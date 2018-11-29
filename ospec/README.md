@@ -20,6 +20,7 @@ Noiseless testing framework
 	- test exclusivity (i.e. `.only`)
 	- async tests and hooks
 - explicitly regulates test-space configuration to encourage focus on testing, and to provide uniform test suites across projects
+- Supports ES modules with `--module`, delegating to `--experimental-modules` on recent Node or via [`esm`](https://github.com/standard-things/esm) on older versions.
 
 ## Usage
 

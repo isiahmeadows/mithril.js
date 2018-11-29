@@ -1,42 +1,120 @@
 #!/usr/bin/env node
+/* eslint-disable global-require */
 "use strict"
 
-var o = require("../ospec")
-var path = require("path")
-var glob = require("glob")
-
-
-function parseArgs(argv) {
-	argv = ["--globs"].concat(argv.slice(2))
-	var args = {}
-	var name
-	argv.forEach(function(arg) {
-		if (/^--/.test(arg)) {
-			name = arg.substr(2)
-			args[name] = args[name] || []
-		} else {
-			args[name].push(arg)
+function respawn() {
+	var proc = require("child_process").spawn(process.argv[0],
+		["--experimental-modules", "--", __filename]
+			.concat(process.argv.slice(2)),
+		{
+			cwd: process.cwd(),
+			// eslint-disable-next-line no-process-env
+			env: process.env,
+			stdio: "inherit",
+			windowsHide: true,
 		}
-	})
-	return args
+	)
+
+	function onExit(code, signal) {
+		proc.removeListener("exit", onExit)
+		proc.removeListener("error", onError)
+		process.removeListener("SIGINT", onSIGINT)
+		if (signal != null) process.kill(signal)
+		// 9 = invalid flag
+		// eslint-disable-next-line no-process-exit
+		if (code !== 9) process.exit(code)
+		run("shim")
+	}
+
+	function onError(e) {
+		proc.removeListener("exit", onExit)
+		proc.removeListener("error", onError)
+		process.removeListener("SIGINT", onSIGINT)
+		console.error(e)
+		// eslint-disable-next-line no-process-exit
+		process.exit(1)
+	}
+
+	function onSIGINT() {
+		proc.kill("SIGINT")
+	}
+
+	proc.on("exit", onExit)
+	proc.on("error", onError)
+	process.on("SIGINT", onSIGINT)
 }
 
+function run(type) {
+	function execute(ospecMod, req) {
+		var argv = ["--globs"].concat(process.argv.slice(2))
+		var args = {}
+		var name
+		argv.forEach(function(arg) {
+			if (arg === "--module") return
+			if ((/^--/).test(arg)) {
+				name = arg.substr(2)
+				args[name] = args[name] || []
+			} else {
+				args[name].push(arg)
+			}
+		})
 
-var args = parseArgs(process.argv)
-var globList = args.globs && args.globs.length ? args.globs : ["**/tests/**/*.js"]
-var ignore = ["**/node_modules/**"].concat(args.ignore||[])
-var cwd = process.cwd()
+		var globList = args.globs && args.globs.length ? args.globs :
+			[type === "script" ? "**/tests/**/*.js" : "**/tests/**/*.{,m}js"]
+		var path = require("path")
+		var ignore = ["**/node_modules/**"].concat(args.ignore || [])
+		var cwd = process.cwd()
 
-args.require && args.require.forEach(function(module) {
-	module && require(require.resolve(module, { basedir: cwd }))
-})
+		Promise.all(
+			(args.require || []).filter(Boolean).map(function (mod) {
+				return req(require.resolve(mod, {basedir: cwd}))
+			})
+		)
+			.then(function () {
+				return new Promise(function (resolve) {
+					var globbed = []
+					var glob = require("glob")
 
-var pending = globList.length
-globList.forEach(function(globPattern) {
-	glob(globPattern, {ignore: ignore})
-		.on("match", function(fileName) { require(path.join(cwd, fileName)) }) // eslint-disable-line global-require
-		.on("error", function(e) { console.error(e) })
-		.on("end", function() { if (--pending === 0) o.run()})
-});
+					globList.forEach(function(globPattern) {
+						glob(globPattern, {ignore: ignore})
+							.on("match", function(fileName) { globbed.push(req(path.join(cwd, fileName))) })
+							.on("error", function(e) { console.error(e) })
+							.on("end", function() { resolve(Promise.all(globbed)) })
+					})
+				})
+			})
+			.then(function () { return req(ospecMod) })
+			.then(function (o) { o.default.run() })
+	}
 
-process.on("unhandledRejection", function(e) { console.error("Uncaught (in promise) " + e.stack) })
+	process.on("unhandledRejection", function(e) {
+		console.error("Uncaught (in promise) " + e.stack)
+	})
+
+	function wrapPromise(f) {
+		return function (path) {
+			return new Promise(function (resolve) { resolve(f(path)) })
+		}
+	}
+
+	if (type === "shim") {
+		const req = require("esm")(module)
+		execute("../ospec.mjs", wrapPromise(req))
+	} else if (type === "script") {
+		execute("../ospec.js", wrapPromise(function (path) {
+			return {default: require(path)}
+		}))
+	} else {
+		// Wrap this in `eval` in case ESM is unsupported, to avoid the
+		// whole file aborting over a syntax error.
+		// eslint-disable-next-line no-eval
+		execute("../ospec.mjs", function (m) {
+			// eslint-disable-next-line no-eval
+			return eval("import(" + JSON.stringify(m) + ")")
+		})
+	}
+}
+
+if (process.argv.indexOf("--module", 2) < 0) run("script")
+else if (process.execArgv.indexOf("--experimental-modules") < 0) respawn()
+else run("native")

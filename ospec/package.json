@@ -13,6 +13,9 @@
   "bin": {
     "ospec": "./bin/ospec"
   },
+  "optionalDependencies": {
+    "esm": "*"
+  },
   "scripts": {
     "prepublishOnly": "node esm.js"
   },
