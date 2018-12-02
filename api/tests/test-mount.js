@@ -1,15 +1,14 @@
-"use strict"
-
-var o = require("../../ospec/ospec")
-var components = require("../../test-utils/components")
-var domMock = require("../../test-utils/domMock")
-var throttleMocker = require("../../test-utils/throttleMock")
-
-var m = require("../../render/hyperscript")
-var apiRedraw = require("../../api/redraw")
-var apiMounter = require("../../api/mount")
-
 o.spec("mount", function() {
+	"use strict"
+
+	var components = utils.components
+	var domMock = utils.domMock
+	var throttleMocker = utils.throttleMock
+
+	var m = modules["render/hyperscript"]
+	var apiRedraw = modules["api/redraw"]
+	var apiMounter = modules["api/mount"]
+
 	var $window, root, redrawService, mount, render, throttleMock
 
 	o.beforeEach(function() {

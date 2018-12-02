@@ -1,24 +1,25 @@
-"use strict"
-
-var o = require("../../ospec/ospec")
-var domMock = require("../../test-utils/domMock")
-var throttleMocker = require("../../test-utils/throttleMock")
-var apiRedraw = require("../../api/redraw")
-
-// Because Node doesn't have this.
-if (typeof requestAnimationFrame !== "function") {
-	global.requestAnimationFrame = (function (delay, last) {
-		return function(callback) {
-			var elapsed = Date.now() - last
-			return setTimeout(function() {
-				callback()
-				last = Date.now()
-			}, delay - elapsed)
-		}
-	})(16, 0)
-}
-
+/* global setTimeout */
 o.spec("redrawService", function() {
+	"use strict"
+
+	var domMock = utils.domMock
+	var throttleMocker = utils.throttleMock
+	var apiRedraw = modules["api/redraw"]
+
+	// Because Node doesn't have this.
+	if (typeof requestAnimationFrame !== "function") {
+		var delay = 16, last = 0
+		// eslint-disable-next-line no-undef
+		;(typeof global !== "undefined" ? global : window)
+			.requestAnimationFrame = function(callback) {
+				var elapsed = Date.now() - last
+				return setTimeout(function() {
+					callback()
+					last = Date.now()
+				}, delay - elapsed)
+			}
+	}
+
 	var root, redrawService, $document
 	o.beforeEach(function() {
 		var $window = domMock()

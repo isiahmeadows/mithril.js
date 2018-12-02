@@ -5,3 +5,5 @@ npm-debug.log
 .vscode
 .DS_Store
 .eslintcache
+
+test-bundle.js

@@ -8,3 +8,5 @@ examples/
 /mithril.min.mjs
 /stream/stream.mjs
 node_modules/
+
+test-bundle.js

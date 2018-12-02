@@ -1,19 +1,19 @@
-"use strict"
-
-var o = require("../../ospec/ospec")
-var callAsync = require("../../test-utils/callAsync")
-var browserMock = require("../../test-utils/browserMock")
-var throttleMocker = require("../../test-utils/throttleMock")
-
-var m = require("../../render/hyperscript")
-var callAsync = require("../../test-utils/callAsync")
-var apiRedraw = require("../../api/redraw")
-var apiRouter = require("../../api/router")
-var Promise = require("../../promise/promise")
-
+/* global setTimeout */
 o.spec("route", function() {
-	void [{protocol: "http:", hostname: "localhost"}, {protocol: "file:", hostname: "/"}].forEach(function(env) {
-		void ["#", "?", "", "#!", "?!", "/foo"].forEach(function(prefix) {
+	"use strict"
+
+	var callAsync = utils.callAsync
+	var browserMock = utils.browserMock
+	var throttleMocker = utils.throttleMock
+	var callAsync = utils.callAsync
+
+	var m = modules["render/hyperscript"]
+	var apiRedraw = modules["api/redraw"]
+	var apiRouter = modules["api/router"]
+	var Promise = modules["promise/promise"]
+
+	;[{protocol: "http:", hostname: "localhost"}, {protocol: "file:", hostname: "/"}].forEach(function(env) {
+		["#", "?", "", "#!", "?!", "/foo"].forEach(function(prefix) {
 			o.spec("using prefix `" + prefix + "` starting on " + env.protocol + "//" + env.hostname, function() {
 				var $window, root, redrawService, route, throttleMock
 
