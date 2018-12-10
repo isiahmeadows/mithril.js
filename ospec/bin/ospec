@@ -2,10 +2,7 @@
 /* eslint-disable global-require */
 "use strict"
 
-process.on("unhandledRejection", function(e) {
-	throw e
-	// console.error("Uncaught (in promise) " + e.stack)
-})
+process.on("unhandledRejection", function(e) { throw e })
 
 var path = require("path")
 var glob = require("glob")
