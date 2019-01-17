@@ -35,6 +35,254 @@ module.exports = function($window) {
 		}
 	}
 
+	// Support for upgrading custom elements. The upgrade data is stored in a
+	// pair of root + dictionary lists.
+	//
+	// Here's the format for each dictionary entry:
+	//
+	// - Omitted: not being listened to or already upgraded (so do nothing)
+	// - Object: an array of `{paths, lengths, vnodes}` objects where `paths` is
+	//   a flattened list of paths for each vnode, `lengths` is a list of
+	//   lengths for each path, and `vnodes` contains the vnodes corresponding
+	//   to each path.
+	//
+	// There are a few reasons for this:
+	//
+	// - It's nice to know quickly that an element is already upgraded, since we
+	//   can dodge the whole mess. This conveniently doesn't require checking
+	//   the dictionary, so we can avoid it altogether.
+	//
+	// - This has reasonably fast performance features, because of careful
+	//   design of the algorithm:
+	//   - Amortized constant subscription
+	//   - Amortized constant upgrade
+	//   - Quadratic async removal (which almost never happens)
+	//   - Virtually zero-cost in all other operations
+	//
+	// - This keeps memory usage down to a near minimum.
+
+	// FIXME: move the `.lengths` into `.paths` before each sequence.
+	var $customElements = $window.customElements
+	var customElementRoots = []
+	var customElementDefs = []
+	var observedTagNames = Object.create(null)
+	var currentRoot, currentRootIndex, currentPath
+
+	var copyWithin = [].copyWithin || function (target, start, end) {
+		while (start !== end) this[target++] = this[start++]
+	}
+
+	function pushAll(target, source) {
+		var i = 0, j = target.length
+		while (i < source.length) target[j++] = source[i++]
+	}
+
+	function sliceEqual(a, b, end, offsetB) {
+		for (var i = 0, j = offsetB; i < end; i++, j++) {
+			if (a[i] !== b[j]) return false
+		}
+		return true
+	}
+
+	function upgradeElement(tag) {
+		delete observedTagNames[tag]
+
+		var vnodes = []
+
+		for (var i = 0; i < customElementRoots.length; i++) {
+			var data = customElementDefs[i][tag]
+			if (data == null) continue
+			delete customElementDefs[i][tag]
+			if (data.vnodes.length === 0) continue
+			pushAll(vnodes, data.vnodes)
+			var node = customElementRoots[i]
+			var prevLen = data.lengths[0]
+
+			for (var i = 0, j = 0; i < data.lengths.length; i++, j += prevLen) {
+				var pathLen = data.lengths[i]
+				var diff = Math.max(pathLen - prevLen)
+				var index = Math.min(pathLen, prevLen)
+
+				for (var k = 0; k < diff; k++) node = node.parentNode
+				diff = data.path[j + index] - data.path[j + index + prevLen]
+				for (var k = 0; k < diff; k++) node = node.nextSibling
+				for (var k = index + j + prevLen, l = k + pathLen; k < l; k++) node = node.children[data.path[k]]
+				// Don't call the vnodes *yet*. Let's get the world in order
+				// first before we let components and attributes know things
+				// are updated.
+				data.vnodes[i].dom = node
+			}
+		}
+
+		for (var i = 0; i < vnodes.length; i++) {
+			var vnode = vnodes[i]
+			if (typeof vnode.state.onelementdefined === "function") callHook.apply(vnode.state.onelementdefined, vnode)
+			if (typeof vnode.attrs.onelementdefined === "function") callHook.apply(vnode.attrs.onelementdefined, vnode)
+		}
+	}
+
+	// Warning: this function is necessarily complex. The removal process works
+	// like this:
+	//
+	// 1. Get the list of paths from the root.
+	// 2. Remove all paths matching this node and/or children of this node.
+	// 3. If the tag no longer has children to add, remove it from the root.
+	// 4. If the root no longer has tags to observe, remove it from the list.
+	//
+	// Here's a basic gist of how it works:
+	//
+	// - It uses the root to get the corresponding definitions. This is saved
+	//   when a node is asynchronously removed, so it can do the correct
+	//   bookkeeping.
+	//
+	// - It searches for a node via an array of paths, much like a subtree
+	//   detector. Asynchronously-defined custom elements are exceedingly rare,
+	//   so we don't need to optimize this into a tree structure. Conveniently,
+	//   the paths are always ordered with respect to the node's tree position,
+	//   which simplifies the algorithm tremendously.
+	//
+	// - The main loop is split into two phases: search and update. The search
+	//   is done via a series of simple prefix detector algorithms (the paths
+	//   are usually relatively small), and the update is done as the search
+	//   finds matching values.
+	function updateRemove(root, path) {
+		if ($customElements == null) return
+		// Search for the root. If it's missing, then yay! We can skip this
+		// slow, horrible monstrosity.
+		var rootIndex = customElementRoots.indexOf(root)
+		if (rootIndex < 0) return
+		var defs = customElementDefs[rootIndex]
+		var tags = Object.keys(defs)
+		var remaining = tags.length
+
+		// Iterate each definition for the element's respective root. We need to
+		// modify some deltas as we remove the element.
+		for (var i = 0; i < tags.length; i++) {
+			var tag = tags[i]
+			var data = defs[tag]
+			var currentLen = 0
+
+			outer:
+			for (var j = 0, k = 0; j < data.lengths.length; j++, k += currentLen) {
+				currentLen = data.lengths[j]
+
+				// If it's not a prefix or equal, skip it.
+				if (currentLen < path.length) continue
+				var pathEnd = path.length - 1, currentEnd = k + pathEnd
+				if (path[pathEnd] < data.paths[currentEnd]) continue
+				if (!sliceEqual(path, data.paths, pathEnd, k)) continue
+				var dataCount = j, pathCount = k
+
+				if (path[pathEnd] === data.paths[currentEnd]) {
+					// Drop everything that starts with the path.
+					j++, k += currentLen
+					while (j < data.lengths.length) {
+						currentLen = data.lengths[j]
+						if (!sliceEqual(path, data.paths, currentLen, k)) break
+						j++, k += currentLen
+					}
+				}
+
+				// Now, the next several are either matches or after our
+				// slice. Let's optimize for those.
+				//
+				// Note: this does waste an iteration with the first
+				// path this is a prefix of or follows, but it's very
+				// little work that's duplicated.
+				for (; j < data.lengths.length; j++, k += currentLen) {
+					currentLen = data.lengths[j]
+					// Break if it doesn't start with `path.slice(0, -1)`.
+					if (currentLen < path.length) break outer
+					currentEnd = k + pathEnd
+					if (!sliceEqual(path, data.paths, pathEnd, k)) continue
+					if (path[pathEnd] === data.paths[currentEnd]) {
+						// Increment it if it comes after the same path.
+						// We also need to move everything to their new
+						// positions in case any paths were removed.
+						data.paths[currentEnd]++
+						copyWithin.call(data.paths, pathCount, k, currentLen)
+						data.vnodes[dataCount] = data.vnodes[j]
+						data.lengths[dataCount] = currentLen
+						dataCount++
+						pathCount += currentLen
+					}
+				}
+
+				// Now let's resize the arrays accordingly, or delete the
+				// definitions if we removed everything.
+				if (dataCount !== 0) {
+					data.paths.length = pathCount
+					data.lengths.length = dataCount
+					data.vnodes.length = dataCount
+				} else {
+					delete defs[tag]
+					remaining--
+				}
+
+				break
+			}
+		}
+
+		if (remaining === 0) {
+			customElementRoots.splice(rootIndex, 1)
+			customElementDefs.splice(rootIndex, 1)
+		}
+	}
+
+	function subscribeElement(vnode, hooks) {
+		if ($customElements == null) return
+		var child = typeof vnode.tag === "string" ? vnode : vnode.instance
+		var tag = child.tag.indexOf("-") > -1 ? child.tag : child.attrs.is
+		// This is only `null`/`undefined` if it's neither an autonomous custom
+		// element like `<x-foo>` or a customized builtin element like
+		// `<button is="x-foo">`.
+		if (tag == null) return
+
+		// If no upgrade is required, let's skip the mess altogether. We still
+		// schedule the hook so the user doesn't have to guess or know to make
+		// this particular check.
+		//
+		// Note: this code path can *never* be hit during the update phase
+		// before `defs[tag] === true`.
+		if (child.dom.constructor !== $customElements.get(tag)) {
+			if (typeof child.state.onelementdefined === "function") hooks.push(callHook.bind(child.state.onelementdefined, child))
+			if (typeof child.attrs.onelementdefined === "function") hooks.push(callHook.bind(child.attrs.onelementdefined, child))
+			if (child !== vnode) {
+				if (typeof vnode.state.onelementdefined === "function") hooks.push(callHook.bind(vnode.state.onelementdefined, vnode))
+				if (typeof vnode.attrs.onelementdefined === "function") hooks.push(callHook.bind(vnode.attrs.onelementdefined, vnode))
+			}
+			return
+		}
+
+		var defs
+
+		if (currentRootIndex < 0) {
+			currentRootIndex = customElementRoots.length
+			customElementRoots.push(currentRoot)
+			customElementDefs.push(defs = Object.create(null))
+		} else {
+			defs = customElementDefs[currentRootIndex]
+		}
+
+		var data = defs[tag]
+
+		// The element's already defined, so we don't need to upgrade it.
+		if (data === true) return
+
+		if (data == null) {
+			if (!observedTagNames[tag]) {
+				observedTagNames[tag] = true
+				$customElements.whenDefined(tag).then(upgradeElement.bind(null, tag))
+			}
+			defs[tag] = data = {paths: [], lengths: [], vnodes: []}
+		}
+
+		data.lengths.push(currentPath.length)
+		pushAll(data.path, currentPath)
+		data.vnodes.push(child)
+		if (vnode !== child) data.vnodes.push(vnode)
+	}
+
 	// IE11 (at least) throws an UnspecifiedError when accessing document.activeElement when
 	// inside an iframe. Catch and swallow this error, and heavy-handidly return null.
 	function activeElement() {
@@ -898,8 +1146,25 @@ module.exports = function($window) {
 		if (dom.vnodes == null) dom.textContent = ""
 
 		vnodes = Vnode.normalizeChildren(Array.isArray(vnodes) ? vnodes : [vnodes])
+		if ($customElements != null) {
+			var prevCurrentRoot = currentRoot
+			var prevCurrentRootIndex = currentRootIndex
+
+			currentRoot = root
+			currentPath = []
+			currentRootIndex = customElementRoots.indexOf(currentRoot)
+		}
+
 		updateNodes(dom, dom.vnodes, vnodes, hooks, null, namespace === "http://www.w3.org/1999/xhtml" ? undefined : namespace)
 		dom.vnodes = vnodes
+
+		if ($customElements != null) {
+			customElementRoots.splice(currentRootIndex, 1)
+			customElementDefs.splice(currentRootIndex, 1)
+			currentRoot = prevCurrentRoot
+			currentRootIndex = prevCurrentRootIndex
+		}
+
 		// `document.activeElement` can return null: https://html.spec.whatwg.org/multipage/interaction.html#dom-document-activeelement
 		if (active != null && activeElement() !== active && typeof active.focus === "function") active.focus()
 		for (var i = 0; i < hooks.length; i++) hooks[i]()
