@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+	<head>
+		<title>Markdown Editor</title>
+		<style>
+html,body {height:100%;margin:0;}
+h1,h2,h3,h4,h5,h6,p {margin:0 0 10px;}
+#editor {display:flex;height:100%;}
+.input,.preview {box-sizing:border-box;height:100%;margin:0;padding:10px;width:50%;}
+.input {border:0;border-right:1px solid #ccc;outline:none;resize:none;}
+		</style>
+	</head>
+	<body>
+		<div id="editor"></div>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/0.3.2/marked.min.js"></script>
+		<script src="../../mithril.js"></script>
+		<script>
+const {m, mount} = Mithril
+
+//model
+const state = {
+	text: "# Markdown Editor\n\nType on the left panel and see the result on the right panel",
+	update(value) {
+		state.text = value
+	}
+}
+
+//view
+function Editor(_, context) {
+	return [
+		m("textarea.input", {
+			oninput(e) {
+				state.update(e.target.value)
+				context.update()
+			},
+			value: state.text
+		}),
+		m(".preview", trust(marked(state.text))),
+	]
+}
+
+mount(document.getElementById("editor"), () => m(Editor))
+		</script>
+	</body>
+</html>

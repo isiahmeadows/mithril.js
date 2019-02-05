@@ -1,0 +1,54 @@
+<!doctype html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>Mosaic</title>
+		<style>
+#root {margin:auto;max-width:600px;width:100%;}
+.slice {animation:enter 1s;animation-fill-mode:forwards;background-image:url(flowers.jpg);height:60px;float:left;opacity:0;width:60px;}
+.slice:nth-child(10n) {clear:right;}
+.exit {animation:exit 1s;}
+
+@keyframes enter {
+	from {opacity:0;transform:rotate(-90deg) scale(0);}
+	to {opacity:1;transform:rotate(0) scale(1);}
+}
+@keyframes exit {
+	from {opacity:1;transform:rotate(0) scale(1);}
+	to {opacity:0;transform:rotate(90deg) scale(0);}
+}
+		</style>
+	</head>
+	<body>
+		<div id="root"></div>
+		<script src="../../mithril.js"></script>
+		<script>
+const {m, mount} = Mithril
+
+function View(attrs, context) {
+	let show = true
+
+	setInterval(
+		() => { show = !show; context.update() },
+		2000
+	)
+
+	return () => {
+		if (!show) return m(".container")
+		const refs = Array.from({length: 100}, () => context.ref())
+		context.ref(refs).update(elems => () => {
+			for (const elem of elems) elem.classList.add("exit")
+			return new Promise(resolve => setTimeout(resolve, 1000))
+		})
+		return m(".container", refs.map((ref, i) => m(".slice", {
+			ref,
+			style: {
+				backgroundPosition: `${i % 10 * 11}% ${Math.floor(i / 10) * 11}%`,
+			},
+		})))
+	}
+}
+mount(document.getElementById("root"), () => m(View))
+		</script>
+	</body>
+</html>
