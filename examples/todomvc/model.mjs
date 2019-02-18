@@ -1,10 +1,11 @@
 //model
 
-export const state = {
+const state = {
 	todos: JSON.parse(localStorage["todos-mithril"] || "[]"),
 	editing: null,
 }
 
+const subscribers = []
 let awaitingFrame = false
 
 export function dispatch(action) {
@@ -59,6 +60,12 @@ export function dispatch(action) {
 		localStorage["todos-mithril"] = JSON.stringify(state.todos)
 		awaitingFrame = false
 	})
+
+	for (const subscriber of subscribers) subscriber()
+}
+
+export function subscribe(f) {
+	subscribers.push(f)
 }
 
 export function countRemaining() {

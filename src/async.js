@@ -1,26 +1,23 @@
-"use strict"
+import {m, Fragment} from "./m.js"
 
-// 0 = pending
-// 1 = ready
-// 2 = error
-function Async(attrs, context) {
-    var state = 0, value
-
-    try {
-        Promise.resolve(attrs.init()).then(
-            function (v) { state = 1; value = v; context.update() },
-            function (e) { state = 2; value = e; context.update() },
+export function Async(attrs, context, [state, value, ref] = []) {
+    if (state == null) {
+        const hooks = []
+        const close = () => {
+            const prev = hooks
+            hooks = undefined
+            hooks.forEach(hook => { hook() })
+        }
+        [state, value, ref] = ["pending", undefined, () => close]
+        new Promise(resolve => {
+            resolve(attrs.init(f => {
+                if (state === "pending" && hooks != null) hooks.push(f)
+            }))
+        }).then(
+            v => { context.update(["ready", v, undefined]) },
+            e => { context.update(["error", e, undefined]) }
         )
-    } catch (e) {
-        state = 2
-        value = e
     }
 
-    return function (attrs) {
-        if (state === 0) return attrs.pending()
-        if (state === 1) return attrs.ready(value)
-        return attrs.error(value)
-    }
+    return m(Fragment, {ref}, m(Fragment, {key: state}, attrs[state](value)))
 }
-
-module.exports = Async

@@ -19,13 +19,15 @@ Other notes:
 
 | Function      |   ID   | Example                                    |
 |:-------------:|:------:|:------------------------------------------ |
-| Retain*       | `0x00` | `m(retain)`                                |
-| Text*         | `0x01` | `m(text, ...)`, `"..."`                    |
-| Trusted*      | `0x02` | `m(trust, ...)`                            |
-| Keyed*        | `0x03` | `m(keyed, ...)`                            |
+| Retain*       | `0x00` | `m(m.Retain)`                              |
+| Text*         | `0x01` | `m(m.Text, ...)`, `"..."`                  |
+| Raw*          | `0x02` | `m(m.Raw, ...)`                            |
+| Keyed*        | `0x03` | `m(m.Keyed, ...)`                          |
 | Component*    | `0x08` | `m(Component, ...)`                        |
 | Other element | `0x09` | `m("feMatrix", ...)`, `m("mo", ...)`, etc. |
-| Fragment      | `0x0A` | `m(fragment, ...)`, `[...]`                |
+| Fragment      | `0x0A` | `m(m.Fragment, ...)`, `[...]`              |
+| Portal Get    | `0x0C` | `m(portal.Get, ...)`                       |
+| Portal Set    | `0x0D` | `m(portal.Set, ...)`                       |
 
 Unknown elements are *typically* SVG or MathML elements, but not always.
 

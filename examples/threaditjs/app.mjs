@@ -1,9 +1,12 @@
-// Mithril (this): 167 lines. React + experimental Hooks: 210 lines.
-// Totals exclude this header comment. Mithril v3 is ~20% smaller.
-import {m, mount, fragment, keyed, trust} from "mithril/esm/m"
-import {Route, Link} from "mithril/esm/util/route"
-import Async from "mithril/esm/util/async"
-import request from "mithril/esm/util/request"
+// Mithril v3 (this): 163 lines.
+// React: 242 lines.
+// React + experimental Hooks: 210 lines.
+// Totals exclude this header comment.
+// Mithril v3 is ~33% smaller than React, ~22% smaller than React + hooks.
+import {m, mount, Fragment, Keyed, Trust} from "mithril/m"
+import {Route, Link} from "mithril/util/route"
+import Async from "mithril/util/async"
+import request from "mithril/util/request"
 
 T.time("Setup")
 
@@ -63,11 +66,11 @@ function Home(attrs, context, threads = []) {
 				? m("h2", "Not found! Don't try refreshing!")
 				: m("h2", "Error! Try refreshing."),
 			ready: () => [
-				m(keyed, threads.map(thread =>
-					m(fragment, {key: thread.id}, [
+				m(Keyed, threads.map((thread) =>
+					m(Fragment, {key: thread.id}, [
 						m("p", [
-							m(Link, {href: `/thread/${thread.id}`}, [
-								m(trust, T.trimTitle(thread.text))
+							m(Link, {href: `/thread/${thread.id}`, [
+								m(Trust, T.trimTitle(thread.text))
 							]),
 						]),
 						m("p.comment_count", thread.comment_count, " comment(s)"),
@@ -90,29 +93,26 @@ function NewThread({save}, context, value = "") {
 		})
 		return false
 	}}, [
-		m("textarea", {value,
-			oninput: ev => context.update(ev.target.value)
-		}),
+		m("textarea", {value, oninput: ev => context.update(ev.target.value)}),
 		m("input[type=submit][value='Post!']"),
 	])
 }
 
 //thread
-function Thread({id}, context) {
-	let ref
-	if (context.isInit) {
-		T.time("Thread render")
-		;(ref = context.ref()).update(() => {
+function Thread({id}, context, rendered = false) {
+	if (!rendered) T.time("Thread render")
+	return m(Fragment, {
+		ref: () => {
+			context.update(true)
 			T.timeEnd("Thread render")
-		})
-	}
-
-	return m(fragment, {ref}, [
+		}
+	}, [
 		m(Header),
 		m(".main", m(Async, {
 			key: id,
 			init: () => api.thread(id).then(({root: node}) => {
-				document.title = `ThreaditJS: Mithril | ${T.trimTitle(node.text)}`
+				document.title =
+					`ThreaditJS: Mithril | ${T.trimTitle(node.text)}`
 				return node
 			}),
 			pending: () => m("h2", "Loading"),
@@ -126,7 +126,7 @@ function Thread({id}, context) {
 
 function ThreadNode({node}) {
 	return m(".comment", [
-		m("p", m(trust, node.text)),
+		m("p", m(Trust, node.text)),
 		m(".reply", m(Reply, {node})),
 		m(".children", node.children.map(child =>
 			m(ThreadNode, {node: child})
@@ -134,9 +134,7 @@ function ThreadNode({node}) {
 	])
 }
 
-function Reply({node}, context, state = {}) {
-	const {replying = false, newComment = ""} = state
-
+function Reply({node}, context, {replying = false, newComment = ""} = {}) {
 	if (replying) {
 		return m("form", {onsubmit() {
 			api.newComment(newComment, node.id).then(response => {
@@ -148,11 +146,11 @@ function Reply({node}, context, state = {}) {
 			m("textarea", {
 				value: newComment,
 				oninput(ev) {
-					context.update({...state, newComment: ev.target.value})
+					context.update({replying, newComment: ev.target.value})
 				},
 			}),
 			m("input[type=submit][value='Reply!']"),
-			m(".preview", m(trust, T.previewComment(newComment))),
+			m(".preview", m(Trust, T.previewComment(newComment))),
 		])
 	} else {
 		return m("a", {onclick() {

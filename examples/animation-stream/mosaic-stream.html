@@ -25,7 +25,6 @@
 		<script src="../../stream/stream.js"></script>
 		<script>
 const {m, render} = Mithril
-const root = document.getElementById("root")
 
 const range = (start, end) =>
 	Array.from({length: end - start}, (_, i) => i + start)
@@ -64,7 +63,7 @@ alternate(2000)([[], range(0, 10 * 10)])(m.stream())
 	// pipe state stream into view
 	.map(view(exit))
 	// pipe view stream into render
-	.map(vnode => render(root, vnode))
+	.map(render(document.getElementById("root")))
 		</script>
 	</body>
 </html>

@@ -1,6 +1,9 @@
-// Mithril: 167 lines. React + experimental Hooks (this): 210 lines.
-// Totals exclude this header comment. Mithril v3 is ~20% smaller.
-import React, {useEffect, useState} from "react"
+// Mithril v3: 163 lines.
+// React (this): 242 lines.
+// React + experimental Hooks: 210 lines.
+// Totals exclude this header comment.
+// Mithril v3 is ~33% smaller than React, ~22% smaller than React + hooks.
+import React from "react"
 import ReactDOM from "react-dom"
 import {Router, Link} from "react-router"
 
@@ -53,104 +56,127 @@ function Header() {
 }
 
 //home
-function Home(params) {
-	const [state, setState] = useState("loading")
-	const [threads, setThreads] = useState([])
+class Home extends React.Component {
+	constructor(...args) {
+		super(...args)
+		this.state = {
+			state: "loading",
+			threads: [],
+		}
 
-	useEffect(() => {
 		api.home().then(response => {
 			document.title = "ThreaditJS: React | Home"
-			setState("ready")
-			setThreads(response.data)
+			this.setState({
+				state: "ready",
+				threads: response.data,
+			})
 		}, e => {
-			setState(e.status === 404 ? "notFound" : "error")
+			this.setState({
+				state: e.status === 404 ? "notFound" : "error",
+			})
 		})
-	}, [])
+	}
 
-	return <>
-		<Header />
-		<div class="main">{
-			state === "loading" ? <h2>Loading</h2>
-			: state === "notFound" ? <h2>Not found! Don't try refreshing!</h2>
-			: state === "error" ? <h2>Error! Try refreshing.</h2>
-			: <>
-				{threads.map(thread =>
-					<React.Fragment key={thread.id}>
-						<p>
-							<Link
-								href={`/thread/${thread.id}`}
-								dangerouslySetInnerHTML={{
-									__html: T.trimTitle(thread.text)
-								}}
-							/>
-						</p>
-						<p class="comment_count">
-							{thread.comment_count} comment(s)
-						</p>
-						<hr />
-					</React.Fragment>
-				)}
-				<NewThread onSave={thread => {
-					setThreads([...threads, thread])
-				}} />
-			</>
-		}</div>
-	</>
+	render() {
+		const {state, threads} = this.state
+		return <>
+			<Header />
+			<div class="main">{
+				state === "loading" ? <h2>Loading</h2>
+				: state === "notFound" ? <h2>Not found! Don't try refreshing!</h2>
+				: state === "error" ? <h2>Error! Try refreshing.</h2>
+				: <>
+					{threads.map(thread =>
+						<React.Fragment key={thread.id}>
+							<p>
+								<Link
+									href={`/thread/${thread.id}`}
+									dangerouslySetInnerHTML={{
+										__html: T.trimTitle(thread.text)
+									}}
+								/>
+							</p>
+							<p class="comment_count">
+								{thread.comment_count} comment(s)
+							</p>
+							<hr />
+						</React.Fragment>
+					)}
+					<NewThread onSave={thread => {
+						setThreads([...threads, thread])
+					}} />
+				</>
+			}</div>
+		</>
+	}
 }
 
-function NewThread({save}) {
-	const [value, setValue] = useState("")
+class NewThread extends React.Component {
+	constructor(...args) {
+		super(...args)
+		this.state = {
+			value: "",
+		}
+	}
 
-	return (
-		<form onsubmit={ev => {
-			ev.preventDefault()
-			ev.stopPropagation()
-			api.newThread(value).then(({data: thread}) => {
-				onSave(thread)
-				setValue("")
-			})
-		}}>
-			<textarea value={value} oninput={ev => setValue(ev.target.value)} />
-			<input type="submit" value="Post!" />
-		</form>
-	)
+	render() {
+		const {value} = this.state
+		const {save} = this.props
+
+		return (
+			<form onSubmit={ev => {
+				ev.preventDefault()
+				ev.stopPropagation()
+				api.newThread(value).then(({data: thread}) => {
+					onSave(thread)
+					setValue("")
+				})
+			}}>
+				<textarea value={value} onInput={ev => this.setState({
+					value: ev.target.value,
+				})} />
+				<input type="submit" value="Post!" />
+			</form>
+		)
+	}
 }
 
 //thread
-function Thread({id}) {
-	const isInit = useRef(true)
+class Thread {
+	constructor(...args) {
+		super(...args)
+		this.state = {
+			state: "loading",
+			node: undefined,
+		}
 
-	if (isInit.current) {
-		isInit.current = false
 		T.time("Thread render")
+
+		api.thread(this.props.id).then(({root: node}) => {
+			document.title = `ThreaditJS: React | ${T.trimTitle(node.text)}`
+			this.setState({state: "ready", node})
+		}, e => {
+			this.setState({state: e.status === 404 ? "notFound" : "error"})
+		})
 	}
 
-	useLayoutEffect(() => {
+	componentDidMount() {
 		T.timeEnd("Thread render")
-	}, [])
+	}
 
-	const [state, setState] = useState("loading")
-	const [node, setNode] = useState()
-
-	useEffect(() => {
-		api.thread(id).then(({root: node}) => {
-			document.title = `ThreaditJS: React | ${T.trimTitle(node.text)}`
-			setState("ready")
-			setNode(node)
-		}, e => {
-			setState(e.status === 404 ? "notFound" : "error")
-		})
-	}, [])
-
-	return <>
-		<Header />
-		<div class="main"><React.Fragment key={id}>{
-			state === "loading" ? <h2>Loading</h2>
-			: state === "notFound" ? <h2>Not found! Don't try refreshing!</h2>
-			: state === "error" ? <h2>Error! Try refreshing.</h2>
-			: <ThreadNode node={node} />
-		}</React.Fragment></div>
-	</>
+	render() {
+		const {state, node} = this.state
+		const {id} = this.props
+		return <>
+			<Header />
+			<div class="main"><React.Fragment key={id}>{
+				state === "loading" ? <h2>Loading</h2>
+				: state === "notFound" ? <h2>Not found! Don't try refreshing!</h2>
+				: state === "error" ? <h2>Error! Try refreshing.</h2>
+				: <ThreadNode node={node} />
+			}</React.Fragment></div>
+		</>
+	}
 }
 
 function ThreadNode({node}) {
@@ -165,41 +191,50 @@ function ThreadNode({node}) {
 	)
 }
 
-function Reply(context, {node}, {replying = false, newComment = ""} = {}) {
-	const [replying, setReplying] = useState(false)
-	const [newComment, setNewComment] = useState("")
+class Reply {
+	constructor(...args) {
+		super(...args)
+		this.state = {
+			replying: false,
+			newComment: "",
+		}
+	}
 
-	if (replying) {
-		return (
-			<form onsubmit={ev => {
-				ev.preventDefault()
-				ev.stopPropagation()
-				api.newComment(newComment, node.id).then(response => {
-					node.children.push(response.data)
-					setReplying(false)
-					setNewComment("")
-				})
-			}}>
-				<textarea value={newComment} oninput={ev => {
-					setNewComment(ev.target.value)
-				}} />
-				<input type="submit" value="Reply!" />
-				<div class="preview" dangerouslySetInnerHTML={{
-					__html: T.previewComment(newComment)
-				}} />
-			</form>
-		)
-	} else {
-		return (
-			<a onclick={ev => {
-				ev.preventDefault()
-				ev.stopPropagation()
-				setReplying(true)
-				setNewComment(true)
-			}}>
-				Reply!
-			</a>
-		)
+	render() {
+		const {replying, newComment} = this.state
+		const {node} = this.props
+
+		if (replying) {
+			return (
+				<form onSubmit={ev => {
+					ev.preventDefault()
+					ev.stopPropagation()
+					api.newComment(newComment, node.id).then(response => {
+						node.children.push(response.data)
+						this.setState({replying: false, newComment: ""})
+					})
+				}}>
+					<textarea value={newComment} onInput={ev => {
+						this.setState({newComment: ev.target.value})
+					}} />
+					<input type="submit" value="Reply!" />
+					<div class="preview" dangerouslySetInnerHTML={{
+						__html: T.previewComment(newComment)
+					}} />
+				</form>
+			)
+		} else {
+			return (
+				<a onClick={ev => {
+					ev.preventDefault()
+					ev.stopPropagation()
+					ev.target.value
+					this.setState({replying: true, newComment: ""})
+				}}>
+					Reply!
+				</a>
+			)
+		}
 	}
 }
 
