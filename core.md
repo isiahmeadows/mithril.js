@@ -44,7 +44,7 @@ Core would change considerably, but this is to simplify the API and better accom
     - This is partially to integrate better with certain third-party utilities that [return their own DOM nodes](https://fontawesome.com/how-to-use/with-the-api/setup/getting-started) for you to add.
 - Retain: `m(Retain)`
 	- This replaces `onbeforeupdate`.
-	- If no subtree previously existed, this throws an error.
+	- If no subtree previously existed, this generates a raw node with the existing tree if hydrating or throws an error otherwise.
 - Portal get: `m(PortalGet, {token, default}, value => children)`
 - Portal set: `m(PortalSet, {token, value}, children)`
 - Request element/ref access: `ref: (elem, length) => ...` for elements/fragments/etc., `ref: value => ...` otherwise
@@ -100,15 +100,6 @@ Notes:
 - Update state + view sync: `context.updateSync(next?, opts = {}).then(...)`
 	- This is similar to `context.update(next?, opts = {})`, but operates synchronously.
 	- There exist legitimate use cases for sync redraws (mostly [DOM feedback](https://github.com/MithrilJS/mithril.js/issues/1166#issuecomment-234965960) and third-party integration), but semantics get hairy when sync redraws affect parent and sibling components. This is part of why sync redraws are restricted to subtree redraws. (The other main part is because it usually signals a broken abstraction.)
-- Global update: `context.globalUpdate(next?).then(...)`, `context.globalUpdateSync(next?).then(...)`
-	- `context.globalUpdate(next?).then(...)` - Update state + view async
-	- `context.globalUpdateSync(next?).then(...)` - Update state + view sync
-	- This is similar to the non-subtree variants, but .
-	- This schedules a subtree redraw, not a root-level redraw.
-	- Sync redraws are only available for subtrees, and it can only be done while not rendering the component body.
-	- Note that even though `subtree.redrawSync()` starts synchronously, DOM removals *could* be blocked by `onremove` hooks, so it still returns a promise in this case. And as expected, errors during the redraw are converted into rejections and not rethrown.
-	- There exist legitimate use cases for sync redraws (mostly [DOM feedback](https://github.com/MithrilJS/mithril.js/issues/1166#issuecomment-234965960) and third-party integration), but semantics get hairy when sync redraws affect parent and sibling components, thus why sync redraws are restricted to subtree redraws.
-	- Async = batched, sync = started immediately
 
 ## Core API
 
@@ -136,7 +127,7 @@ Notes:
 	- Depends on `mithril/render`
 	- `mountpoint = register(root, () => vnode)` - Create a mountpoint, but skip initial render
 		- `mountpoint.update().then(...)` - Works similarly to `context.update()`
-		- `mountpoint.updateSync().then(...)` - Works similarly to `subtree.updateSync()`
+		- `mountpoint.updateSync().then(...)` - Works similarly to `context.updateSync()`
 		- `mountpoint.unmount()` - Unmount the view from the root and dispose
 		- Internally, this calls `render(root, view(), internalRedraw)`
 - `mithril/mount` - The DOM mounting API

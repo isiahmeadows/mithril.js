@@ -76,11 +76,13 @@ Notes:
 	- DOM vnode with `(vnode.mask & 0x00FF) === 9`: Custom element tag name
 	- DOM vnode with `(vnode.mask & 0x0100) !== 0`: Custom element `is` name
 	- All other types: `undefined`
+- `ir.attrs` - Type-specific:
+	- Component or DOM vnode: Current attributes
+	- All other types: `undefined`
 - `ir.state` - Type-specific:
 	- Component: Current state or view factory
 	- Keyed fragment vnode: Fragment key/index map
 	- Text or trusted vnode: Fragment key/index map
-	- DOM vnode: Element attributes
 	- All other types: `undefined`
 - `ir.events` - Type-specific:
 	- DOM vnode: optional event target + subscribed events
@@ -97,19 +99,7 @@ Context instance:
 - `context.fields` - Direct reference to fields object
 - `context._ir` - Direct reference to component vnode IR
 
-Subtree instance:
-
-- `subtree._ir` - Direct reference to backing IR node
-
-Notes:
-
-- Subtrees are meant to be able to operate without a current `context` instance.
-- Contexts are mostly just simple dependency injection objects. It's subtrees and refs that do all the interesting work.
-- Unused refs never complete. A future development build might choose to check for these and generate warnings.
-- After receiving a vnode tree, created refs are marked as live and checked for usage.
-	- This step also marks created refs as live.
-	- This step also initializes the `ref._value` for composite refs.
-	- For unused refs, this marks all of them as used, clears their states, sends `undefined` to child composite refs, and generates a warning for each one.
+Note: Contexts are mostly just simple dependency injection objects that let you redraw things.
 
 ## Operations
 

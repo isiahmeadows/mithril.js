@@ -113,19 +113,3 @@ Basically `mithril-node-render`, moved into core.
 1. It helps us determine more easily what's common between single-shot and retained renderers, so we can know what abstractions to expose.
 1. It makes our SSR support much more discoverable.
 1. It's a much simpler upgrading story.
-
-## Subtree rendering API
-
-This is exposed under `mithril/subtree`.
-
-It's a simple component that sugars over `m.mount`/`m.render` for controlled subtree redrawing.
-
-- `m(Subtree, () => ...)` - Define a subtree
-
-When a subtree component invokes `context.update()`, updates are restricted to that subtree, not performed globally.
-
-### Why?
-
-1. Performance concerns *do* come up in larger apps. This is meant to help them scale better.
-1. This isn't exactly easy nor obvious to get right, especially when memory leaks get involved.
-1. By making subtrees opt-in in this fashion, I can form a closure over the attributes *only* as I need to, avoiding the need to store that all in the vnode itself.
