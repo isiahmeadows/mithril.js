@@ -9,10 +9,28 @@ This is exposed under `mithril/ref` and in the core bundle via `m.ref`. It exist
 - `refs = m.ref.all(len, ([...elems]) => ...)` - Create a combined ref that invokes a callback once all indexed refs are received.
     - `refs[index]` - Get a ref linked to that callback index.
     - `refs.empty` - Get a ref called to send an empty array, or `undefined` if indexed refs exist.
+- `refs = m.ref.create(({...elems}) => ...)` - Similar to `m.ref.join(...)`, but lets you create the refs on demand.
+- `refs = m.ref.proxy(({...elems}) => ...)` - Similar to `m.ref.join(...)`, but exposes the refs via a proxy.
 
 Note: The resulting refs only propagate the first argument, the element or component ref. If you want to include element lengths, do something like `refs.key({elem, index})`. These don't actually care about the values themselves.
 
 This is implemented in [CJS + ES5](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/cjs/ref.js) and [ESM + ES2018](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/esm/ref.js).
+
+## Portal combinators
+
+This is exposed under `mithril/portal`.
+
+These are useful for easier manipulation of portals.
+
+- `{Get, Set, token} = Portal.create(token = {})` - Create a getter/setter portal pair
+	- Set value: `m(Set, {value}, ...)`
+	- Get value: `m(Get, {default}, value => ...)`
+    - The token is optionally generated internally, but is exposed via `token`.
+- `m(Portal.Get, {portals: Array<portal | [portal, default]>}, ([...values]) => ...)`, `m(Portal.Get, {portals: Record<string, portal | [portal, default]>}, ({...values}) => ...)` - Get multiple portals at once
+- `m(Portal.Set, {portals: Array<[portal, value]>}, ...)` - Set multiple portals at once
+- `m(Portal.Update, {portals: Array<[portal, value, default]>}, ([...values], [...prev]) => ...)`, `m(Portal.Get, {portals: Record<string, [portal, value, default]>}, ({...values}, {...prev}) => ...)` - Update multiple portals at once, emitting the callback with the previous and subsequent values
+
+Note that for `Portal.Get`/etc., you have to wrap the token in a `Portal.create` first.
 
 ## Router API
 

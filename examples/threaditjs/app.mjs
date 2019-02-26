@@ -3,15 +3,15 @@
 // React + experimental Hooks: 210 lines.
 // Totals exclude this header comment.
 // Mithril v3 is ~33% smaller than React, ~22% smaller than React + hooks.
-import {m, mount, Fragment, Keyed, Trust} from "mithril/m"
-import {Route, Link} from "mithril/util/route"
+import {Fragment, Keyed, Trust, m, mount} from "mithril/m"
+import {Link, Route} from "mithril/util/route"
 import Async from "mithril/util/async"
 import request from "mithril/util/request"
 
 T.time("Setup")
 
 //API calls
-const apiUrl = ref => T.apiUrl + ref
+const apiUrl = (ref) => T.apiUrl + ref
 const api = {
 	async home() {
 		T.timeEnd("Setup")
@@ -57,19 +57,19 @@ function Home(attrs, context, threads = []) {
 	return [
 		m(Header),
 		m(".main", m(Async, {
-			init: () => api.home().then(response => {
+			init: () => api.home().then((response) => {
 				document.title = "ThreaditJS: Mithril | Home"
 				context.update(response.data)
 			}),
 			pending: () => m("h2", "Loading"),
-			error: e => e.status === 404
+			error: (e) => e.status === 404
 				? m("h2", "Not found! Don't try refreshing!")
 				: m("h2", "Error! Try refreshing."),
 			ready: () => [
 				m(Keyed, threads.map((thread) =>
 					m(Fragment, {key: thread.id}, [
 						m("p", [
-							m(Link, {href: `/thread/${thread.id}`, [
+							m(Link, {href: `/thread/${thread.id}`}, [
 								m(Trust, T.trimTitle(thread.text))
 							]),
 						]),
@@ -85,7 +85,7 @@ function Home(attrs, context, threads = []) {
 	]
 }
 
-function NewThread({save}, context, value = "") {
+function NewThread({onSave}, context, value = "") {
 	return m("form", {onsubmit: () => {
 		api.newThread(value).then(({data: thread}) => {
 			onSave(thread)
@@ -93,7 +93,7 @@ function NewThread({save}, context, value = "") {
 		})
 		return false
 	}}, [
-		m("textarea", {value, oninput: ev => context.update(ev.target.value)}),
+		m("textarea", {value, oninput: (ev) => context.update(ev.target.value)}),
 		m("input[type=submit][value='Post!']"),
 	])
 }
@@ -116,10 +116,10 @@ function Thread({id}, context, rendered = false) {
 				return node
 			}),
 			pending: () => m("h2", "Loading"),
-			error: e => e.status === 404
+			error: (e) => e.status === 404
 				? m("h2", "Not found! Don't try refreshing!")
 				: m("h2", "Error! Try refreshing."),
-			ready: node => m(ThreadNode, {node})
+			ready: (node) => m(ThreadNode, {node})
 		}))
 	])
 }
@@ -128,7 +128,7 @@ function ThreadNode({node}) {
 	return m(".comment", [
 		m("p", m(Trust, node.text)),
 		m(".reply", m(Reply, {node})),
-		m(".children", node.children.map(child =>
+		m(".children", node.children.map((child) =>
 			m(ThreadNode, {node: child})
 		))
 	])
@@ -137,7 +137,7 @@ function ThreadNode({node}) {
 function Reply({node}, context, {replying = false, newComment = ""} = {}) {
 	if (replying) {
 		return m("form", {onsubmit() {
-			api.newComment(newComment, node.id).then(response => {
+			api.newComment(newComment, node.id).then((response) => {
 				context.update({replying: false, newComment: ""})
 				node.children.push(response.data)
 			})

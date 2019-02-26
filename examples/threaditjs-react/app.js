@@ -3,14 +3,14 @@
 // React + experimental Hooks: 210 lines.
 // Totals exclude this header comment.
 // Mithril v3 is ~33% smaller than React, ~22% smaller than React + hooks.
+import {BrowserRouter, Link, Route} from "react-router"
 import React from "react"
 import ReactDOM from "react-dom"
-import {Router, Link} from "react-router"
 
 T.time("Setup")
 
 //API calls
-const apiUrl = ref => T.apiUrl + ref
+const apiUrl = (ref) => T.apiUrl + ref
 const api = {
 	async home() {
 		T.timeEnd("Setup")
@@ -64,13 +64,13 @@ class Home extends React.Component {
 			threads: [],
 		}
 
-		api.home().then(response => {
+		api.home().then((response) => {
 			document.title = "ThreaditJS: React | Home"
 			this.setState({
 				state: "ready",
 				threads: response.data,
 			})
-		}, e => {
+		}, (e) => {
 			this.setState({
 				state: e.status === 404 ? "notFound" : "error",
 			})
@@ -81,12 +81,12 @@ class Home extends React.Component {
 		const {state, threads} = this.state
 		return <>
 			<Header />
-			<div class="main">{
+			<div className="main">{
 				state === "loading" ? <h2>Loading</h2>
-				: state === "notFound" ? <h2>Not found! Don't try refreshing!</h2>
-				: state === "error" ? <h2>Error! Try refreshing.</h2>
-				: <>
-					{threads.map(thread =>
+					: state === "notFound" ? <h2>Not found! Don't try refreshing!</h2>
+						: state === "error" ? <h2>Error! Try refreshing.</h2>
+							: <>
+					{threads.map((thread) =>
 						<React.Fragment key={thread.id}>
 							<p>
 								<Link
@@ -96,14 +96,14 @@ class Home extends React.Component {
 									}}
 								/>
 							</p>
-							<p class="comment_count">
+							<p className="comment_count">
 								{thread.comment_count} comment(s)
 							</p>
 							<hr />
 						</React.Fragment>
 					)}
-					<NewThread onSave={thread => {
-						setThreads([...threads, thread])
+					<NewThread onSave={(thread) => {
+						this.setState({threads: [...threads, thread]})
 					}} />
 				</>
 			}</div>
@@ -121,18 +121,18 @@ class NewThread extends React.Component {
 
 	render() {
 		const {value} = this.state
-		const {save} = this.props
+		const {onSave} = this.props
 
 		return (
-			<form onSubmit={ev => {
+			<form onSubmit={(ev) => {
 				ev.preventDefault()
 				ev.stopPropagation()
 				api.newThread(value).then(({data: thread}) => {
 					onSave(thread)
-					setValue("")
+					this.setState({value: ""})
 				})
 			}}>
-				<textarea value={value} onInput={ev => this.setState({
+				<textarea value={value} onInput={(ev) => this.setState({
 					value: ev.target.value,
 				})} />
 				<input type="submit" value="Post!" />
@@ -142,7 +142,7 @@ class NewThread extends React.Component {
 }
 
 //thread
-class Thread {
+class Thread extends React.Component {
 	constructor(...args) {
 		super(...args)
 		this.state = {
@@ -155,7 +155,7 @@ class Thread {
 		api.thread(this.props.id).then(({root: node}) => {
 			document.title = `ThreaditJS: React | ${T.trimTitle(node.text)}`
 			this.setState({state: "ready", node})
-		}, e => {
+		}, (e) => {
 			this.setState({state: e.status === 404 ? "notFound" : "error"})
 		})
 	}
@@ -169,11 +169,11 @@ class Thread {
 		const {id} = this.props
 		return <>
 			<Header />
-			<div class="main"><React.Fragment key={id}>{
+			<div className="main"><React.Fragment key={id}>{
 				state === "loading" ? <h2>Loading</h2>
-				: state === "notFound" ? <h2>Not found! Don't try refreshing!</h2>
-				: state === "error" ? <h2>Error! Try refreshing.</h2>
-				: <ThreadNode node={node} />
+					: state === "notFound" ? <h2>Not found! Don't try refreshing!</h2>
+						: state === "error" ? <h2>Error! Try refreshing.</h2>
+							: <ThreadNode node={node} />
 			}</React.Fragment></div>
 		</>
 	}
@@ -181,17 +181,17 @@ class Thread {
 
 function ThreadNode({node}) {
 	return (
-		<div class="comment">
+		<div className="comment">
 			<p dangerouslySetInnerHTML={{__html: node.text}} />
-			<div class="reply"><Reply node={node} /></div>
-			<div class="children">
-				{node.children.map(child => <ThreadNode node={child} />)}
+			<div className="reply"><Reply node={node} /></div>
+			<div className="children">
+				{node.children.map((child) => <ThreadNode node={child} />)}
 			</div>
 		</div>
 	)
 }
 
-class Reply {
+class Reply extends React.Component {
 	constructor(...args) {
 		super(...args)
 		this.state = {
@@ -206,26 +206,26 @@ class Reply {
 
 		if (replying) {
 			return (
-				<form onSubmit={ev => {
+				<form onSubmit={(ev) => {
 					ev.preventDefault()
 					ev.stopPropagation()
-					api.newComment(newComment, node.id).then(response => {
+					api.newComment(newComment, node.id).then((response) => {
 						node.children.push(response.data)
 						this.setState({replying: false, newComment: ""})
 					})
 				}}>
-					<textarea value={newComment} onInput={ev => {
+					<textarea value={newComment} onInput={(ev) => {
 						this.setState({newComment: ev.target.value})
 					}} />
 					<input type="submit" value="Reply!" />
-					<div class="preview" dangerouslySetInnerHTML={{
+					<div className="preview" dangerouslySetInnerHTML={{
 						__html: T.previewComment(newComment)
 					}} />
 				</form>
 			)
 		} else {
 			return (
-				<a onClick={ev => {
+				<a onClick={(ev) => {
 					ev.preventDefault()
 					ev.stopPropagation()
 					ev.target.value
@@ -239,7 +239,7 @@ class Reply {
 }
 
 //router
-React.render(document.getElementById("app"), (
+ReactDOM.render(document.getElementById("app"), (
 	<BrowserRouter>
 		<Route path="/" exact component={Home} />
 		<Route path="/thread/:id" component={Thread} />

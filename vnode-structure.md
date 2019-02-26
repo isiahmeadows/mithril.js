@@ -29,9 +29,9 @@ If you're confused about all the various bit hacks here and they all look like s
 	- `vnode.mask & 0x4000` - Reserved
 	- `vnode.mask & 0x8000` - Reserved
 	- `vnode.mask >>> 16` - Node length for raw node reference vnodes
-- `vnode.tag` - Tag/custom element name/component name/portal ID token
-- `vnode.attrs` - Attributes
-- `vnode.children` - Children/element reference
+- `vnode.tag` - Tag/custom element name/component name/portal token
+- `vnode.attrs` - Resolved attributes, portal value/default
+- `vnode.children` - Children/element reference, portal callback
 - `vnode.key` - `attrs.key` mirror
 - `vnode.ref` - `attrs.ref` mirror
 
@@ -43,6 +43,7 @@ Notes:
 - For customized builtins, `vnode.tag` is set to `vnode.attrs.is`. This is the only case where a vnode property is set to an attribute.
 - A `m.vnode.create(mask, tag, attrs, children, key, ref)` exists to create this structure, but `m` is preferred when `tag` is dynamic.
 - For empty arrays, always return `null`/`undefined` for their children
+- Portal tokens are either objects or arrays.
 
 ## Mithril IR structure
 
