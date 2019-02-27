@@ -1,3 +1,5 @@
+[*Up*](./README.md)
+
 # Element type IDs
 
 This is used to tie control elements and common tag names to element IDs. The ID is stored as an 8-bit integer within the mask for fast, easy access.
@@ -19,15 +21,15 @@ Other notes:
 
 | Function      |   ID   | Example                                    |
 |:-------------:|:------:|:------------------------------------------ |
-| Retain*       | `0x00` | `m(m.Retain)`                              |
-| Text*         | `0x01` | `m(m.Text, ...)`, `"..."`                  |
-| Raw*          | `0x02` | `m(m.Raw, ...)`                            |
-| Keyed*        | `0x03` | `m(m.Keyed, ...)`                          |
+| Retain*       | `0x00` | `m(Retain)`                                |
+| Text*         | `0x01` | `m(Text, ...)`, `"..."`                    |
+| Raw*          | `0x02` | `m(Raw, ...)`                              |
+| Keyed*        | `0x03` | `m(Keyed, ...)`                            |
 | Component*    | `0x08` | `m(Component, ...)`                        |
 | Other element | `0x09` | `m("feMatrix", ...)`, `m("mo", ...)`, etc. |
-| Fragment      | `0x0A` | `m(m.Fragment, ...)`, `[...]`              |
-| Portal Get    | `0x0C` | `m(portal.Get, ...)`                       |
-| Portal Set    | `0x0D` | `m(portal.Set, ...)`                       |
+| Fragment      | `0x0A` | `m(Fragment, ...)`, `[...]`                |
+| Portal Get    | `0x0C` | `m(PortalGet, ...)`                        |
+| Portal Set    | `0x0D` | `m(PortalSet, ...)`                        |
 
 Unknown elements are *typically* SVG or MathML elements, but not always.
 

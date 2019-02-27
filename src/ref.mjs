@@ -1,67 +1,63 @@
 const missing = {}
 
-export function join([...keys], callback) {
-	let remaining = keys.length
-	const values = Object.fromEntries(keys.map((key) => [key, missing]))
+export const ROOT = {}
 
-	return Object.fromEntries(keys.map((key) => [key, (value) => {
-		const prev = values[key]
-		values[key] = value
-		if (prev !== missing) return
-		if (--remaining === 0) {
-			const func = callback
-			callback = undefined
-			func(values)
-		}
-	}]))
-}
-
-export function all(remaining, callback) {
-	remaining |= 0 // eslint-disable-line no-bitwise
-	const values = new Array(remaining).fill(missing)
-
-	return Object.assign(values.map((_, i) => (value) => {
-		const prev = values[i]
-		values[i] = value
-		if (prev !== missing) return
-		if (--remaining === 0) {
-			const func = callback
-			callback = undefined
-			func(values)
-		}
-	}), {
-		empty: remaining ? undefined : () => {
-			const func = callback
-			if (func) { callback = undefined; func(values) }
-		},
-	})
-}
-
-export function create(callback) {
-	let remaining = 0
+export function join(callback) {
+	let remaining = 1
+	let refs = Object.create(null)
 	const values = Object.create(null)
-	const refs = Object.create(null)
+
+	function finish() {
+		if (--remaining === 0) {
+			const func = callback
+			callback = refs = undefined
+			func(values)
+		}
+	}
 
 	return (key) => {
+		if (key == null) return values
+		if (key === ROOT) return finish
 		if (refs[key] != null) return refs[key]
 		remaining++
 		values[key] = missing
 		return refs[key] = (value) => {
 			const prev = values[key]
 			values[key] = value
-			if (prev !== missing) return
-			if (--remaining === 0) {
-				const func = callback
-				callback = undefined
-				func(values)
-			}
+			if (prev === missing) finish()
 		}
 	}
 }
 
-export function proxy(callback) {
-	const ref = create(callback)
-	return new Proxy(Object.create(null), {
-		get: (_, key) => ref(key)
-	})
+export function all(callback) {
+	let remaining = 1
+	let refs = []
+	const values = []
+
+	function finish() {
+		if (--remaining === 0) {
+			const func = callback
+			callback = refs = undefined
+			func(values)
+		}
+	}
+
+	return (index) => {
+		if (index == null) return values
+		if (index === ROOT) return finish
+		// Cast this to a 32-bit integer
+		index |= 0 // eslint-disable-line no-bitwise
+		if (index < 0) throw new TypeError("Array index must be positive")
+		if (index <= refs.length && refs[index] != null) return refs[index]
+		remaining++
+		// Keep the arrays dense at all times
+		for (var i = values.length; i < index; i++) values[i] = undefined
+		for (var i = refs.length; i < index; i++) refs[i] = undefined
+		values[index] = missing
+		return refs[index] = (value) => {
+			const prev = values[index]
+			values[index] = value
+			if (prev === missing) finish()
+		}
+	}
 }

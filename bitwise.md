@@ -1,3 +1,5 @@
+[*Up*](./README.md)
+
 # Bitwise operations
 
 Throughout this repo, there's a lot of bitwise operations used. These mainly come down to a few simple reasons:

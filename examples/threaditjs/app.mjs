@@ -3,10 +3,10 @@
 // React + experimental Hooks: 210 lines.
 // Totals exclude this header comment.
 // Mithril v3 is ~33% smaller than React, ~22% smaller than React + hooks.
-import {Fragment, Keyed, Trust, m, mount} from "mithril/m"
-import {Link, Route} from "mithril/util/route"
-import Async from "mithril/util/async"
-import request from "mithril/util/request"
+import {Fragment, Keyed, Trust, m, mount} from "mithril"
+import {Link, Router} from "mithril/route"
+import Async from "mithril/async"
+import request from "mithril/request"
 
 T.time("Setup")
 
@@ -161,7 +161,7 @@ function Reply({node}, context, {replying = false, newComment = ""} = {}) {
 }
 
 //router
-mount(document.getElementById("app"), () => m(Route, {
+mount(document.getElementById("app"), () => m(Router, {
 	default: "/",
 	"/thread/:id": ({id}) => m(Thread, {id}),
 	"/": () => m(Home),

@@ -1,12 +1,25 @@
 # Mithril v3 Redesign
 
+## Status
+
+This is a major work in progress, and is very much so a pre-proposal that's still being honed and improved upon. Please don't assume *anything* here is actually going to make it into the next version. Also, don't assume it's targeting version 3 either - I have it listed as such only because it's a major overhaul of the API, but there are no active plans to *make* any of this targeted towards version 3 specifically.
+
+## Feedback?
+
+If you have *any* feedback, questions, or concerns, please do feel free to [file an issue](https://github.com/isiahmeadows/mithril.js/issues/new).
+
+## General idea
+
 TODO: fill in some details
 
 https://github.com/MithrilJS/mithril.js/issues/2278#issuecomment-442003421
 
 - [Core changes](core.md)
-- [Vnode structural changes](vnode-structure.md)
-- [Utilities added to `mithril/*`][utils.md]
+- [Vnode and IR structural changes](vnode-structure.md)
+- [Utilities added to `mithril/*`](utils.md)
+- [Other general notes](notes.md)
+- [Element type-to-ID mapping](element-type-ids.md)
+- [Bitwise operations explainer](bitwise.md)
 
 The general idea is this:
 

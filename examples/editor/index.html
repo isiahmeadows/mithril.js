@@ -15,7 +15,7 @@ h1,h2,h3,h4,h5,h6,p {margin:0 0 10px;}
 		<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/0.3.2/marked.min.js"></script>
 		<script src="../../mithril.js"></script>
 		<script>
-const {m, mount} = Mithril
+const {m} = Mithril
 
 //model
 const state = {
@@ -39,7 +39,7 @@ function Editor(attrs, context) {
 	]
 }
 
-mount(document.getElementById("editor"), () => m(Editor))
+Mithril.mount(document.getElementById("editor"), () => m(Editor))
 		</script>
 	</body>
 </html>

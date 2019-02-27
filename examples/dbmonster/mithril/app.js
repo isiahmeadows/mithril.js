@@ -1,25 +1,24 @@
 "use strict"
 
-const {m, Fragment, Keyed, mount} = Mithril
+const {m, Keyed} = Mithril
 
 perfMonitor.startFPSMonitor()
 perfMonitor.startMemMonitor()
 perfMonitor.initProfiler("render")
 
-function App(attrs, context, isReady = false) {
-	if (!isReady) {
-		function update() {
-			requestAnimationFrame(update)
-			perfMonitor.startProfile("render")
-			context.update(ENV.generateData().toArray()).then(() => {
-				perfMonitor.endProfile("render")
-			})
-		}
-		update()
+function App(attrs, context, data) {
+	function update() {
+		requestAnimationFrame(update)
+		perfMonitor.startProfile("render")
+		context.update(ENV.generateData().toArray()).then(() => {
+			perfMonitor.endProfile("render")
+		})
 	}
 
+	if (data == null) update()
+
 	return {
-		next: true,
+		next: data || [],
 		view: m("div", [
 			m("table.table.table-striped.latest-data", [
 				m("tbody", m(Keyed, data.map(({dbname, lastSample}) =>
@@ -30,7 +29,7 @@ function App(attrs, context, isReady = false) {
 								lastSample.nbQueries
 							])
 						]),
-						lastSample.topFiveQueries.map(query =>
+						lastSample.topFiveQueries.map((query) =>
 							m("td", {class: query.elapsedClassName}, [
 								query.formatElapsed,
 								m("div.popover.left", [
@@ -46,4 +45,4 @@ function App(attrs, context, isReady = false) {
 	}
 }
 
-mount(document.getElementById("app"), () => m(App))
+Mithril.mount(document.getElementById("app"), () => m(App))

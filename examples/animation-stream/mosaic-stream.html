@@ -24,46 +24,39 @@
 		<script src="../../mithril.js"></script>
 		<script src="../../stream/stream.js"></script>
 		<script>
-const {m, render} = Mithril
+const {m, Ref} = Mithril
 
 const range = (start, end) =>
 	Array.from({length: end - start}, (_, i) => i + start)
 
-const exit = elem => {
-	context.dom.classList.add("exit")
-	return new Promise(resolve => setTimeout(resolve, 1000))
-}
-
-const backgroundPosition = step => i =>
+const backgroundPosition = (i, step) =>
 	// X% Y%
 	`${i % step * (step + 1)}% ${Math.floor(i / step) * (step + 1)}%`
 
-// actions -> state -> vnode
-const view = exit => cells => {
-	if (!show) return m(".container")
-	const refs = cells.map(() => context.ref())
-	context.ref(refs).update(elems => () => Promise.all(elems.map(exit)))
-	return m(".container", refs.map((slice, i) => m(".slice", {
-		ref: slice,
-		style: {
-			backgroundPosition: `${i % 10 * 11}% ${Math.floor(i / 10) * 11}%`,
-		},
-	})))
-}
+const View = ({cells, state}) => m(".container",
+	cells == null ? null : cells.map((i) => m(".slice", {
+		class: state === "hide" ? "exit" : null,
+		style: {backgroundPosition: backgroundPosition(i, 10)},
+	}))
+)
 
-// delayed alternate array[0] and array[1] and pipe into actions stream
+// delayed alternate array[0..n] and pipe into actions stream
 const alternate = delay => array => actions => {
-	let i = 1
-	setInterval(() => actions(array[i = 1 - i]), delay)
+	let i = array.length
+	setInterval(() => actions(array[i = (i + 1) % array.length)]), delay)
 	return actions
 }
 
 // prepare stream alternating between empty and full
-alternate(2000)([[], range(0, 10 * 10)])(m.stream())
+const rangeMemo = range(0, 100)
+alternate(1000)([
+	["show", rangeMemo], ["show", rangeMemo],
+	["hide", rangeMemo], ["hide", null],
+])(Mithril.stream())
 	// pipe state stream into view
-	.map(view(exit))
+	.map(([state, cells]) => m(View, {cells, state}))
 	// pipe view stream into render
-	.map(render(document.getElementById("root")))
+	.map(view => Mithril.render(document.getElementById("root"), view))
 		</script>
 	</body>
 </html>

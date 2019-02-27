@@ -1,16 +1,16 @@
-import {mount} from "../../../mithril/mount.mjs"
-import {Route} from "../../../mithril/utils/route.mjs"
+import {m, mount} from "../../../mithril.mjs"
+import {Router} from "../../../mithril/router.mjs"
 import View from "./view.mjs"
 import {subscribe} from "./model.mjs"
 
-function App(attrs, context, isReady = false) {
+function App(attrs, context) {
 	subscribe(() => context.update())
-	return () => m(Route, {
+	return () => m(Router, {
 		default: "/all",
-		"/all": router => m(View, {showing: "all", router}),
-		"/active": router => m(View, {showing: "active", router}),
-		"/completed": router => m(View, {showing: "completed", router}),
+		"/all": (router) => m(View, {showing: "all", router}),
+		"/active": (router) => m(View, {showing: "active", router}),
+		"/completed": (router) => m(View, {showing: "completed", router}),
 	})
 }
 
-mount(document.getElementById("todoapp"), () => )
+mount(document.getElementById("todoapp"), () => m(App))

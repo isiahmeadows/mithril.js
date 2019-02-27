@@ -1,5 +1,8 @@
-import {m, Keyed} from "../../../mithril/m.mjs"
-import {state, dispatch, getRemaining, getTodosByStatus} from "./model.mjs"
+import {Keyed, m} from "../../../mithril.mjs"
+import {
+	countRemaining, dispatch, getTodosByStatus, hasRemaining,
+	state
+} from "./model.mjs"
 import {Link} from "../../../mithril/router.mjs"
 
 //view
@@ -26,8 +29,8 @@ function Todo({todo}, context, activated = false) {
 		}
 	}
 
-	let inputRef = !activated && todo === state.editing
-		? input => {
+	const inputRef = !activated && todo === state.editing
+		? (input) => {
 			if (input !== document.activeElement) {
 				input.focus()
 				input.selectionStart = todo.title.length
@@ -75,7 +78,7 @@ function Todos({showing}) {
 			},
 		}),
 		m("label[for=toggle-all]", "Mark all as complete"),
-		m("ul#todo-list", m(Keyed, todosByStatus.map(todo =>
+		m("ul#todo-list", m(Keyed, todosByStatus.map((todo) =>
 			m(Todo, {key: todo.id, todo})
 		))),
 	])

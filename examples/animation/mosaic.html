@@ -23,32 +23,31 @@
 		<div id="root"></div>
 		<script src="../../mithril.js"></script>
 		<script>
-const {m, mount} = Mithril
+const {m} = Mithril
 
-function View(attrs, context) {
-	let show = true
+const range = (start, end) =>
+	Array.from({length: end - start}, (_, i) => i + start)
 
-	setInterval(
-		() => { show = !show; context.update() },
-		2000
-	)
+const backgroundPosition = (i, step) =>
+	// X% Y%
+	`${i % step * (step + 1)}% ${Math.floor(i / step) * (step + 1)}%`
 
-	return () => {
-		if (!show) return m(".container")
-		const refs = Array.from({length: 100}, () => context.ref())
-		context.ref(refs).update(elems => () => {
-			for (const elem of elems) elem.classList.add("exit")
-			return new Promise(resolve => setTimeout(resolve, 1000))
-		})
-		return m(".container", refs.map((ref, i) => m(".slice", {
-			ref,
-			style: {
-				backgroundPosition: `${i % 10 * 11}% ${Math.floor(i / 10) * 11}%`,
-			},
-		})))
+function View(attrs, context, [state, schedule] = [0, true]) {
+	if (schedule) setTimeout(() => context.update([state + 1, true]), 100)
+	const show = (state & 2) === 0
+	const remove = state === 3
+
+	return {
+		next: [state, false],
+		view: m(".container",
+			remove() ? null : range(100).map((i) => m(".slice", {
+				class: show() ? null : "exit",
+				style: {backgroundPosition: backgroundPosition(i, 10)},
+			}))
+		)
 	}
 }
-mount(document.getElementById("root"), () => m(View))
+Mithril.render(document.getElementById("root"), m(View))
 		</script>
 	</body>
 </html>
