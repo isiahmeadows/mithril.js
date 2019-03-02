@@ -3,7 +3,7 @@ import {
 	countRemaining, dispatch, getTodosByStatus, hasRemaining,
 	state
 } from "./model.mjs"
-import {Link} from "../../../mithril/router.mjs"
+import Router from "../../../mithril/router.mjs"
 
 //view
 function Header() {
@@ -87,24 +87,22 @@ function Todos({showing}) {
 function Footer({showing}) {
 	const remaining = countRemaining()
 
+	function filter(href, label, children) {
+		return m("li", m(Router.Link, m("a", {
+			href, children,
+			class: showing === label ? "selected" : ""
+		})))
+	}
+
 	return [
 		m("span#todo-count", [
 			m("strong", remaining),
 			remaining === 1 ? " item left" : " items left",
 		]),
 		m("ul#filters", [
-			m("li", m(Link, {
-				href: "/all",
-				class: showing === "all" ? "selected" : ""
-			}, "All")),
-			m("li", m(Link, {
-				href: "/active",
-				class: showing === "active" ? "selected" : ""
-			}, "Active")),
-			m("li", m(Link, {
-				href: "/completed",
-				class: showing === "completed" ? "selected" : ""
-			}, "Completed")),
+			filter("/", "all", "All"),
+			filter("/active", "active", "Active"),
+			filter("/completed", "completed", "Completed"),
 		]),
 		m("button#clear-completed", {
 			onclick() { dispatch({type: "clear"}) }

@@ -45,8 +45,6 @@ Core would change considerably, but this is to simplify the API and better accom
 - Retain: `m(Retain)`
 	- This replaces `onbeforeupdate`.
 	- If no subtree previously existed, this generates a raw node with the existing tree if hydrating or throws an error otherwise.
-- Portal get: `m(PortalGet, {token, default}, value => children)`
-- Portal set: `m(PortalSet, {token, value}, children)`
 - Request element/ref access: `ref: (elem, length) => ...` for elements/fragments/etc., `ref: value => ...` otherwise
 	- For component vnodes, `ref` is called with the `ref:` returned with the view.
 	- For element and text vnodes: `ref` is called with the backing DOM node.
@@ -60,8 +58,6 @@ Core would change considerably, but this is to simplify the API and better accom
 
 Notes:
 
-- Portals are indexed by token, but the token can be any type. Note that `NaN` should *not* be used as the algorithm just uses `lastIndexOf` and an internal stack for portal tokens.
-- You can specify an array of portals + an array of values/defaults to get them all at once and sent through the callback as an array, instead of just a single portal or default.
 - There are two special vnode attributes:
 	- `key` - This tracks vnode identity and allows two functions:
 		- In `Keyed` children, linking an instance to a particular identity. This is how keyed fragments work today.
@@ -71,9 +67,7 @@ Notes:
 - Vnode keys in all other cases are diffed as part of the logical "tag name"
 - Vnode children are stored in `attrs.children`
 - There is no `vnode.text` - it's `children: "..."` for `trust`/`text` and `children: [m(text, "...")]` elsewhere
-
-Notes:
-
+- An error would be thrown during normalization if a child is an object without a numeric `.mask` field.
 - Refs are somewhat different from React's:
 	- Refs are designed to be control mechanisms, not simply exposure mechanisms. They work more like a single-use token you can pass around and asynchronously query. Likewise, these are *not* saved in subsequent renders.
 	- [React cares about ref identity](https://reactjs.org/docs/refs-and-the-dom.html#caveats-with-callback-refs), but this complicates the model a lot, especially when it's designed only for exposure.

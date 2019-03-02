@@ -3,9 +3,9 @@
 // React + experimental Hooks: 210 lines.
 // Totals exclude this header comment.
 // Mithril v3 is ~33% smaller than React, ~22% smaller than React + hooks.
-import {Fragment, Keyed, Trust, m, mount} from "mithril"
-import {Link, Router} from "mithril/route"
+import {Fragment, Keyed, Trust, m, render} from "mithril"
 import Async from "mithril/async"
+import Router from "mithril/route"
 import request from "mithril/request"
 
 T.time("Setup")
@@ -47,7 +47,7 @@ function Header() {
 			m("a[href='http://threaditjs.com']", "ThreaditJS Home"),
 		]),
 		m("h2", [
-			m(Link, {href: "/"}, "ThreaditJS: Mithril"),
+			m(Router.Link, m("a[href=/]", "ThreaditJS: Mithril")),
 		]),
 	]
 }
@@ -69,9 +69,10 @@ function Home(attrs, context, threads = []) {
 				m(Keyed, threads.map((thread) =>
 					m(Fragment, {key: thread.id}, [
 						m("p", [
-							m(Link, {href: `/thread/${thread.id}`}, [
-								m(Trust, T.trimTitle(thread.text))
-							]),
+							m(Router.Link, m("a", {
+								href: `/thread/${thread.id}`,
+								innerHTML: T.trimTitle(thread.text),
+							})),
 						]),
 						m("p.comment_count", thread.comment_count, " comment(s)"),
 						m("hr"),
@@ -161,7 +162,7 @@ function Reply({node}, context, {replying = false, newComment = ""} = {}) {
 }
 
 //router
-mount(document.getElementById("app"), () => m(Router, {
+render(document.getElementById("app"), Router.match({
 	default: "/",
 	"/thread/:id": ({id}) => m(Thread, {id}),
 	"/": () => m(Home),

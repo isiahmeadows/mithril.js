@@ -18,7 +18,7 @@ Given that [vnode allocation and inspection now requires interpretation](vnode-s
 
 ## Composable refs
 
-This is exposed under `mithril/ref` and in the core bundle via `Mithril.Ref`. It exists to help make refs considerably more manageable.
+This is exposed under `mithril/ref` and in the full bundle via `Mithril.Ref`. It exists to help make refs considerably more manageable.
 
 - `refs = Ref.join(({...elems}) => ...)` - Create a combined ref that invokes a callback once all named refs are received.
     - `ref = refs(key)` - Create and get a ref linked to that callback key
@@ -39,50 +39,63 @@ This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-re
 
 ## Router API
 
-This is exposed under `mithril/router`.
+This is exposed under `mithril/router` and in the full bundle via `Mithril.Router`. The default export is a global router instance.
 
-- `m(Router.Router, {prefix, default, history, onredirect, ...routes})` - Define routes
-    - `"/route/:param": (params, history) => ...` - Define a route
-        - `params` contains both query params and template params
-        - `history` contains a history proxy you can `.push(opts)` and `.pop()` to and you can get the `.current()` href + state
+- `newRouter = Router.create(init: (update) => history)` - Create a new global router instance with a different history.
+    - `{href, state} = history.current()` - Return the current URL + state pair
+    - `history.push(href, state, title)` - Push a new URL + state pair with an optional descriptive title
+    - `history.replace(href, state, title)` - Replace the current URL + state pair with an optional descriptive title
+    - `history.pop()` - Pop the current URL + state pair and restore the previous pair
+    - `history.prefix` - Any prefix to tack on to linked children.
+    - `update()` - Schedule a change callback using the current change callback.
+    - The default history splices off the prefix, but custom histories don't necessarily have to.
+    - The `update` callback indirectly invokes `Router.update`.
+    - The history should be somehow initialized with a reference to its corresponding global router instance
+
+- `Router.history` - Get the router history.
+    - The default history has a `history.prefix` property with some extra magic semantics
+        - When the prefix starts with `#`, routing is based on the URL's hash.
+        - When the prefix starts with `?`, routing is based on the URL's query + hash.
+        - When the prefix starts with anything else, routing is based on the full URL path, query, and hash.
+        - The default prefix is `"#!"`.
+        - When no DOM exists, the default history throws an error from every method.
+
+- `Router.match({...routes, default, current?})` - Dispatch based on a route.
+    - `current = href | {href, state}` forces a current route, ignoring the history altogether. Passing a string is equivalent to passing `{path: current, state: null}`. Don't use this unless you're rendering server-side.
+    - `default:` is the fallback route if no route is detected, if no routes match, or if the current route's `href` is literally `""`.
+    - `"/route/:param": (params) => ...` - Define a route
+        - `params` contains both query params and template params.
+        - This can return one of `router` to skip, an object of child routes (for composable routes, detected by the presence of a property starting with `/`) to then dispatch from, or a vnode child.
         - This is exact by default, but the prefix carried by the context specifically *excludes* any final parameter, either `:param` or `:param...`.
-    - `prefix:` is the prefix to use in addition to the router's parent's prefix.
-    - `default:` is the fallback route if no route is detected or if no routes match, used only when the prefix starts with either a `?` or a `#`.
-    - `current: {href, state}` forces a current route, ignoring the history altogether. Passing a string is equivalent to passing `{path: current, state: null}`. Don't use this unless you're rendering server-side.
-    - `history:` is the global history instance to use, a `{current(): {href, state}, push(href, state, title, replace), pop(), subscribe(cb)}` object where each of those returns a potential promise. Defaults to one that just manipulates the URL based on the `prefix` if a DOM exists.
-        - The return values of `history.push(...)` and `history.pop()` are ignored.
-        - When this is passed, it's not added as a child router but a new top-level router.
-    - When running without a global DOM, you *must* pass at least one of `history:` or `current:`.
+    - When there is no active history (as in, when running without a global DOM and without an explicit `history:`), `current` is required.
     - If you want a 404 route, define a final route of `"/:path...": () => ...`.
-    - Note: when defining child routes, `prefix`, `current`, and `history` are all ignored.
-- `SKIP` - Skip the current route and render the next matching route
-    - This can be returned even when the route itself was previously rendered
-    - This must be returned directly from a route view - an error will be thrown otherwise.
-- `m(Router.Redirect, {...})` - Redirect to another route.
-    - This simply does `history.push({...attrs, replace: true})` on initialization.
-    - This can be returned even when the route itself was previously rendered.
-- `m(Router.Link, {...})` - Create a link using the router's parent's implicit prefix
-    - `href:` - The path to route to (required)
-    - `tag:` - The tag name to render as the vnode
-    - `attrs:` - Other attributes to set on the element itself
-    - `params:`, `replace:`, `state:`, `title:` - Other options passed through to `history.push`
-- `history = router.history` - Get the context's history object
-    - `{href, state} = history.current()` - Get the current route with the prefix spliced off.
-    - `history.push(href | setOpts).then(...)` - Set the current route, taking into account any prefix.
-        - `opts.href` - The target URL to move to. Specifying a string is equivalent to passing this without parameters.
-        - `opts.params` - The data you want to interpolate and append as query parameters
-        - `opts.replace` - Whether to replace the current history state
-        - `opts.state` - The state to associate with the history entry
-        - `opts.title` - The title of the history entry
-    - `history.pop().then(...)` - Go back to the previous route.
-    - The returned promises
+    - Note: when matching from a child router, `current` is ignored.
+    - Note: this is the only method of all of these that exist
+
+- `Router.push(href | setOpts).then(...)` - Set the current route.
+    - `opts.href` - The target URL to move to. Specifying a string is equivalent to passing this without parameters.
+    - `opts.params` - The data you want to interpolate and append as query parameters
+    - `opts.state` - The state to associate with the history entry
+    - `opts.title` - The title of the history entry
+
+- `Router.replace(href | setOpts).then(...)` - Replace the current route, taking into account any prefix.
+    - Options are identical to `Router.push(href | setOpts).then(...)`
     - This is intentionally unwieldy. Prefer `Router.Link` where possible.
-    - Each of these strips the prefix as necessary, and they wrap inconsistencies in the history passed to `Router.Router`.
-- The original proposal was one of the few bits that was fairly close: https://github.com/MithrilJS/mithril.js/issues/2281
-    - I just want to keep the URL handling changes of https://github.com/MithrilJS/mithril.js/pull/2361 in this.
-    - I also wanted to discourage direct manipulation.
+    - Use this to redirect. `route: () => { Router.redirect(...) }` is the preferred idiom.
+
+- `Router.pop().then(...)` - Go back to the previous route.
+    - The returned promises await the change to execute first as well as the `onupdate` to execute.
+
+- `m(Router.Link, {...}, elem)` - Create a link using the router's parent's implicit prefix
+    - `children:` - An element to hook into with `onclick` + `href` (required)
+    - All other options are passed to `router.push(opts)`
 
 This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/router.mjs).
+
+### Notes
+
+- `router.push`/`router.replace`/`router.pop` are all intentionally unwieldy. Prefer `Router.Link` where possible.
+- Each of these strips the prefix as necessary, and they wrap inconsistencies in the history passed to `new Router({...})`.
 
 ## Request API
 

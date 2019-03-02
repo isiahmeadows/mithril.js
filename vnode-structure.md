@@ -33,9 +33,9 @@ Total: 6 fields
 	- `vnode.mask & 0x4000` - Reserved
 	- `vnode.mask & 0x8000` - Reserved
 	- `vnode.mask >>> 16` - Node length for raw node reference vnodes
-- `vnode.tag` - Tag/custom element name/component name/portal token
-- `vnode.attrs` - Resolved attributes, portal value/default
-- `vnode.children` - Children/element reference, portal callback
+- `vnode.tag` - Tag/custom element name/component name
+- `vnode.attrs` - Resolved attributes
+- `vnode.children` - Children/element reference
 - `vnode.key` - `attrs.key` mirror
 - `vnode.ref` - `attrs.ref` mirror
 
@@ -48,7 +48,6 @@ Notes:
 - For customized builtins, `vnode.tag` is set to `vnode.attrs.is`. This is the only case where a vnode property is set to an attribute.
 - A `Mithril.create(mask, tag, attrs, children, key, ref)` exists to create this structure, but `m` is preferred when `tag` is dynamic.
 - For empty arrays, always return `null`/`undefined` for their children
-- Portal tokens are either objects or arrays.
 
 ## Mithril IR structure
 
@@ -92,24 +91,6 @@ Here are the types:
 	- `ir[parent]` - Closest element parent
 	- `ir[remove]` - `ref` removal hook
 	- `ir[children]` - Children with holes represented by `undefined`s
-
-- Portal Get: 7 entries
-	- `ir[mask]` - Inline cache mask
-	- `ir[id]` - Internal node ID, used for simplifying update batching
-	- `ir[key]` - Element key
-	- `ir[parent]` - Closest element parent
-	- `ir[remove]` - `ref` removal hook
-	- `ir[children]` - The rendered instance as an `ir` object or `undefined` if no children are rendered
-	- `ir[tag]` - Portal ID token
-
-- Portal Set: 7 entries
-	- `ir[mask]` - Inline cache mask
-	- `ir[id]` - Internal node ID, used for simplifying update batching
-	- `ir[key]` - Element key
-	- `ir[parent]` - Closest element parent
-	- `ir[remove]` - `ref` removal hook
-	- `ir[children]` - Children with holes represented by `undefined`s
-	- `ir[tag]` - Portal ID token
 
 - Simple DOM: 8 entries
 	- `ir[mask]` - Inline cache mask
@@ -201,7 +182,6 @@ These operations are a little arcane, but that's because it involves quite a bit
 - If `(ir[mask] & 0xFA) === 8 && ir[tag] !== vnode.tag`, replace.
 	- If the incoming vnode's component doesn't equal the internal vnode's component, replace.
 	- If the incoming vnode's tag name doesn't equal the internal vnode's tag name, replace.
-	- If the incoming vnode's portal doesn't equal the internal vnode's portal, replace.
 - If `(ir[mask] & 1 << 10) !== 0 && ir[key] !== vnode.key`, replace.
 	- If the vnodes have keys and the incoming vnode's key doesn't equal the internal vnode's key, replace.
 - Else, patch.
@@ -213,3 +193,6 @@ This is in large part due to disagreement with [React's decision to block it](ht
 - They note that it's *very* difficult to block arbitrary JavaScript in general and that their defense could still be penetrated in many circumstances.
 - Some of the potential vulnerabilities they claim exist are almost certainly *not* exploitable in practice.
 	- The section on "[...] if your server has a hole that lets the user store an arbitrary JSON object while the client code expects a string, [...]" is itself fairly niche, and even in this case, you almost always do further processing before rendering the value.
+	- It notes pretty clearly it *doesn't* protect against things like `href: "javascript:doSomethingReallyEvil()"` or spreading untrusted attributes.
+	- Most of the hypotheticals are just about things frameworks already address, like unescaped strings and the like.
+- The obvious case of an object without a `.mask` is already rejected for reasons other than this, but it'd also catch 99% of the issues that'd really occur in practice, including some I've encountered personally.

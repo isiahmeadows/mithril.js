@@ -28,8 +28,6 @@ Other notes:
 | Component*    | `0x08` | `m(Component, ...)`                        |
 | Other element | `0x09` | `m("feMatrix", ...)`, `m("mo", ...)`, etc. |
 | Fragment      | `0x0A` | `m(Fragment, ...)`, `[...]`                |
-| Portal Get    | `0x0C` | `m(PortalGet, ...)`                        |
-| Portal Set    | `0x0D` | `m(PortalSet, ...)`                        |
 
 Unknown elements are *typically* SVG or MathML elements, but not always.
 
