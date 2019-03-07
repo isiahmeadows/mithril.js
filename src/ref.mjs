@@ -1,63 +1,63 @@
-const missing = {}
+const pending = {}
+const hole = {}
 
-export const ROOT = {}
-
-export function join(callback) {
-	let remaining = 1
-	let refs = Object.create(null)
-	const values = Object.create(null)
+function combine(isArray, callback) {
+	let created = 0, mounted = 0, hasRoot = false, remove
+	const values = isArray ? [] : Object.create(null)
 
 	function finish() {
-		if (--remaining === 0) {
-			const func = callback
-			callback = refs = undefined
-			func(values)
+		if (created !== 0 && --created === 0) {
+			if (isArray) {
+				for (let i = 0; i < values.length; i++) {
+					if (values[i] === hole) values[i] = undefined
+				}
+			}
+			remove = callback(values)
+			if (typeof remove !== "function") remove = undefined
+		}
+		return removeHook
+	}
+
+	function removeHook() {
+		if (mounted !== 0 && --mounted === 0) {
+			if (remove != null) remove()
 		}
 	}
 
 	return (key) => {
 		if (key == null) return values
-		if (key === ROOT) return finish
-		if (refs[key] != null) return refs[key]
-		remaining++
-		values[key] = missing
-		return refs[key] = (value) => {
+		if (key === join) {
+			if (!hasRoot) { hasRoot = true; created++; mounted++ }
+			return finish
+		}
+		added: {
+			if (isArray) {
+				// Cast this to a 32-bit integer
+				key |= 0 // eslint-disable-line no-bitwise
+				if (key < 0) throw new TypeError("Array index must be positive")
+				const length = values.length
+				if (key <= values.length && values[key] !== hole) break added
+				// Keep the array dense at all times
+				values.length = key + 1
+				values.fill(hole, length, key)
+			} else if (Object.prototype.hasOwnProperty.call(values, key)) {
+				break added
+			}
+			created++; mounted++
+			values[key] = pending
+		}
+		return (value) => {
 			const prev = values[key]
 			values[key] = value
-			if (prev === missing) finish()
+			if (prev === pending) return finish()
 		}
 	}
 }
 
+export function join(callback) {
+	return combine(false, callback)
+}
+
 export function all(callback) {
-	let remaining = 1
-	let refs = []
-	const values = []
-
-	function finish() {
-		if (--remaining === 0) {
-			const func = callback
-			callback = refs = undefined
-			func(values)
-		}
-	}
-
-	return (index) => {
-		if (index == null) return values
-		if (index === ROOT) return finish
-		// Cast this to a 32-bit integer
-		index |= 0 // eslint-disable-line no-bitwise
-		if (index < 0) throw new TypeError("Array index must be positive")
-		if (index <= refs.length && refs[index] != null) return refs[index]
-		remaining++
-		// Keep the arrays dense at all times
-		for (var i = values.length; i < index; i++) values[i] = undefined
-		for (var i = refs.length; i < index; i++) refs[i] = undefined
-		values[index] = missing
-		return refs[index] = (value) => {
-			const prev = values[index]
-			values[index] = value
-			if (prev === missing) finish()
-		}
-	}
+	return combine(true, callback)
 }

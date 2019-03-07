@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html>
 	<head>
@@ -32,22 +33,21 @@ const backgroundPosition = (i, step) =>
 	// X% Y%
 	`${i % step * (step + 1)}% ${Math.floor(i / step) * (step + 1)}%`
 
-function View(attrs, context, [state, schedule] = [0, true]) {
-	if (schedule) setTimeout(() => context.update([state + 1, true]), 100)
+Mithril.render(document.getElementById("root"), m(".container", (context, {
+	state = 0,
+	timer = setTimeout(() => context.update({state: state + 1}), 1000)
+} = {}) => {
 	const show = (state & 2) === 0
 	const remove = state === 3
 
 	return {
-		next: [state, false],
-		view: m(".container",
-			remove() ? null : range(100).map((i) => m(".slice", {
-				class: show() ? null : "exit",
-				style: {backgroundPosition: backgroundPosition(i, 10)},
-			}))
-		)
+		state: {state, timer},
+		value: remove ? undefined : range(100).map((i) => m(".slice", {
+			class: show ? undefined : "exit",
+			style: {backgroundPosition: backgroundPosition(i, 10)},
+		}))
 	}
-}
-Mithril.render(document.getElementById("root"), m(View))
+}))
 		</script>
 	</body>
 </html>

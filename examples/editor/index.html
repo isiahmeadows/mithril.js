@@ -15,7 +15,7 @@ h1,h2,h3,h4,h5,h6,p {margin:0 0 10px;}
 		<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/0.3.2/marked.min.js"></script>
 		<script src="../../mithril.js"></script>
 		<script>
-const {m} = Mithril
+const {m, component} = Mithril
 
 //model
 const state = {
@@ -26,18 +26,15 @@ const state = {
 }
 
 //view
-function Editor(attrs, context) {
-	return [
+const Editor = component((context) => {
+	return () => [
 		m("textarea.input", {
-			oninput(e) {
-				state.update(e.target.value)
-				context.update()
-			},
+			oninput(e) { state.update(e.target.value) },
 			value: state.text
 		}),
 		m(".preview", trust(marked(state.text))),
 	]
-}
+})
 
 Mithril.mount(document.getElementById("editor"), () => m(Editor))
 		</script>

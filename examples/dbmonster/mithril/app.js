@@ -6,7 +6,7 @@ perfMonitor.startFPSMonitor()
 perfMonitor.startMemMonitor()
 perfMonitor.initProfiler("render")
 
-function App(attrs, context, data) {
+Mithril.render(document.getElementById("app"), (context, data) => {
 	function update() {
 		requestAnimationFrame(update)
 		perfMonitor.startProfile("render")
@@ -18,8 +18,8 @@ function App(attrs, context, data) {
 	if (data == null) update()
 
 	return {
-		next: data || [],
-		view: m("div", [
+		state: data || [],
+		value: m("div", [
 			m("table.table.table-striped.latest-data", [
 				m("tbody", m(Keyed, data.map(({dbname, lastSample}) =>
 					m("tr", {key: dbname}, [
@@ -43,6 +43,4 @@ function App(attrs, context, data) {
 			])
 		])
 	}
-}
-
-Mithril.mount(document.getElementById("app"), () => m(App))
+})

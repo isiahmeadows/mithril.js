@@ -49,121 +49,97 @@ Notes:
 - A `Mithril.create(mask, tag, attrs, children, key, ref)` exists to create this structure, but `m` is preferred when `tag` is dynamic.
 - For empty arrays, always return `null`/`undefined` for their children
 
-## Mithril IR structure
+## Mithril DOM IR structure
 
 The IR vnodes are arranged as arrays to minimize memory and let them be quickly read without confusing the engine with polymorphic types. Specifically:
 
 - Chrome and Firefox both pre-allocate room in arrays for 8 entries immediately (I've verified this), and I suspect Edge and Safari are likely similar.
+- Each element is really tracked as three separate objects within global arrays:
+	- An array containing basic type info + children IDs.
+	- An array containing object type info, like tags, attrs, etc.
+	- An array containing the raw DOM vnodes
+	- Global queues exist for both of these, used to add elements when there isn't room before or at the current read counter.
+- Keys are resolved to integers using a global object instance, for simplicity and to fit better with the highly numeric nature of this.
+
+Here's the general vnode structure, consisting of 4 integers + 4 polymorphic fields:
+
+- `idata[(id << 2) + 0] = mask` - Inline cache mask
+	- `mask & 0x00FF` = Type ID
+	- `mask & 1 << 8` = Custom element (either autonomous or customized)
+	- `mask & 1 << 9` = Not void
+	- `mask & 1 << 10` = Check key
+	- `mask & 1 << 11` = Skip for diff (i.e. is being asynchronously removed)
+	- `mask & 1 << 12` = Has removal hook on self or descendant
+	    - This flag is reset on every element after checking, and is re-toggled if it still has one added
+		- This flag is unset on parents with no subscribed children after checking
+	- `mask & 1 << 13` = Has removal hook on self
+	- Note: `mask & 0x07FF` *must* align with `vnode.mask & 0x07FF`.
+- `idata[(id << 2) + 1] = parentId` - Closest element parent ID or `-1` if this is the root node.
+- `idata[(id << 2) + 2] = domStart` - DOM index start
+- `idata[(id << 2) + 3] = domEnd` - DOM index end (as in, index after last)
+- `odata[(id << 2) + 0] = key` - Element key
+- `odata[(id << 2) + 1] = remove` - `ref` removal hook
+- `odata[(id << 2) + 2] = children` - Children IDs with holes represented by `-1`s or `undefined` for text nodes and raw nodes
+- `odata[(id << 2) + 3] = typeData` - Type-dependent data, `undefined` unless otherwise specified
+
+Each node is referred to by an ID pointer.
+
+- All IR nodes are indexed per-root in order of appearance, and their indices are updated on each render.
+- This is used together with `parentId` checking to avoid attempting to schedule a redraw whenever one is already scheduled for that segment.
+- After updating a segment, all subsequent children are updated.
 
 Here are the types:
 
-- Text: 7 entries
-	- `ir[mask]` - Inline cache mask
-	- `ir[id]` - Internal node ID, used for simplifying update batching
-	- `ir[key]` - Element key
-	- `ir[parent]` - Closest element parent
-	- `ir[remove]` - `ref` removal hook
-	- `ir[dom]` - Node reference
-	- `ir[children]` - Text contents
+- Text:
+	- `typeData` = String contents
+	- Assert: `domStart === domEnd - 1`
+	- Assert: `children === undefined`
 
-- Raw: 7 entries
-	- `ir[mask]` - Inline cache mask
-	- `ir[id]` - Internal node ID, used for simplifying update batching
-	- `ir[key]` - Element key
-	- `ir[parent]` - Closest element parent
-	- `ir[remove]` - `ref` removal hook
-	- `ir[dom]` - Node start/reference
-	- `ir[children]` - Fragment length (usually 1)
+- Raw:
+	- Assert: `children === undefined`
 
-- Keyed: 7 entries
-	- `ir[mask]` - Inline cache mask
-	- `ir[id]` - Internal node ID, used for simplifying update batching
-	- `ir[key]` - Element key
-	- `ir[parent]` - Closest element parent
-	- `ir[remove]` - `ref` removal hook
-	- `ir[children]` - Children with holes represented by `undefined`s
-	- `ir[tag]` - Fragment key/index map
+- Keyed:
+	- `typeData` = Fragment key/index map
+	- Note: `domStart` and `domEnd` are inferred from children.
+	- Assert: `Array.isArray(children)`
 
-- Fragment: 6 entries
-	- `ir[mask]` - Inline cache mask
-	- `ir[id]` - Internal node ID, used for simplifying update batching
-	- `ir[key]` - Element key
-	- `ir[parent]` - Closest element parent
-	- `ir[remove]` - `ref` removal hook
-	- `ir[children]` - Children with holes represented by `undefined`s
+- Fragment:
+	- Note: `domStart` and `domEnd` are inferred from children.
+	- Assert: `Array.isArray(children)`
 
-- Simple DOM: 8 entries
-	- `ir[mask]` - Inline cache mask
-		- Assert: `(ir[mask] & 0x00FF) !== 9`
-		- Assert: `(ir[mask] & 1 << 8) === 0`
-		- Assert: `(ir[mask] & 1 << 16) === 0`
-	- `ir[id]` - Internal node ID, used for simplifying update batching
-	- `ir[key]` - Element key
-	- `ir[parent]` - Closest element parent
-	- `ir[remove]` - `ref` removal hook
-	- `ir[dom]` - Element reference
-	- `ir[children]` - Children with holes represented by `undefined`s
-	- `ir[tag]` - Current attributes
-
-- Component: 9 entries
-	- `ir[mask]` - Inline cache mask
-		- `ir[mask] & 1 << 16` - Is reducer
-	- `ir[id]` - Internal node ID, used for simplifying update batching
-	- `ir[key]` - Element key
-	- `ir[parent]` - Closest element parent
-	- `ir[remove]` - `ref` removal hook
-	- `ir[children]` - The rendered instance as an `ir` object or `undefined` if no children are rendered
-	- `ir[tag]` - Component reference
-	- `ir[state]` - Current state or view factory
-	- `ir[attrs]` - Current attributes
-
-- Full DOM: 10 entries
-	- `ir[mask]` - Inline cache mask
-		- `ir[mask] & 1 << 16` - Has events
-	- `ir[id]` - Internal node ID, used for simplifying update batching
-	- `ir[key]` - Element key
-	- `ir[parent]` - Closest element parent
-	- `ir[remove]` - `ref` removal hook
-	- `ir[dom]` - Fragment start
-	- `ir[children]` - Children with holes represented by `undefined`s
-	- `ir[attrs]` - Current attributes
-	- `ir[tag]` - Mask-dependent:
-		- `(ir[mask] & 0x00FF) === 9`: Custom element tag name
-		- `(ir[mask] & 1 << 8) !== 0`: Custom element `is` name
+- DOM:
+	- `typeData.tag` = Mask-dependent:
+		- `(mask & 0x00FF) === 9`: Custom element tag name
+		- `(mask & 1 << 8) !== 0`: Custom element `is` name
 		- Otherwise: `undefined`
-	- `ir[state]` - Event target + subscribed events
+	- `typeData.attrs` = DOM attributes
+	- `typeData.events` = DOM event map
+	- Assert: `domStart === domEnd - 1`
+	- Assert: `Array.isArray(children)`
 
-Common:
+- Component:
+	- `typeData` = Component reference
+	- Note: `domStart` and `domEnd` are inferred from children.
+	- Assert: `Array.isArray(children)`
 
-- `ir[mask]` - Inline cache mask
-	- `ir[mask] & 0x00FF` - Type ID
-	- `ir[mask] & 1 << 8` - Custom element (either autonomous or customized)
-	- `ir[mask] & 1 << 9` - Not void
-	- `ir[mask] & 1 << 10` - Check key
-	- `ir[mask] & 1 << 11` - Skip for diff (i.e. is being asynchronously removed)
-	- `ir[mask] & 1 << 12` - Has removal hook on self or descendant
-	    - This flag is reset on every element after checking, and is re-toggled if it still has one added
-		- This flag is unset on parents with no subscribed children after checking
-	- `ir[mask] & 1 << 13` - Has removal hook on self
-	- `ir[mask] & 1 << 14` - Is locked (rendered or destroyed)
-		- This flag exists mainly for sanity checks to avoid certain issues.
-	- `ir[mask] & 1 << 15` - Reserved
-	- `ir[mask] & 1 << 16` to `ir[mask] & 1 << 31` - Reserved
-	- Note: `ir[mask] & 0x07FF` *must* align with `vnode.mask & 0x07FF`.
-- `ir[id]` - Internal node ID, used for simplifying update batching
-- `ir[key]` - Element key
-- `ir[parent]` - Closest element parent
-- `ir[remove]` - `ref` removal hook
+- Control:
+	- `typeData.body` = Current control body
+	- `typeData.state` = Current state
+	- `typeData.context` = Node context
+	- Note: `domStart` and `domEnd` are inferred from children.
+	- Assert: `Array.isArray(children)`
 
 Notes:
 
 - In the MVP, this can just normalize the vnodes into internal IR, replacing them as necessary. This is all just internal whatnot.
+- This is *highly* specific to Mithril's core renderer. Other renderers may choose to implement their IR differently, and in some cases (like native renderers), they likely have different data structures.
 
 ## Context
 
 Context instance:
 
-- `context._ir` - Direct reference to component vnode IR
+- `context._ir` - Vnode IR index, or `-1` if unmounted
+	- This sentinel exists mainly for sanity checks to avoid certain issues.
 
 Note: Contexts are mostly just simple dependency injection objects that let you redraw things.
 
@@ -173,20 +149,51 @@ These operations are a little arcane, but that's because it involves quite a bit
 
 ### Get patch strategy
 
-- If `(vnode.mask & 0xFF) === 0`, skip.
-	- If the incoming vnode is a `m(Retain)` vnode, skip.
-- If `(ir[mask] & 0x07FF) !== (vnode.mask & 0x07FF)`, replace.
-	- If the incoming vnode's tag type doesn't match the internal vnode's tag type, replace.
-	- If the incoming vnode has a key and the internal vnode doesn't, replace.
-	- If the internal vnode has a key and the incoming vnode doesn't, replace.
-- If `(ir[mask] & 0xFA) === 8 && ir[tag] !== vnode.tag`, replace.
-	- If the incoming vnode's component doesn't equal the internal vnode's component, replace.
-	- If the incoming vnode's tag name doesn't equal the internal vnode's tag name, replace.
-- If `(ir[mask] & 1 << 10) !== 0 && ir[key] !== vnode.key`, replace.
-	- If the vnodes have keys and the incoming vnode's key doesn't equal the internal vnode's key, replace.
-- Else, patch.
+Rules:
 
-## Why keep it JSON-compatible?
+1. If the incoming vnode's type is `Retain`, skip.
+1. If the incoming vnode's type doesn't match the internal vnode's type, replace.
+1. If the incoming vnode has a key and the internal vnode doesn't, replace.
+1. If the internal vnode has a key and the incoming vnode doesn't, replace.
+1. If the incoming vnode's component doesn't equal the internal vnode's component, replace.
+1. If the incoming vnode's tag name doesn't equal the internal vnode's tag name, replace.
+1. Else, patch.
+
+```js
+function getPatchStrategy(id, vnode) {
+	if (!(vnode.mask & 0xFF)) return SKIP
+	if (
+		(idata[id << 2] ^ vnode.mask) & 0x07FF ||
+		(idata[id << 2] & 1 << 10) && odata[id << 2] !== vnode.key ||
+		(idata[id << 2] & 0xFF) === 8 && odata[(id << 2) + 3] !== vnode.tag ||
+		(idata[id << 2] & 1 << 8) && odata[(id << 2) + 3].tag !== vnode.tag
+	) {
+		return REPLACE
+	}
+	return PATCH
+}
+```
+
+### Skip subtree
+
+This searches for the next walkable subtree's IR ID and returns it, or `-1` if this is the last node.
+
+```js
+// Returns the new index. Takes a fair bit of pointer chasing here.
+function skipSubtree(id) {
+	while (id >= 0) {
+		const parent = idata[(id << 2) + 1]
+		const children = odata[(parent << 2) + 2]
+		const index = children.indexOf(id) + 1
+
+		if (index !== children.length) return children[index]
+		id = parent
+	}
+	return id
+}
+```
+
+## Why keep vnodes JSON-compatible?
 
 This is in large part due to disagreement with [React's decision to block it](https://overreacted.io/why-do-react-elements-have-typeof-property/) somewhat. They make security claims, but I'm not convinced they're serious in any remotely sane set-up:
 

@@ -6,7 +6,7 @@ These are all various utilities that are, unless otherwise listed, kept out of t
 
 ## Vnode inspection Utilities
 
-This is exposed under `mithril/vnodes` and in the core bundle via `Mithril.Vnodes`.
+This is exposed under `mithril/vnodes` and in the full bundle via `Mithril.Vnodes`.
 
 - `Vnodes.tag(vnode)` - Get the resolved tag name, component reference, or built-in component reference.
 - `Vnodes.attrs(vnode)` - Get the resolved attributes as a frozen object, including `is` for DOM `is` attributes, `key` for the key, `ref` for the ref, and `children` for the resolved children.
@@ -22,12 +22,12 @@ This is exposed under `mithril/ref` and in the full bundle via `Mithril.Ref`. It
 
 - `refs = Ref.join(({...elems}) => ...)` - Create a combined ref that invokes a callback once all named refs are received.
     - `ref = refs(key)` - Create and get a ref linked to that callback key
-    - `ref = refs(Ref.ROOT)` - Create and get a ref called to send an object, or `undefined` if named refs exist.
+    - `ref = refs(Ref.join)` - Create and get a ref called to send an object, or `undefined` if named refs exist.
     - `value = refs()` - Get the resolved values or `undefined` if some are still pending
 
 - `refs = Ref.all(([...elems]) => ...)` - Create a combined ref that invokes a callback once all named refs are received.
     - `ref = refs(index)` - Create and get a ref linked to that index
-    - `ref = refs(Ref.ROOT)` - Get a ref called to send an empty array, or `undefined` if named refs exist.
+    - `ref = refs(Ref.all)` - Get a ref called to send an empty array, or `undefined` if named refs exist.
     - `value = refs()` - Get the resolved values or `undefined` if some are still pending
 
 Notes:
@@ -35,11 +35,27 @@ Notes:
 - The resulting refs only propagate the first argument, the element or component ref.
 - These don't type check the values themselves apart from checking identity with a private sentinel object.
 
-This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/ref.mjs).
+This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/ref.mjs), with an optimized implementation [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/optimized/ref.mjs).
+
+## Trusted vnodes
+
+This is exposed under `mithril/trust` and in the full bundle via `Mithril.Trust`. is a userland implementation of `m.trust`, something that's been around since v0.1. It's out-of-core because `innerHTML` is better for most use cases.
+
+- `m(Trust, {tag = "div", xmlns = null}, ...children)`
+    - `tag:` - The tag name to use for the temporary parent. By default, it uses `"div"`
+    - `xmlns:` - The namespace to use for the temporary parent. By default, it falls back to just using the default document namespace.
+    - `children:` - An array of children strings to render as part of the fragment.
+    - `ref:` - This provides an array of child nodes for its ref.
+
+This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/trust.mjs), with an optimized implementation [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/optimized/trust.mjs).
+
+### Why?
+
+People are going to ask for it anyways, so why not? Plus, it shows off some of the flexibility of the component model.
 
 ## Router API
 
-This is exposed under `mithril/router` and in the full bundle via `Mithril.Router`. The default export is a global router instance.
+This is exposed under `mithril/router` and in the full bundle via `Mithril.Router`. The default export is a global router instance. It depends on the internal path parsing utilities, but that's it.
 
 - `newRouter = Router.create(init: (update) => history)` - Create a new global router instance with a different history.
     - `{href, state} = history.current()` - Return the current URL + state pair
@@ -65,12 +81,12 @@ This is exposed under `mithril/router` and in the full bundle via `Mithril.Route
     - `default:` is the fallback route if no route is detected, if no routes match, or if the current route's `href` is literally `""`.
     - `"/route/:param": (params) => ...` - Define a route
         - `params` contains both query params and template params.
-        - This can return one of `router` to skip, an object of child routes (for composable routes, detected by the presence of a property starting with `/`) to then dispatch from, or a vnode child.
+        - This can return one of `router` to skip, an object of child routes (for composable routes, detected by the presence of a property starting with `/`) to then dispatch from, a vnode child, or a state reducer returning one of the above.
+        - Child route objects may also contain `default:` properties, but not `current:`.
         - This is exact by default, but the prefix carried by the context specifically *excludes* any final parameter, either `:param` or `:param...`.
     - When there is no active history (as in, when running without a global DOM and without an explicit `history:`), `current` is required.
     - If you want a 404 route, define a final route of `"/:path...": () => ...`.
-    - Note: when matching from a child router, `current` is ignored.
-    - Note: this is the only method of all of these that exist
+    - Note: this returns a state reducer. So this *can* be used independently of Mithril's view.
 
 - `Router.push(href | setOpts).then(...)` - Set the current route.
     - `opts.href` - The target URL to move to. Specifying a string is equivalent to passing this without parameters.
@@ -90,12 +106,13 @@ This is exposed under `mithril/router` and in the full bundle via `Mithril.Route
     - `children:` - An element to hook into with `onclick` + `href` (required)
     - All other options are passed to `router.push(opts)`
 
-This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/router.mjs).
+This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/router.mjs), although it currently lacks support for state reducers returning anything other than vnodes.
 
 ### Notes
 
-- `router.push`/`router.replace`/`router.pop` are all intentionally unwieldy. Prefer `Router.Link` where possible.
-- Each of these strips the prefix as necessary, and they wrap inconsistencies in the history passed to `new Router({...})`.
+- Prefer `Router.Link` over explicit `router.push(...)`/`router.replace(...)`/`router.pop(...)` for URLs. Mithril handles most of the boilerplate and
+- Each of these strips the prefix as necessary, and they wrap inconsistencies in the history passed to `Router.create(...)`.
+- This is fully zero-dependency and the only utility that requires vnodes is the `router.Link` component, so you *could* use this in both state reducers and the virtual DOM tree without issue as long as you don't use `router.Link`.
 
 ## Request API
 
@@ -103,25 +120,26 @@ This is exposed under `mithril/request`.
 
 - JSONP support is gone. It's basically obsolete now in light of CORS being available on all supported platforms, and our code is easy to just copy if necessary.
 
-Beyond that, the API is probably fine as-is.
+Beyond that, the API is probably fine as-is after [#2335](https://github.com/MithrilJS/mithril.js/pull/2335) and [#2361](https://github.com/MithrilJS/mithril.js/pull/2361) are merged.
 
 ## Async loading sugar
 
-This is exposed under `mithril/async`.
+This is exposed under `mithril/async` and in the full bundle via `Mithril.Async`.
 
 Basically https://github.com/MithrilJS/mithril.js/issues/2282.
 
-- `m(Async, {init, destroy, body})`
+- `m(Async, {init, destroy, loading, ready, error, destroyed})`
     - `init:` - Initialize the resource and return a promise resolved once ready, rejected if error. This is a function accepting a cancellation scheduler so you can abort requests as necessary.
     - `destroy:` - Destroy an initialized resource and return a promise resolved once destroyed, rejected if an error occurred during destruction.
-    - `body:` - Render a body based on the state
-        - `body("loading")` - Resource is currently loading
-        - `body("ready", data)` - Resource is ready
-        - `body("error", error)` - An error occurred when creating or destroying the resource.
-        - `body("destroyed")` - Resource is successfully destroyed
+    - `loading:`, `ready:`, `error:`, `destroyed:` - Render a body based on the state
+        - `loading()` - Resource is currently loading
+        - `ready(data)` - Resource is ready
+        - `error(error)` - An error occurred when creating or destroying the resource.
+        - `destroyed()` - Resource is successfully destroyed
     - `ref:` - This provides a `destroy()` callback as its `ref`, so you can manually and gracefully destroy the resource.
+    - This is also a state reducer factory, so yes, you can use it in your state reducers, too. And it's zero-dependency, so it doesn't care whether you return vnodes or something else entirely.
 
-This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/async.mjs).
+This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/async.mjs), with an optimized implementation [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/optimized/async.mjs).
 
 ### Why?
 
@@ -133,7 +151,7 @@ This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-re
 
 ## Transition API
 
-This is exposed under `mithril/transition`.
+This is exposed under `mithril/transition` and in the full bundle via `Mithril.Transition`.
 
 - `m(Transition, {in, out, show, onin, onout}, children)` - Define a transitioned element
     - `in:` - Zero or more space-separated classes to toggle while transitioning inward.

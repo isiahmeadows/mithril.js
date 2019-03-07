@@ -33,9 +33,9 @@ const backgroundPosition = (i, step) =>
 	// X% Y%
 	`${i % step * (step + 1)}% ${Math.floor(i / step) * (step + 1)}%`
 
-const View = ({cells, state}) => m(".container",
-	cells == null ? null : cells.map((i) => m(".slice", {
-		class: state === "hide" ? "exit" : null,
+const view = (state, cells) => m(".container",
+	cells == null ? undefined : cells.map((i) => m(".slice", {
+		class: state === "hide" ? "exit" : undefined,
 		style: {backgroundPosition: backgroundPosition(i, 10)},
 	}))
 )
@@ -51,10 +51,10 @@ const alternate = delay => array => actions => {
 const rangeMemo = range(0, 100)
 alternate(1000)([
 	["show", rangeMemo], ["show", rangeMemo],
-	["hide", rangeMemo], ["hide", null],
+	["hide", rangeMemo], ["hide", undefined],
 ])(Mithril.stream())
 	// pipe state stream into view
-	.map(([state, cells]) => m(View, {cells, state}))
+	.map(([state, cells]) => view(state, cells))
 	// pipe view stream into render
 	.map(view => Mithril.render(document.getElementById("root"), view))
 		</script>

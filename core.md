@@ -4,53 +4,114 @@
 
 Core would change considerably, but this is to simplify the API and better accommodate components.
 
-- Changes to vnodes and primitives
-	- Changes to the vnode structure
-	- Primitive components
-	- Userland components
-	- Separation of keyed and unkeyed fragments
-	- Normalization changes
-- Changes to components
-	- TODO
-
 ## Goals
 
 - Libraries should be largely independent of where it gets its Mithril state. This is why `context` is passed as a parameter to components.
 - It should be as concise as pragmatically possible, yet still remain actual JS. This guided my decision to offer both reducer and closure variants.
 
-## Component variants:
+## State reducers
 
-- Closure: `component(attrs, context) => (attrs) => (view | {view, ref?})`
-- Reducer: `component(attrs, context, state?) => view | {next, view, ref?}`
-	- Omitting `next` is equivalent to passing `{next: state}`, not `{next: undefined}`.
-- `ref` is for if you want to support a custom `ref`.
-- If you want previous attributes and/or state, store the old values in the new state. Mithril does *not* retain them.
-- Note: `attrs` is really `{...vnode.attrs, children: vnode.children}` from the vnode.
+You'll see these referenced quite a bit, so here's a quick explainer.
+
+State reducers are simple `(context, state = undefined) => {state, value, ref?, done?}` methods.
+
+- `context` is a full [vnode context](core.md#context).
+	- Note that if you wrap this for your own purposes, make sure it's either persistent, it always delegates to one (at least indirectly), or both. Utilities *will* rely on this, including built-in ones.
+- `state` is the state accumulator. You accept the previous value and return the next.
+- These are intentionally valid vnode children, so you can use them to create simple reactive cells of sorts.
+- `value` is the return value. In control vnodes, this is your vnode children.
+- `done()` is called when the state reducer is being removed. It's not normally awaited, so be aware of that.
+- Conveniently, this can be used as a control vnode, and it's special-made for it.
+
+State reducer factories are just as simple: they take a value and return a state reducer. This might come as a surprise to you, but stateful components are implemented as exactly this: a state reducer factory that accepts attributes and returns a state reducer that emits views. If this helps, state reducer factories are just this: `(arg: Arg) => Reducer<Value, Ref>`. Stateful components are a close variant of that: `(arg: Attrs) => Reducer<Child, Ref>`. The full type of `Reducer` is this:
+
+```ts
+// Basic description
+type Reducer<T, R = undefined> =
+    <S>(context: Context<S>, state: S | undefined) =>
+        {state: S, value: T, ref?: R, done?(): any};
+
+// Exact, what'll go in Mithril's type definitions
+type _MakeNullableOptional<T extends {}> =
+	{[P in keyof T & {[K in keyof T]: void | null | undefined}]?: T[P]} & T;
+
+type ReducerResult<T, R = undefined, S = any> = _MakeNullableOptional<{
+	state: S, value: T, ref: R, done: (() => any) | void | null | undefined
+}>;
+
+type Reducer<T, R = undefined, S = any> =
+    (context: Context<S>, state: S | undefined) => ReducerResult<T, R, S>;
+```
+
+This is purely a convention commonly used throughout the API. This is heavily inspired by React Hooks, but aims to keep the runtime overhead to a minimum. It also is not present in the core bundle because 99% of uses can generally just be written as a design pattern. And of course, there's a heavy FP inspiration here, but a pragmatic, impure one.
+
+## Components
+
+- Components: `component(attrs): view`
+- Components simply map attributes to a view. Mithril only cares about them in that it can more intelligently diff things.
+- Intentionally, components do have a friendly API that works even if you choose to use it not as a component.
+- If you want to actually update the view, use a control vnode
+- Refs on components pass through to the component's body.
+- If you want to remember attributes, store them in the state.
+- If you want to remember old attributes or state, store them in the new state.
+- Note: incoming vnode children are accessible via `attrs.children`.
+
+### Why separate the updating from components?
+
+There's a few reasons:
+
+1. Instead of component attributes being stored on the internal model, it's stored in a closure (the control vnode's body) that implicitly gets replaced on update. In most cases, this provides a substantial memory win, since in practice, attributes are often not necessary.
+2. Updating can happen anywhere, and it doesn't matter where it is as long as the tree is updated appropriately. This brings a lot of added flexbility.
+3. Components now only serve one master: abstraction. Control components serve the single master of enabling subtree updates.
+
+If you've used [React Redux](https://react-redux.js.org/) and you squint hard enough, [you can see a mild resemblance to it](https://redux.js.org/basics/usage-with-react), yes, that was a partial inspiration. But this is also partially coincidence due to similar concerns:
+
+- Incoming attributes are treated very similarly a Redux action dispatch.
+- State is treated much like Redux component props.
+- Unlike React Redux, this provides the previous state (their props) when receiving attributes (their action). This keeps the view logic within the component, which just makes more sense.
+- Unlike React Redux, this fuses dispatch with rendering, so it avoids all the overhead of going through a full store and back.
+
+I've used React Redux in a few boilerplates and seen several other React Redux projects, and yes, reducers are *very* commonly used as [state reducers in an MVI architecture](http://hannesdorfmann.com/android/mosby3-mvi-3). This is a partial inversion of that architecture, where:
+
+- The view is fused with the "model"
+- The view is specified together with its model
+- The state reducer `receive` is receiving intents in the form of attributes
 
 ## Vnodes
 
 - Element: `m("div", ...)`
+	- `xmlns` sets the raw namespace to construct this with.
 - Fragment: `m(Fragment, ...)`, `[...]`
 - Keyed: `m(Keyed, ...)`
 - Text: `m(Text, ...)`, `"..."`
-- Raw: `m(Raw, Node | string)`
-	- This is retained as long as `elem` remains the same.
+- Raw: `m(Raw, {length = 1}, [...])`
+	- Children may either be nodes (when rendering to DOM) or strings (when rendering to string).
+	- This is retained as long as the children array remains the same.
 	- If the node is a fragment, the fragment's length *is* tracked accordingly.
 	- The underlying renderer decides what `elem` should be.
 	- This replaces `m.trust` - you should instead do one of the following:
 		- Set `innerHTML` directly. 99.999999% of the time, this is sufficient. It's worth noting React, as popular as it is, only lets you do this.
-		- Create a factory node, set `innerHTML` into it, and copy its children into a fragment, and return the fragment in a raw vnode.
+		- Create a factory node, set `innerHTML` into it, and copy its children into a fragment, and return the fragment in a raw vnode. (This is what Mithril v1 and v2 do internally.)
 	- It's *highly* advised that you diff the attributes appropriately here.
     - This is partially to integrate better with certain third-party utilities that [return their own DOM nodes](https://fontawesome.com/how-to-use/with-the-api/setup/getting-started) for you to add.
 - Retain: `m(Retain)`
 	- This replaces `onbeforeupdate`.
 	- If no subtree previously existed, this generates a raw node with the existing tree if hydrating or throws an error otherwise.
-- Request element/ref access: `ref: (elem, length) => ...` for elements/fragments/etc., `ref: value => ...` otherwise
-	- For component vnodes, `ref` is called with the `ref:` returned with the view.
+- Control: `m(Control, {ref: controlBody})`, `controlBody`
+	- Control children: `controlBody(context, state): view | {state, ref?, done?, value: view}`
+	- These are intentionally [state reducers](mvp-utils.md#state-combinator-api).
+	- Returning `view` directly is equivalent to passing `{state, value: view, ref: undefined}`.
+	- This is for when you need a fragment you can update manually.
+	- This simplifies a few things.
+	- This makes certain auto-binding patterns easier to specify.
+	- This can provide some prop-like magic behavior without actually being a significant maintenance or boilerplate problem.
+- Request element/ref access: `ref: (elem) => ...`, `ref: (value) => ...`, etc.
+	- For component vnodes, `ref` is called with the `ref:` generated by the view.
 	- For element and text vnodes: `ref` is called with the backing DOM node.
 	- For raw vnodes: `ref` is called with the first DOM node + the raw length.
-	- For retained vnodes: `ref` is not called.
-	- For all other vnode typs, `ref` is called with zero arguments.
+	- For retained and control vnodes: `ref` is not called.
+	- For fragment vnodes, `ref` is called with an array of the above.
+	- For keyed vnodes, `ref` is called with a key/value object of the above.
 	- The callback is scheduled to run after rendering or in the next frame.
 	- Return a callback to run on remove, ignored if the ref is replaced.
 	- This replaces the `oncreate`/`onupdate`/`onbeforeremove`/`onremove` lifecycle methods.
@@ -65,6 +126,7 @@ Notes:
 	- `ref` - This allows accessing the underlying DOM instance or provided component ref of a particular component or vnode.
 - Vnode keys in `Keyed` are tracked like keyed fragments today
 - Vnode keys in all other cases are diffed as part of the logical "tag name"
+- Vnode keys are treated as object properties. Don't assume they're compared by literal identity, but treat them as if they're compared by property identity.
 - Vnode children are stored in `attrs.children`
 - There is no `vnode.text` - it's `children: "..."` for `trust`/`text` and `children: [m(text, "...")]` elsewhere
 - An error would be thrown during normalization if a child is an object without a numeric `.mask` field.
@@ -79,20 +141,17 @@ Notes:
 
 ## Context
 
-- Is serializing: `context.isSerializing`
+- Is serializing: `context.renderType()`
 	- This is for cases like third party integration when you need to *not* invoke DOM-dependent libraries in server-side code.
-	- This is set to `true` by `mithril/render-html` and `false` by `mithril/render`
+	- This is used by `mithril/trust` to determine what to render.
+	- This is returns `"html"` for `mithril/render-html` and `"dom"` for `mithril/render`
 - Update state + view async: `context.update(next?).then(...)`
-	- This schedules a global redraw.
+	- This schedules a subtree redraw for the relevant control vnode.
 	- If `next` is passed, it's called with the current state and the state is replaced with its return value.
 	- If a renderer only runs once, this is optional.
-- Update state + view sync: `context.updateSync(next?).then(...)`
-	- This is similar to `context.update(next?)`, but operates synchronously.
+- Update state + view sync: `context.updateSync(next?)`
+	- This is similar to `context.update(next?)`, but operates synchronously and either synchronously throws or synchronously returns `undefined`.
 	- There exist legitimate use cases for sync redraws (mostly [DOM feedback](https://github.com/MithrilJS/mithril.js/issues/1166#issuecomment-234965960) and third-party integration), but semantics get hairy when sync redraws affect parent and sibling components. This is part of why sync redraws are restricted to subtree redraws. (The other main part is because it usually signals a broken abstraction.)
-- Set state + view async: `context.set(next).then(...)`
-	- Sugar for `context.update(() => next)`
-- Set state + view sync: `context.setSync(next?).then(...)`
-	- Sugar for `context.updateSync(() => next)`
 
 ## Hyperscript API
 
@@ -101,6 +160,7 @@ This is the existing hyperscript API, exposed via exports of `mithril/m`. Each o
 - `m`/`default` - The hyperscript factory
 - `Fragment`, `Keyed`, `Text`, `Trust`, `Retain` - Built-in components
 - `create(mask, tag, attrs, children, key, ref)` - The vnode factory
+- `RETAIN_MEMO` - A reference to the memoized `m(Retain)`, for `mopt`
 - `normalize` - Normalize a single child into a vnode
 - `normalizeChildren` - Normalize a child or array of children into an array of vnodes
 
@@ -127,7 +187,7 @@ Notes:
 
 ## DOM hydration API
 
-The DOM hydration API is exposed under `mithril/hydrate` and is exposed under `Mithril.hydrate`. It depends on `mithril/render` and `mithril/m`.
+The DOM hydration API is exposed under `mithril/hydrate` and is exposed via `Mithril.hydrate`. It depends on `mithril/render` and `mithril/m`.
 
 - `hydrate(root, vnode?)` - Renders a root vnode.
 	- This assigns an expando `._ir` to the root if one doesn't exist already.
@@ -138,6 +198,48 @@ Notes:
 - An error is thrown if any differences exist between the existing DOM tree the incoming vnode tree.
 - If an error is thrown at any point, all successfully added removal hooks are called immediately before throwing the caught error. If any of these throw, their errors replace the initially caught error and are rethrown instead.
 - This shares a lot of internal subscription code with `mithril/render`, so those need to share a common backend.
+
+## Closure components
+
+This is exposed under `mithril/component` and exposed via `Mithril.component`.
+
+- `component((attrs, context) => (attrs, prev) => view)`
+    - `attrs` - The current attributes.
+    - `prev` - The previous attributes or `undefined` if it's the first render.
+	- This is just like `closure`, but sugars over attributes, too.
+
+This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/component.mjs), with an optimized implementation [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/optimized/component.mjs).
+
+### Why?
+
+Sometimes, it's easier to think procedurally and method-oriented and in super stateful, relatively static components like controlled forms and some inputs, it's sometimes more concise.
+
+```js
+// Native reducer
+function Counter() {
+    return (context, count = 0) => [
+        m("button", {onclick: () => context.update(count - 1)}, "-"),
+        m(".display", count),
+        m("button", {onclick: () => context.update(count + 1)}, "+"),
+    ]
+}
+
+// Closure
+const Counter = closure(() => {
+    let count = 0
+    return () => [
+        m("button", {onclick: () => count--}, "-"),
+        m(".display", count),
+        m("button", {onclick: () => count++}, "+"),
+    ]
+})
+```
+
+Also, it's just generally useful when you store your model entirely separate from the component and access it directly, something not uncommon in simpler apps.
+
+### Open questions
+
+Is this a common enough *need* (not simply *want*) to include in the core bundle? I'm leaning towards a yes, since it's *sometimes* more concise and a little more streamlined. However, that "sometimes" is really an "almost never" in practice based on my experimentation, with most use cases being either forms, model-driven components, or something similarly stateful, self-contained, and non-reactive. I've only once in the `src/` or `examples/` folders needed this, and even in many of the cases you'd expect, it's neither more concise nor necessarily more readable.
 
 ## General notes
 

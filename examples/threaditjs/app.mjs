@@ -53,15 +53,15 @@ function Header() {
 }
 
 //home
-function Home(attrs, context, threads = []) {
-	return [
+function Home() {
+	return (context, threads = []) => [
 		m(Header),
 		m(".main", m(Async, {
 			init: () => api.home().then((response) => {
 				document.title = "ThreaditJS: Mithril | Home"
 				context.update(response.data)
 			}),
-			pending: () => m("h2", "Loading"),
+			loading: () => m("h2", "Loading"),
 			error: (e) => e.status === 404
 				? m("h2", "Not found! Don't try refreshing!")
 				: m("h2", "Error! Try refreshing."),
@@ -86,8 +86,8 @@ function Home(attrs, context, threads = []) {
 	]
 }
 
-function NewThread({onSave}, context, value = "") {
-	return m("form", {onsubmit: () => {
+function NewThread({onSave}) {
+	return (context, value = "") => m("form", {onsubmit: () => {
 		api.newThread(value).then(({data: thread}) => {
 			onSave(thread)
 			context.update("")
@@ -100,29 +100,31 @@ function NewThread({onSave}, context, value = "") {
 }
 
 //thread
-function Thread({id}, context, rendered = false) {
-	if (!rendered) T.time("Thread render")
-	return m(Fragment, {
-		ref: () => {
-			context.update(true)
-			T.timeEnd("Thread render")
-		}
-	}, [
-		m(Header),
-		m(".main", m(Async, {
-			key: id,
-			init: () => api.thread(id).then(({root: node}) => {
-				document.title =
-					`ThreaditJS: Mithril | ${T.trimTitle(node.text)}`
-				return node
-			}),
-			pending: () => m("h2", "Loading"),
-			error: (e) => e.status === 404
-				? m("h2", "Not found! Don't try refreshing!")
-				: m("h2", "Error! Try refreshing."),
-			ready: (node) => m(ThreadNode, {node})
-		}))
-	])
+function Thread({id}) {
+	return (context, rendered = false) => {
+		if (!rendered) T.time("Thread render")
+		return m(Fragment, {
+			ref: () => {
+				context.update(true)
+				T.timeEnd("Thread render")
+			}
+		}, [
+			m(Header),
+			m(".main", m(Async, {
+				key: id,
+				init: () => api.thread(id).then(({root: node}) => {
+					document.title =
+						`ThreaditJS: Mithril | ${T.trimTitle(node.text)}`
+					return node
+				}),
+				loading: () => m("h2", "Loading"),
+				error: (e) => e.status === 404
+					? m("h2", "Not found! Don't try refreshing!")
+					: m("h2", "Error! Try refreshing."),
+				ready: (node) => m(ThreadNode, {node})
+			}))
+		])
+	}
 }
 
 function ThreadNode({node}) {
@@ -135,29 +137,31 @@ function ThreadNode({node}) {
 	])
 }
 
-function Reply({node}, context, {replying = false, newComment = ""} = {}) {
-	if (replying) {
-		return m("form", {onsubmit() {
-			api.newComment(newComment, node.id).then((response) => {
-				context.update({replying: false, newComment: ""})
-				node.children.push(response.data)
-			})
-			return false
-		}}, [
-			m("textarea", {
-				value: newComment,
-				oninput(ev) {
-					context.update({replying, newComment: ev.target.value})
-				},
-			}),
-			m("input[type=submit][value='Reply!']"),
-			m(".preview", m(Trust, T.previewComment(newComment))),
-		])
-	} else {
-		return m("a", {onclick() {
-			context.update({replying: true, newComment: ""})
-			return false
-		}}, "Reply!")
+function Reply({node}) {
+	return (context, {replying = false, newComment = ""} = {}) => {
+		if (replying) {
+			return m("form", {onsubmit() {
+				api.newComment(newComment, node.id).then((response) => {
+					context.update({replying: false, newComment: ""})
+					node.children.push(response.data)
+				})
+				return false
+			}}, [
+				m("textarea", {
+					value: newComment,
+					oninput(ev) {
+						context.update({replying, newComment: ev.target.value})
+					},
+				}),
+				m("input[type=submit][value='Reply!']"),
+				m(".preview", m(Trust, T.previewComment(newComment))),
+			])
+		} else {
+			return m("a", {onclick() {
+				context.update({replying: true, newComment: ""})
+				return false
+			}}, "Reply!")
+		}
 	}
 }
 

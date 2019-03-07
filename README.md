@@ -16,7 +16,8 @@ https://github.com/MithrilJS/mithril.js/issues/2278#issuecomment-442003421
 
 - [Core changes](core.md)
 - [Vnode and IR structural changes](vnode-structure.md)
-- [Utilities added to `mithril/*`](utils.md)
+- [Utilities added to `mithril/*`, part of the MVP](mvp-utils.md)
+- [Utilities added to `mithril/*`, not part of the MVP](future-utils.md)
 - [Other general notes](notes.md)
 - [Element type-to-ID mapping](element-type-ids.md)
 - [Bitwise operations explainer](bitwise.md)

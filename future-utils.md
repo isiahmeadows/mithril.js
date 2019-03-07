@@ -1,8 +1,74 @@
 [*Up*](./README.md)
 
-# Utilities
+# Non-MVP Utilities
 
 These are all various utilities that are, unless otherwise listed, kept out of the core bundle, but they are not considered part of the proposal's MVP.
+
+## State utilities
+
+This is exposed in `mithril/state` to help you manipulate state reducers and state reducer factories more easily.
+
+- `reducer = State.join({...reducers}, ({...values}, refs) => ...)` - Join multiple reducers in an object into a single reducer with each named by property
+    - The resulting reducer emits objects for its refs and children
+    - If the callback is omitted, it defaults to the identity function
+
+- `reducer = State.all([...reducers], ([...values], refs) => ...)` - Join multiple reducers in an array into a single reducer with each named by index
+    - The resulting reducer emits arrays for its refs and children
+    - If the callback is omitted, it defaults to the identity function
+
+- `result = State.run(value, ...funcs)` - Run a value through a series of functions.
+    - Basically sugar for `funcs.reduce((x, f) => f(x), value)`
+    - Once JS has a [pipeline operator](https://github.com/tc39/proposal-pipeline-operator/), this becomes less necessary.
+    - This is useful for creating a pipeline of reducer transforms.
+
+- `reducerFactory = State.pipe(...reducerFactories)` - Compose a series of state reducer factories
+    - If a reducer returns `null` or `undefined` as its ref, the previous one is passed in its place.
+    - If a later reducer updates, previous reducers' factories are skipped. This avoids unexpected state updates when none was expected.
+    - If no reducer factories are passed, this returns the identity state reducer factory.
+    - If only one reducer factories is passed, this returns the reducer directly.
+    - Conveniently, you *can* create components this way.
+
+- `reducerFactory = State.id()` - Return an identity state reducer factory.
+
+- `reducer = State.map(oldReducer, (value, ref) => newValue)` - Transform a reducer's return value.
+    - Refs are sent through without modification.
+
+- `reducer = State.tap(reducer, (value, ref) => newValue)` - Return a reducer that runs a reducer and invokes a function on each emitted value.
+
+- `reducer = State.of(value)` - Create a reducer always returning a constant.
+
+- `reducer = State.setRef(oldReducer, ref)` - Set a reducer's ref.
+
+- `reducer = State.chain(oldReducer, (value, ref) => newReducer)` - Take a ref's value and pipe its value through a new function and return a new ref wrapping its return value.
+    - You might recognize this function shape and maybe even its name. Yes, it's a flat-map/monadic bind.
+
+- `reducerFactory = State.when(cond, (ref) => cons, (ref) => alt)` - When `cond` is truthy, invoke `cons` with the value, else invoke `alt` with the value.
+    - If either is omitted, it defaults to emitting `undefined` instead.
+
+- `reducer = State.watch(value, init, compare)` - Detect the reducer factory's lifecycle.
+    - `init(context, prev, value)` - Called on first load and on change. Returns a `{value, ref, done}` object where `value` is passed along as the value, `ref` is passed along as the ref, and `done` is called on next update or on `done`.
+    - `compare(prev, value)` - Called to check if a value is the same. Defaults to `(a, b) => a === b`.
+    - This returns the current value.
+
+- `reducer = State.watchAll(values, init, compare)` - Mostly sugar for `State.watch(values, init, arrayEqual)`, but lets you customize the array equality.
+
+- `State.arrayEqual(a, b, compare)` - The implementation used for `State.watchAll`, but exposed in case it's useful.
+
+This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/state.mjs), with an optimized implementation [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/optimized/state.mjs).
+
+### Why?
+
+A few reasons:
+
+- The basic design pattern is pretty nice for simple stuff, but it won't scale too far.
+- Components are state reducer factories, so this could sugar creating some of them, especially when you chain.
+- This is what would be our answer to React Hooks, just substantially lower-overhead.
+
+Also, there's a handful of helpers [here](https://github.com/isiahmeadows/mithril.js/tree/v3-redesign/helpers) based on [some of these hooks](https://usehooks.com/), in case you want to know what it could look like in practice.
+
+### Open questions
+
+1. Should this be part of the MVP? Most of the real power gained from using state reducers ends up centralized into this module. The main concern I have is that we'll have to teach it to people first, almost right out the gate. It's counterintuitive at first, but not in the same way hooks are. However, writing the necessary primitives isn't much easier, and I've seen already how primitives are easy to screw up, just while writing the utility library.
 
 ## List diff
 

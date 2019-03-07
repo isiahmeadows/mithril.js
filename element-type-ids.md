@@ -19,15 +19,16 @@ Other notes:
 
 - `(mask & 0xF0) === 0x00`
 
-| Function      |   ID   | Example                                    |
-|:-------------:|:------:|:------------------------------------------ |
-| Retain*       | `0x00` | `m(Retain)`                                |
-| Text*         | `0x01` | `m(Text, ...)`, `"..."`                    |
-| Raw*          | `0x02` | `m(Raw, ...)`                              |
-| Keyed*        | `0x03` | `m(Keyed, ...)`                            |
-| Component*    | `0x08` | `m(Component, ...)`                        |
-| Other element | `0x09` | `m("feMatrix", ...)`, `m("mo", ...)`, etc. |
-| Fragment      | `0x0A` | `m(Fragment, ...)`, `[...]`                |
+| Function      |   ID   | Example                                      |
+|:-------------:|:------:|:-------------------------------------------- |
+| Retain*       | `0x00` | `m(Retain)`                                  |
+| Text*         | `0x01` | `m(Text, ...)`, `"..."`                      |
+| Raw*          | `0x02` | `m(Raw, ...)`                                |
+| Keyed*        | `0x03` | `m(Keyed, ...)`                              |
+| Component*    | `0x08` | `m(Component, ...)`                          |
+| Other element | `0x09` | `m("feMatrix", ...)`, `m("mo", ...)`, etc.   |
+| Fragment      | `0x0A` | `m(Fragment, ...)`, `[...]`                  |
+| Control       | `0x0B` | `m(Control, ...)`, `(context, state) => ...` |
 
 Unknown elements are *typically* SVG or MathML elements, but not always.
 

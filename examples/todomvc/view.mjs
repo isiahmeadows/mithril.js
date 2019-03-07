@@ -20,7 +20,7 @@ function Header() {
 	])
 }
 
-function Todo({todo}, context, activated = false) {
+function Todo({todo}) {
 	function save(ev) {
 		if (ev.keyCode === 13 || ev.type === "blur") {
 			dispatch({type: "update", title: ev.target.value})
@@ -29,7 +29,7 @@ function Todo({todo}, context, activated = false) {
 		}
 	}
 
-	const inputRef = !activated && todo === state.editing
+	const inputRef = todo === state.editing
 		? (input) => {
 			if (input !== document.activeElement) {
 				input.focus()

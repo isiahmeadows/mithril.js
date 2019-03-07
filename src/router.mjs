@@ -1,7 +1,6 @@
 // `./pathname/build.js` and `./pathname/parse.js` are as defined in this PR:
 // https://github.com/MithrilJS/mithril.js/pull/2361
 import buildPathname from "./pathname/build.js"
-import {m} from "./hyperscript.js"
 import matchTemplate from "./pathname/match.js"
 import parsePathname from "./pathname/parse.js"
 
@@ -21,97 +20,47 @@ function create(init) {
 		})
 	}
 
-	function cleanup(token) {
-		return () => contexts.delete(token)
-	}
-
-	function Dispatch({
-		current = router.history.current(),
-		default: defaultRoute, ...routes
-	}, context, token = {}) {
-		contexts.set(token, context)
-
-		const resolved = typeof current === "string"
-			? {href: current, state: undefined}
-			: current
-
-		if (!(/^\//).test(resolved.href)) {
-			throw new SyntaxError("The current route must start with a `/`")
-		}
-
-		const data = parsePathname(resolved.href)
-		Object.assign(data.params, resolved.state)
-		let prefix = ""
-
-		matcher:
-		for (;;) {
-			for (const route of Object.keys(routes)) {
-				const match = matchTemplate(prefix, route, data)
-				if (match == null) continue
-
-				const result = routes[route](match.params)
-				if (result === router) continue
-				if (result != null && typeof result === "object") {
-					for (const key in result) {
-						if (
-							{}.hasOwnProperty.call(result, key) &&
-							key[0] === "/"
-						) {
-							const {
-								default: newDefaultRoute, ...newRoutes
-							} = result
-							prefix = match.prefix
-							defaultRoute = prefix + newDefaultRoute
-							routes = newRoutes
-							continue matcher
-						}
-					}
-				}
-
-				// Resolve some promises now that we're really ready to
-				// render the route.
-				const queue = currentQueue
-				const promise = currentPromises.length
-					? Promise.all(currentPromises).then(() => {}, () => {})
-					: undefined
-				currentQueue = []
-				currentPromises = []
-				for (const resolve of queue) resolve(promise)
-
-				return {ref: token, view: result}
-			}
-
-			router.history.replace(defaultRoute, null, null)
-			return {ref: token, view: undefined}
-		}
-	}
-
 	const router = {
 		create,
 
-		Link: ({children, ...opts}) => {
-			if (Array.isArray(children)) children = children[0]
-			const onclick = typeof children.attrs.onclick === "function"
-				? children.attrs.onclick
+		Link: (attrs) => {
+			const target = Array.isArray(attrs.children)
+				? attrs.children[0]
+				: attrs.children
+			const onclick = typeof target.attrs.onclick === "function"
+				? target.attrs.onclick
 				: undefined
 
-			children.attrs.href =
-				(router.history.prefix || "") + children.attrs.href
+			target.attrs.href =
+				(router.history.prefix || "") + target.attrs.href
 
-			children.attrs.onclick = function (ev) {
-				const canChangeRoute =
-					typeof onclick !== "function" ||
-					onclick.apply(this, arguments) !== false &&
-					ev.defaultPrevented
+			target.attrs.onclick = function (ev) {
+				let canChangeRoute = true
+
+				if (typeof onclick === "function") {
+					canChangeRoute = onclick.call(this, ev) !== false
+				} else if (onclick != null && typeof onclick === "object") {
+					onclick.handleEvent(ev)
+				}
+
 				if (
-					canChangeRoute &&
-					!ev.ctrlKey && !ev.metaKey &&
-					!ev.shiftKey && ev.which !== 2
-				) update("push", opts)
+					// Skip if `onclick` prevented default
+					canChangeRoute && !ev.defaultPrevented &&
+
+					// Ignore everything but left clicks
+					(ev.button === 0 || ev.which === 0 || ev.which === 1) &&
+
+					// let browser handle `target=_blank`, etc.
+					(!this.target || this.target === "_self") &&
+
+					// No modifier keys
+					!ev.ctrlKey && !ev.metaKey && !ev.shiftKey && !ev.altKey
+				) update("push", attrs)
+
 				return false
 			}
 
-			return children
+			return target
 		},
 
 		history: init(() => {
@@ -130,7 +79,68 @@ function create(init) {
 			router.history.pop()
 		}),
 
-		match: (attrs) => m(Dispatch, {...attrs, ref: cleanup}),
+		match: (attrs) => (context, token = {}) => {
+			contexts.set(token, context)
+			const done = () => contexts.delete(token)
+			const current = attrs.current || router.history.current()
+			let defaultRoute = attrs.route
+			let routes = attrs
+
+			const resolved = typeof current === "string"
+				? {href: current, state: undefined}
+				: current
+
+			if (!(/^\//).test(resolved.href)) {
+				throw new SyntaxError("The current route must start with a `/`")
+			}
+
+			const data = parsePathname(resolved.href)
+			Object.assign(data.params, resolved.state)
+			let offset = 0
+
+			matcher:
+			for (;;) {
+				for (const route of Object.keys(routes)) {
+					if (route === "current" || route === "default") return
+					const match = matchTemplate(
+						data.href.slice(offset),
+						route, data.params
+					)
+					if (match == null) continue
+
+					const result = routes[route](match.params)
+					if (result === router) continue
+					if (result != null && typeof result === "object") {
+						for (const key in result) {
+							if (
+								{}.hasOwnProperty.call(result, key) &&
+								key[0] === "/"
+							) {
+								offset += match.prefix.length
+								defaultRoute = match.prefix + result.default
+								routes = result
+								continue matcher
+							}
+						}
+					}
+
+					// Resolve some promises now that we're really ready to
+					// render the route.
+					const queue = currentQueue
+					const promise = currentPromises.length
+						? Promise.all(currentPromises).then(() => {}, () => {})
+						: undefined
+					currentQueue = []
+					currentPromises = []
+					for (const resolve of queue) resolve(promise)
+
+					return {value: result, done}
+				}
+
+				router.history.replace(defaultRoute, null, null)
+				return {value: undefined, done}
+			}
+		},
 	}
 
 	return router
