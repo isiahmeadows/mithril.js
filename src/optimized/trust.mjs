@@ -1,4 +1,12 @@
-import {RETAIN_MEMO, create} from "mithril/m"
+import {create} from "mithril/m"
+
+function createRaw(children) {
+	return create(0x02, void 0, void 0, children, void 0, void 0)
+}
+
+function htmlContext(render) {
+	return function (current) { render(createRaw(current.children.join(""))) }
+}
 
 // Not using the proper parent makes the child element(s) vanish.
 //     var div = document.createElement("div")
@@ -6,38 +14,31 @@ import {RETAIN_MEMO, create} from "mithril/m"
 //     console.log(div.innerHTML)
 // --> "ij", no <td> in sight.
 export default function Trust(attrs) {
-	var tag = attrs.tag || "div"
-	var xmlns = attrs.xmlns
-	var raw = attrs.children.join("")
+	return function (render, context) {
+		if (context.renderType() === "html") return attrs(htmlContext(render))
+		var tag, xmlns, raw
 
-	return function (context, state) {
-		if (context.renderType() === "html") {
-			return create(0x02, void 0, void 0, raw, void 0, void 0)
-		}
-		if (state == null) {
-			state = {t: void 0, x: void 0, r: void 0}
-		} else if (state.t === tag && state.x === xmlns && state.r === raw) {
-			return RETAIN_MEMO
-		}
-		state.t = tag
-		state.x = xmlns
-		state.r = raw
-		var node = xmlns != null
-			? document.createElementNS(tag, xmlns)
-			: document.createElement(tag)
+		return attrs(function (current) {
+			var nextTag = current.tag || "div"
+			var nextXmlns = current.xmlns
+			var nextRaw = current.children.join("")
 
-		node.innerHTML = raw
-		var nodes = []
-		// No need to remove the child - the renderer will take care of that
-		// when adding it to the live tree.
-		for (node = node.firstChild; node != null; node = node.nextSibling) {
-			nodes.push(node)
-		}
+			if (
+				raw != null &&
+				nextTag === tag && nextXmlns === xmlns && nextRaw === raw
+			) return
+			tag = nextTag; xmlns = nextXmlns; raw = nextRaw
 
-		return {
-			state: state,
-			ref: nodes,
-			value: create(0x02, void 0, void 0, nodes, void 0, void 0)
-		}
+			var node = document.createElementNS(xmlns, tag)
+			node.innerHTML = raw
+			// No need to remove the child - the renderer will take care of
+			// that implicitly when adding it to the live tree.
+			var nodes = []
+			for (node = node.firstChild; node != null; node = node.nextSibling) {
+				nodes.push(node)
+			}
+
+			render(createRaw(nodes), nodes)
+		})
 	}
 }

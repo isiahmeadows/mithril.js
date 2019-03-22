@@ -24,7 +24,7 @@
 		<script src="../../mithril.js"></script>
 		<script src="../../stream/stream.js"></script>
 		<script>
-const {m} = Mithril
+const {m, Cell} = Mithril
 
 const range = (start, end) =>
 	Array.from({length: end - start}, (_, i) => i + start)
@@ -41,22 +41,22 @@ const view = (state, cells) => m(".container",
 )
 
 // delayed alternate array[0..n] and pipe into actions stream
-const alternate = delay => array => actions => {
+const alternate = (delay, array) => send => {
 	let i = array.length
-	setInterval(() => actions(array[i = (i + 1) % array.length)]), delay)
-	return actions
+	setInterval(() => send(array[i = (i + 1) % array.length)]), delay)
 }
 
 // prepare stream alternating between empty and full
 const rangeMemo = range(0, 100)
-alternate(1000)([
-	["show", rangeMemo], ["show", rangeMemo],
-	["hide", rangeMemo], ["hide", undefined],
-])(Mithril.stream())
-	// pipe state stream into view
-	.map(([state, cells]) => view(state, cells))
-	// pipe view stream into render
-	.map(view => Mithril.render(document.getElementById("root"), view))
+
+Mithril.render(document.getElementById("root"), Cell.run(
+	alternate(1000, [
+		["show", rangeMemo], ["show", rangeMemo],
+		["hide", rangeMemo], ["hide", undefined],
+	])
+	// pipe cell into view
+	cell => Cell.map(cell, ([state, cells]) => view(state, cells))
+))
 		</script>
 	</body>
 </html>

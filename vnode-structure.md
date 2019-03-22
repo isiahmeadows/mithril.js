@@ -43,7 +43,8 @@ Notes:
 
 - An error is thrown if `vnode.attrs.children.length > 2 ** 16`
 - Holes are represented by `null`s
-- For DOM vnodes, attributes are serialized to an array with `is`, `key`, and `ref` removed.
+- For DOM vnodes, attributes are serialized to a flattened array of `key`/`value` pairs with `is`, `key`, and `ref` removed.
+- Fragments do *not* store their attributes - those are only used to read the `key` and `ref`. Pass component instances around instead - even if they aren't used, they can still be useful for verifying types.
 - This resolves the polymorphic `children`, `key`, and `ref` accesses immediately.
 - For customized builtins, `vnode.tag` is set to `vnode.attrs.is`. This is the only case where a vnode property is set to an attribute.
 - A `Mithril.create(mask, tag, attrs, children, key, ref)` exists to create this structure, but `m` is preferred when `tag` is dynamic.

@@ -1,9 +1,10 @@
-// Mithril v3 (this): 163 lines.
+// Mithril v3 (this): 179 lines.
 // React: 242 lines.
 // React + experimental Hooks: 210 lines.
 // Totals exclude this header comment.
-// Mithril v3 is ~33% smaller than React, ~22% smaller than React + hooks.
-import {Fragment, Keyed, Trust, m, render} from "mithril"
+// Mithril v3 is ~26% smaller than React, ~15% smaller than React + hooks.
+import * as Cell from "mithril/cell"
+import {Fragment, Keyed, Trust, component, m, render as mount} from "mithril"
 import Async from "mithril/async"
 import Router from "mithril/route"
 import request from "mithril/request"
@@ -53,14 +54,15 @@ function Header() {
 }
 
 //home
-function Home() {
-	return (context, threads = []) => [
+const Home = component((_, context) => {
+	let threads = []
+	return () => [
 		m(Header),
 		m(".main", m(Async, {
-			init: () => api.home().then((response) => {
+			init: () => context.wrap(() => api.home().then((response) => {
 				document.title = "ThreaditJS: Mithril | Home"
-				context.update(response.data)
-			}),
+				threads = response.data
+			})),
 			loading: () => m("h2", "Loading"),
 			error: (e) => e.status === 404
 				? m("h2", "Not found! Don't try refreshing!")
@@ -74,99 +76,103 @@ function Home() {
 								innerHTML: T.trimTitle(thread.text),
 							})),
 						]),
-						m("p.comment_count", thread.comment_count, " comment(s)"),
+						m("p.comment_count", [
+							thread.comment_count, " comment(s)"
+						]),
 						m("hr"),
 					])
 				)),
-				m(NewThread, {onSave(thread) {
-					context.update([...threads, thread])
+				m(NewThread, {onsave(thread) {
+					threads.push(thread)
 				}}),
 			]
 		}))
 	]
-}
+})
 
-function NewThread({onSave}) {
-	return (context, value = "") => m("form", {onsubmit: () => {
-		api.newThread(value).then(({data: thread}) => {
-			onSave(thread)
-			context.update("")
-		})
-		return false
-	}}, [
-		m("textarea", {value, oninput: (ev) => context.update(ev.target.value)}),
-		m("input[type=submit][value='Post!']"),
-	])
+function NewThread(attrs) {
+	return Cell.map(attrs, ({onsave}) =>
+		m("form", {onsubmit(ev) {
+			const textarea = ev.target.elements[0]
+			api.newThread(textarea.value).then(({data: thread}) => {
+				if (onsave) onsave(thread)
+				textarea.value = ""
+			})
+			return false
+		}}, [
+			m("textarea[value='']"),
+			m("input[type=submit][value='Post!']"),
+		])
+	)
 }
 
 //thread
-function Thread({id}) {
-	return (context, rendered = false) => {
-		if (!rendered) T.time("Thread render")
-		return m(Fragment, {
-			ref: () => {
-				context.update(true)
-				T.timeEnd("Thread render")
-			}
-		}, [
+function Thread(attrs) {
+	return (render) => {
+		T.time("Thread render")
+		render([
 			m(Header),
-			m(".main", m(Async, {
-				key: id,
-				init: () => api.thread(id).then(({root: node}) => {
-					document.title =
-						`ThreaditJS: Mithril | ${T.trimTitle(node.text)}`
-					return node
-				}),
-				loading: () => m("h2", "Loading"),
-				error: (e) => e.status === 404
-					? m("h2", "Not found! Don't try refreshing!")
-					: m("h2", "Error! Try refreshing."),
-				ready: (node) => m(ThreadNode, {node})
-			}))
-		])
+			m(".main", Cell.map(
+				Cell.distinct(attrs, ({id}) => id),
+				({id}) => m(Async, {
+					key: id,
+					init: () => api.thread(id).then(({root: node}) => {
+						document.title =
+							`ThreaditJS: Mithril | ${T.trimTitle(node.text)}`
+						return node
+					}),
+					loading: () => m("h2", "Loading"),
+					error: (e) => e.status === 404
+						? m("h2", "Not found! Don't try refreshing!")
+						: m("h2", "Error! Try refreshing."),
+					ready: (node) => m(ThreadNode, {node})
+				})
+			)),
+		]).then(() => {
+			T.timeEnd("Thread render")
+		})
 	}
 }
 
-function ThreadNode({node}) {
-	return m(".comment", [
+function ThreadNode(attrs) {
+	return Cell.map(attrs, ({node}) => m(".comment", [
 		m("p", m(Trust, node.text)),
 		m(".reply", m(Reply, {node})),
 		m(".children", node.children.map((child) =>
 			m(ThreadNode, {node: child})
 		))
-	])
+	]))
 }
 
-function Reply({node}) {
-	return (context, {replying = false, newComment = ""} = {}) => {
-		if (replying) {
-			return m("form", {onsubmit() {
+function Reply(attrs) {
+	return (render) => attrs(({node}) => {
+		const updateReplying = (newComment) => render(
+			m("form", {onsubmit() {
 				api.newComment(newComment, node.id).then((response) => {
-					context.update({replying: false, newComment: ""})
 					node.children.push(response.data)
+					updateClosed()
 				})
 				return false
 			}}, [
 				m("textarea", {
 					value: newComment,
-					oninput(ev) {
-						context.update({replying, newComment: ev.target.value})
-					},
+					oninput(ev) { updateReplying(ev.target.value) },
 				}),
 				m("input[type=submit][value='Reply!']"),
 				m(".preview", m(Trust, T.previewComment(newComment))),
 			])
-		} else {
-			return m("a", {onclick() {
-				context.update({replying: true, newComment: ""})
-				return false
-			}}, "Reply!")
-		}
-	}
+		)
+
+		const updateClosed = () => render(
+			m("a", {onclick() { updateReplying(""); return false }}, "Reply!")
+		)
+
+		updateClosed()
+	})
 }
 
 //router
-render(document.getElementById("app"), Router.match({
+mount(document.getElementById("app"), Router.match({
 	default: "/",
 	"/thread/:id": ({id}) => m(Thread, {id}),
 	"/": () => m(Home),

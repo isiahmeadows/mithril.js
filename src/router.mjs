@@ -4,24 +4,98 @@ import buildPathname from "./pathname/build.js"
 import matchTemplate from "./pathname/match.js"
 import parsePathname from "./pathname/parse.js"
 
+const NEXT = {}
+
 function create(init) {
-	const contexts = new Map()
+	const tokens = []
 	let currentQueue = []
-	let currentPromises = []
+	let renderedPromises = []
+
+	const history = init(() => {
+		for (const token of tokens) token.pending = true
+		for (const token of tokens) match(token)
+	})
 
 	function update(method, opts) {
 		if (typeof opts === "string") opts = {href: opts}
 		return new Promise((resolve) => {
 			currentQueue.push(resolve)
-			router.history[method](
+			history[method](
 				buildPathname(opts.href, opts.params),
 				opts.state, opts.title,
 			)
 		})
 	}
 
-	const router = {
-		create,
+	function match(token) {
+		body: {
+			try {
+				const current = token.attrs.current || history.current()
+				let defaultRoute = token.attrs.default
+				let routes = token.attrs
+
+				const resolved = typeof current === "string"
+					? {href: current, state: undefined}
+					: current
+
+				if (!(/^\//).test(resolved.href)) {
+					throw new SyntaxError("The current route must start with a `/`")
+				}
+
+				const data = parsePathname(resolved.href)
+				Object.assign(data.params, resolved.state)
+				let offset = 0
+
+				matcher:
+				for (;;) {
+					for (const route of Object.keys(routes)) {
+						if (route === "current" || route === "default") continue
+						const match = matchTemplate(
+							data.href.slice(offset),
+							route, data.params
+						)
+						if (match == null) continue
+
+						const result = routes[route](match.params)
+						if (result === NEXT) continue
+						if (result != null && typeof result === "object") {
+							for (const key in Object.keys(result)) {
+								if (key[0] === "/") {
+									offset += match.prefix.length
+									defaultRoute = match.prefix + result.default
+									routes = result
+									continue matcher
+								}
+							}
+						}
+
+						renderedPromises.push((0, token.render)(result))
+						break body
+					}
+
+					// Skip the process altogether.
+					history.replace(defaultRoute, null, null)
+					return
+				}
+			} catch (e) {
+				renderedPromises.push(Promise.reject(e))
+			}
+		}
+
+		token.pending = false
+		for (const token of tokens) {
+			if (token.pending) return
+		}
+		// Resolve the promises now that we're done trying to render routes.
+		const queue = currentQueue
+		const promises = renderedPromises
+		currentQueue = []
+		renderedPromises = []
+		for (const resolve of queue) resolve(promises)
+	}
+
+	return {
+		create, history, NEXT,
 
 		Link: (attrs) => {
 			const target = Array.isArray(attrs.children)
@@ -32,7 +106,7 @@ function create(init) {
 				: undefined
 
 			target.attrs.href =
-				(router.history.prefix || "") + target.attrs.href
+				(history.prefix || "") + target.attrs.href
 
 			target.attrs.onclick = function (ev) {
 				let canChangeRoute = true
@@ -50,7 +124,7 @@ function create(init) {
 					// Ignore everything but left clicks
 					(ev.button === 0 || ev.which === 0 || ev.which === 1) &&
 
-					// let browser handle `target=_blank`, etc.
+					// Let the browser handle `target="_blank"`, etc.
 					(!this.target || this.target === "_self") &&
 
 					// No modifier keys
@@ -63,87 +137,29 @@ function create(init) {
 			return target
 		},
 
-		history: init(() => {
-			for (const context of contexts.values()) {
-				currentPromises.push(new Promise((resolve) => {
-					resolve(context.update())
-				}))
-			}
-		}),
-
 		push: (opts) => update("push", opts),
 		replace: (opts) => update("replace", opts),
 
 		pop: () => new Promise((resolve) => {
 			currentQueue.push(resolve)
-			router.history.pop()
+			history.pop()
 		}),
 
-		match: (attrs) => (context, token = {}) => {
-			contexts.set(token, context)
-			const done = () => contexts.delete(token)
-			const current = attrs.current || router.history.current()
-			let defaultRoute = attrs.route
-			let routes = attrs
-
-			const resolved = typeof current === "string"
-				? {href: current, state: undefined}
-				: current
-
-			if (!(/^\//).test(resolved.href)) {
-				throw new SyntaxError("The current route must start with a `/`")
-			}
-
-			const data = parsePathname(resolved.href)
-			Object.assign(data.params, resolved.state)
-			let offset = 0
-
-			matcher:
-			for (;;) {
-				for (const route of Object.keys(routes)) {
-					if (route === "current" || route === "default") return
-					const match = matchTemplate(
-						data.href.slice(offset),
-						route, data.params
-					)
-					if (match == null) continue
-
-					const result = routes[route](match.params)
-					if (result === router) continue
-					if (result != null && typeof result === "object") {
-						for (const key in result) {
-							if (
-								{}.hasOwnProperty.call(result, key) &&
-								key[0] === "/"
-							) {
-								offset += match.prefix.length
-								defaultRoute = match.prefix + result.default
-								routes = result
-								continue matcher
-							}
-						}
-					}
-
-					// Resolve some promises now that we're really ready to
-					// render the route.
-					const queue = currentQueue
-					const promise = currentPromises.length
-						? Promise.all(currentPromises).then(() => {}, () => {})
-						: undefined
-					currentQueue = []
-					currentPromises = []
-					for (const resolve of queue) resolve(promise)
-
-					return {value: result, done}
-				}
-
-				router.history.replace(defaultRoute, null, null)
-				return {value: undefined, done}
+		match: (attrs) => (render) => {
+			const token = {render, pending: false, attrs: undefined}
+			tokens.push(token)
+			const done = attrs((attrs) => {
+				token.attrs = attrs
+				token.pending = true
+				match(token)
+			})
+			return () => {
+				const index = tokens.indexOf(token)
+				if (index >= 0) tokens.splice(index, 1)
+				return done()
 			}
 		},
 	}
-
-	return router
 }
 
 export default create((onchange) => {

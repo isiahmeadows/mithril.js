@@ -9,8 +9,9 @@ These are all various utilities that are, unless otherwise listed, kept out of t
 This is exposed under `mithril/vnodes` and in the full bundle via `Mithril.Vnodes`.
 
 - `Vnodes.tag(vnode)` - Get the resolved tag name, component reference, or built-in component reference.
-- `Vnodes.attrs(vnode)` - Get the resolved attributes as a frozen object, including `is` for DOM `is` attributes, `key` for the key, `ref` for the ref, and `children` for the resolved children.
-- `Vnodes.children(vnode)` - Get the resolved children as a frozen array.
+- `Vnodes.attrs(vnode)` - Get the resolved attributes as an object, including `is` for DOM `is` attributes, `key` for the key, and `ref` for the ref, and `children` for the resolved children. This does *not* return the original instance, but always a clone of it, and it never returns an empty object. It does *not* clone the children, so be aware of that.
+    - This is mostly what components receive through the `attrs` cell.
+- `Vnodes.children(vnode)` - Equivalent to `Vnodes.attrs(vnode).children`, but avoids the overhead of creating a full attributes object.
 
 ### Why?
 
@@ -20,22 +21,28 @@ Given that [vnode allocation and inspection now requires interpretation](vnode-s
 
 This is exposed under `mithril/ref` and in the full bundle via `Mithril.Ref`. It exists to help make refs considerably more manageable.
 
-- `refs = Ref.join(({...elems}) => ...)` - Create a combined ref that invokes a callback once all named refs are received.
-    - `ref = refs(key)` - Create and get a ref linked to that callback key
-    - `ref = refs(Ref.join)` - Create and get a ref called to send an object, or `undefined` if named refs exist.
-    - `value = refs()` - Get the resolved values or `undefined` if some are still pending
-
-- `refs = Ref.all(([...elems]) => ...)` - Create a combined ref that invokes a callback once all named refs are received.
-    - `ref = refs(index)` - Create and get a ref linked to that index
-    - `ref = refs(Ref.all)` - Get a ref called to send an empty array, or `undefined` if named refs exist.
-    - `value = refs()` - Get the resolved values or `undefined` if some are still pending
+- `m(Ref, {join: ({...elems}) => ...}, (refs) => ...)` - Create a combined ref that invokes a callback once all named refs are received as well as if any of them update.
+- `m(Ref, {all: ([...elems]) => ...}, (refs) => ...)` - Create a combined ref that invokes a callback once all named refs are received as well as if any of them update.
+- `ref = refs(keyOrIndex)` - Create and get a ref linked to that key or index.
+    - Note: it must be either a number, a symbol, or a string, and you *should* coerce it first if it's not.
+- `ref = refs(null)` - Get a ref called to send an empty array, or `undefined` if named refs exist.
+- `value = refs()` - Get the resolved values or `undefined` if some are still pending.
 
 Notes:
 
 - The resulting refs only propagate the first argument, the element or component ref.
+- The returned `done` callback from the `join:`/`all:` callback replaces any previous ones on update.
 - These don't type check the values themselves apart from checking identity with a private sentinel object.
+- Be sure to *not* use these inside callbacks.
 
-This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/ref.mjs), with an optimized implementation [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/optimized/ref.mjs).
+This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/ref.mjs), with an optimized ES5 implementation [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/optimized/ref.mjs).
+
+If you're using an ES6 environment, `mithril/proxy-ref` returns a similar API, but with a few changes for ease of use.
+
+- The main component is exposed via a named export `ProxyRef.Ref`
+- `ref = refs[keyOrIndex]` - Equivalent to `refs(keyOrIndex)`
+- `ref = refs[ProxyRef.fallback]` - Equivalent to `refs(false)`
+- `ref = refs[ProxyRef.resolved]` - Equivalent to `refs()`
 
 ## Trusted vnodes
 
@@ -81,12 +88,12 @@ This is exposed under `mithril/router` and in the full bundle via `Mithril.Route
     - `default:` is the fallback route if no route is detected, if no routes match, or if the current route's `href` is literally `""`.
     - `"/route/:param": (params) => ...` - Define a route
         - `params` contains both query params and template params.
-        - This can return one of `router` to skip, an object of child routes (for composable routes, detected by the presence of a property starting with `/`) to then dispatch from, a vnode child, or a state reducer returning one of the above.
+        - This can return one of `Router.NEXT` to skip, an object of child routes (for composable routes, detected by the presence of a property starting with `/`) to then dispatch from, a vnode child, or a cell returning one of the above.
         - Child route objects may also contain `default:` properties, but not `current:`.
         - This is exact by default, but the prefix carried by the context specifically *excludes* any final parameter, either `:param` or `:param...`.
     - When there is no active history (as in, when running without a global DOM and without an explicit `history:`), `current` is required.
     - If you want a 404 route, define a final route of `"/:path...": () => ...`.
-    - Note: this returns a state reducer. So this *can* be used independently of Mithril's view.
+    - Note: this returns a cell. So this *can* be used independently of Mithril's view.
 
 - `Router.push(href | setOpts).then(...)` - Set the current route.
     - `opts.href` - The target URL to move to. Specifying a string is equivalent to passing this without parameters.
@@ -106,13 +113,15 @@ This is exposed under `mithril/router` and in the full bundle via `Mithril.Route
     - `children:` - An element to hook into with `onclick` + `href` (required)
     - All other options are passed to `router.push(opts)`
 
-This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/router.mjs), although it currently lacks support for state reducers returning anything other than vnodes.
+- `Router.NEXT` - Return this from a route to skip to the next route.
+
+This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/router.mjs), although it currently lacks support for cells returning anything other than vnodes.
 
 ### Notes
 
 - Prefer `Router.Link` over explicit `router.push(...)`/`router.replace(...)`/`router.pop(...)` for URLs. Mithril handles most of the boilerplate and
 - Each of these strips the prefix as necessary, and they wrap inconsistencies in the history passed to `Router.create(...)`.
-- This is fully zero-dependency and the only utility that requires vnodes is the `router.Link` component, so you *could* use this in both state reducers and the virtual DOM tree without issue as long as you don't use `router.Link`.
+- This is fully zero-dependency and the only utility that requires vnodes is the `router.Link` component, so you *could* use this in both cells and the virtual DOM tree without issue as long as you don't use `router.Link`.
 
 ## Request API
 
@@ -124,7 +133,7 @@ Beyond that, the API is probably fine as-is after [#2335](https://github.com/Mit
 
 ## Async loading sugar
 
-This is exposed under `mithril/async` and in the full bundle via `Mithril.Async`.
+This is exposed under `mithril/async` and in the full bundle via `Mithril.async`.
 
 Basically https://github.com/MithrilJS/mithril.js/issues/2282.
 
@@ -137,7 +146,6 @@ Basically https://github.com/MithrilJS/mithril.js/issues/2282.
         - `error(error)` - An error occurred when creating or destroying the resource.
         - `destroyed()` - Resource is successfully destroyed
     - `ref:` - This provides a `destroy()` callback as its `ref`, so you can manually and gracefully destroy the resource.
-    - This is also a state reducer factory, so yes, you can use it in your state reducers, too. And it's zero-dependency, so it doesn't care whether you return vnodes or something else entirely.
 
 This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/async.mjs), with an optimized implementation [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/optimized/async.mjs).
 
@@ -190,3 +198,75 @@ Basically `mithril-node-render`, moved into core. Optionally, I might also expos
 ## Streams
 
 This is exposed under `mithril/stream`, and is the same as what's there today. Nothing is changing here except [maybe moving it into the main bundle itself](https://github.com/MithrilJS/mithril.js/issues/2380), but that's separate to this whole effort.
+
+## Cell utilities
+
+This is exposed under `mithril/cell` and in the full bundle via `Mithril.Cell`.
+
+- `cell = Cell.all([...cells], ([...values]) => ...)` - Join multiple cells in an array into a single cell with each named by index
+    - The resulting cell emits arrays for its children.
+    - If the callback is omitted, it defaults to the identity function.
+    - Received `next` calls from cells are resolved synchronously and emit synchronously if all values have been assigned.
+
+- `cell = Cell.join({...cells}, ({...values}) => ...)` - Join multiple cells in an object into a single cell with each named by property
+    - The resulting cell emits objects for its children.
+    - If the callback is omitted, it defaults to the identity function.
+    - Received `next` calls from cells are resolved synchronously and emit synchronously if all values have been assigned.
+
+- `result = Cell.run(value, ...funcs)` - Run a value through a series of functions.
+    - Basically sugar for `funcs.reduce((x, f) => f(x), value)`
+    - Once JS has a [pipeline operator](https://github.com/tc39/proposal-pipeline-operator/), this becomes less necessary.
+    - This is useful for creating a pipeline of cell transforms.
+
+- `cell = Cell.map(oldCell, (value) => newValue)` - Transform a cell's return value.
+
+- `cell = Cell.filter(oldCell, (value) => boolean)` - Filter a list of values based on a condition
+
+- `cell = Cell.scan(oldCell, initial, (acc, value) => newValue)` - Return a new value based on the old value + an accumulator.
+
+- `cell = Cell.scanMap(oldCell, initial, (acc, value) => [newAcc, newValue])` - Much like a combined `map` and `scan`, where it accumulates *and* transforms a value.
+    - This is useful for when it's easiest to operate using a reducer.
+    - This is technically sugar for `Cell.map(Cell.scan(oldCell, [initial], ([acc], value) => func(acc, value)), ([, value]) => value)`, but it's much better optimized internally.
+
+- `cell = Cell.reduce(oldCell, initial, (acc, value) => newValue)` - Fold all values from a cell into a result, and return a cell that emits only that one value.
+
+- `cell = Cell.distinct(oldCell, compare?)` - Filter distinct (unchanged from previous) values from a cell.
+    - `compare(prev, value)`- Called to check if a value is the same. Defaults to `(a, b) => a === b || Number.isNaN(a) && Number.isNaN(b)`
+
+- `cell = Cell.tap(cell, (value) => newValue)` - Return a cell that runs a cell and invokes a function on each emitted value.
+
+- `cell = Cell.of(value)` - Create a cell always returning a constant.
+
+- `cell = Cell.chain(oldCell, (value) => newCell)` - Take a cell's value and pipe its value through a new function and return a new cell wrapping its return value.
+    - You might recognize this function shape and maybe even its name. Yes, it's a flat-map/monadic bind.
+    - Note: this closes previously created cells before initializing the next one. If that's not what you intend, create a custom cell that delegates to this.
+
+- `cell = Cell.onDone(oldCell, done)` - Return a cell that invokes a `done` callback on completion.
+
+- `Cell.shallowEqual(a, b)` - Shallow-compare two objects or arrays, optionally using a comparison function.
+    - This compares values as per the ES operation SameValueZero(`a`, `b`), which is mostly like `a === b` except NaNs are considered equal. (This is what maps and sets use.)
+    - This considers two objects equal if the set of keys are equal (ignoring order) and their associated values are equal.
+    - This considers two arrays equal if they are of the same length and their values are equal.
+    - This considers one object and one array as not equal, even if all their properties match.
+    - An error is thrown if either parameter is *not* an object.
+
+This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/cell.mjs), with an optimized implementation [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/optimized/cell.mjs).
+
+Note: each of these are written to be resilient against synchronous updates.
+
+### Why?
+
+A few reasons:
+
+- You often want to manipulate cells to new values, but doing it all manually is *very* tedious.
+- Components can be functions from a cell of attributes to a vnode tree, so lifecycle hook naturally fall from the model.
+- This is what would be our answer to React Hooks, just substantially lower in overhead.
+- Most streaming utilities can directly translate to this.
+
+Also, there's a handful of helpers [here](https://github.com/isiahmeadows/mithril.js/tree/v3-redesign/helpers) based on [some of these hooks](https://usehooks.com/), in case you want to know what it could look like in practice.
+
+This utility is slightly smaller than Mithril's existing streams utility when minified and gzipped.
+
+### Open questions
+
+1. Should this be part of the MVP? Most of the real power gained from using state cells ends up centralized into this module. The main concern I have is that we'll have to teach it to people first, almost right out the gate. It's counterintuitive at first, but not in the same way hooks are. However, writing the necessary primitives isn't much easier, and I've seen already how primitives are easy to screw up, just while writing the utility library.

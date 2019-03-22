@@ -1,99 +1,63 @@
 // This is highly optimized to minimize retained and allocated memory.
-var pending = {}
-var hole = {}
+var PENDING = {}
+var HOLE = {}
 var hasOwn = Object.prototype.hasOwnProperty
 var fill = Array.prototype.fill || function (value, start, end) {
 	while (start !== end) this[start++] = value
 }
 
-export function join(callback) {
-	var created = 0, mounted = 0
-	var values = Object.create(null), remove = hole
+function Ref(attrs) {
+	return function (context) {
+		return attrs({next: function (current) {
+			var isArray = current.all != null
+			var callback = isArray ? current.all : current.join
+			var created = 1, hasRoot = false
+			var values = isArray ? [] : Object.create(null)
 
-	function finish() {
-		if (created !== 0 && --created === 0) {
-			var func = callback
-			callback = undefined
-			var result = func(values)
-			if (typeof result !== "function") result = undefined
-			remove = result
-		}
-		return removeHook
-	}
-
-	function removeHook() {
-		if (mounted !== 0 && --mounted === 0 && remove != null) {
-			var func = remove
-			remove = undefined
-			func()
-		}
-	}
-
-	return function (key) {
-		if (key == null) return values
-		if (key === join) {
-			if (remove === hole) { remove = pending; created++; mounted++ }
-			return finish
-		}
-		if (!hasOwn.call(values, key)) {
-			created++; mounted++
-			values[key] = pending
-		}
-		return function (value) {
-			var prev = values[key]
-			values[key] = value
-			if (prev === pending) return finish()
-		}
-	}
-}
-
-export function all(callback) {
-	var created = 0, mounted = 0
-	var values = [], remove = hole
-
-	function finish() {
-		if (created !== 0 && --created === 0) {
-			var func = callback
-			callback = undefined
-			for (var i = 0; i < values.length; i++) {
-				if (values[i] === hole) values[i] = undefined
+			function finish() {
+				if (created !== 0 && --created === 0) {
+					if (isArray) {
+						for (let i = 0; i < values.length; i++) {
+							if (values[i] === HOLE) values[i] = undefined
+						}
+					}
+					callback(values)
+				}
 			}
-			var result = func(values)
-			if (typeof result !== "function") result = undefined
-			remove = result
-		}
-		return removeHook
-	}
 
-	function removeHook() {
-		if (mounted !== 0 && --mounted === 0 && remove != null) {
-			var func = remove
-			remove = undefined
-			func()
-		}
-	}
-
-	return function (index) {
-		if (index == null) return values
-		if (index === all) {
-			if (remove === hole) { remove = pending; created++; mounted++ }
-			return finish
-		}
-		// Cast this to a 32-bit integer
-		index |= 0 // eslint-disable-line no-bitwise
-		if (index < 0) throw new TypeError("Array index must be positive")
-		var length = values.length
-		if (index > values.length || values[index] === hole) {
-			created++; mounted++
-			// Keep the array dense at all times
-			values.length = index + 1
-			fill.call(values, hole, length, index)
-			values[index] = pending
-		}
-		return function (value) {
-			var prev = values[index]
-			values[index] = value
-			if (prev === pending) return finish()
-		}
+			return context.next(current.children(function (key) {
+				if (arguments.length === 0) return values
+				if (key === null) {
+					if (!hasRoot) { hasRoot = true; created++ }
+					return finish
+				}
+				added: {
+					if (isArray) {
+						// Cast this to a 32-bit integer
+						key |= 0 // eslint-disable-line no-bitwise
+						if (key < 0) {
+							throw new TypeError("Array index must be positive")
+						}
+						var length = values.length
+						if (key <= values.length && values[key] !== HOLE) {
+							break added
+						}
+						// Keep the array dense at all times
+						values.length = key + 1
+						fill.call(values, HOLE, length, key)
+					} else if (hasOwn.call(values, key)) {
+						break added
+					}
+					created++
+					values[key] = PENDING
+				}
+				return function (value) {
+					values[key] = value
+					return finish()
+				}
+			}))
+		}})
 	}
 }
+
+export {Ref as default}

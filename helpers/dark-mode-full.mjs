@@ -1,42 +1,41 @@
 // `prefersDarkMode` from `./dark-mode.mjs` with all dependencies included. As
 // an exception, `watchMedia` is specialized to just return whether it matches.
-import {all, chain, map, of, watch} from "mithril/state"
+import {all} from "mithril/state"
 
-function localStorage(key, defaultValue) {
+function localStorage(key) {
 	return (context) => {
-		const item = window.localStorage.getItem(key)
-		const value = item ? JSON.parse(item) : defaultValue
-		return {value, ref: (value) => {
-			window.localStorage.setItem(key, JSON.stringify(value))
-			context.update()
-		}}
+		function sendValue() {
+			const item = window.localStorage.getItem(key)
+			context.send([item ? JSON.parse(item) : undefined, (value) => {
+				window.localStorage.setItem(key, JSON.stringify(value))
+				sendValue()
+			}])
+		}
+		window.addEventListener("storage", sendValue, false)
+		sendValue()
+		return () => window.removeEventListener("storage", sendValue, false)
 	}
 }
 
 function watchMedia(query) {
-	return map(
-		watch(query, (context) => {
-			const mql = window.matchMedia(query)
-			const handler = () => context.update()
-			mql.addListener(handler)
-			return {value: mql, done() { mql.removeListener(handler) }}
-		}),
-		(mql) => mql.matches
-	)
+	return (context) => {
+		const mql = window.matchMedia(query)
+		const handler = () => context.send(mql.matches)
+		mql.addListener(handler)
+		handler()
+		return () => mql.removeListener(handler)
+	}
 }
 
-export default chain(
-	all([
-		watchMedia("(prefers-color-scheme: dark)"),
-		map(localStorage("dark-mode-enabled", false), Boolean),
-	]),
-	([prefersDarkMode, enabled = prefersDarkMode], [, setEnabled]) => {
-		if (enabled) {
-			document.body.classList.add("dark-mode");
-		} else {
-			document.body.classList.remove("dark-mode");
-		}
-
-		return of(enabled, setEnabled)
+export default all([
+	watchMedia("(prefers-color-scheme: dark)"),
+	localStorage("dark-mode-enabled"),
+], ([prefersDarkMode, [enabled = prefersDarkMode, setEnabled]]) => {
+	if (enabled) {
+		document.body.classList.add("dark-mode");
+	} else {
+		document.body.classList.remove("dark-mode");
 	}
-)
+
+	return [Boolean(enabled), setEnabled]
+})

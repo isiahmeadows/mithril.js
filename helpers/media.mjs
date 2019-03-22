@@ -1,20 +1,18 @@
 // Translated from https://usehooks.com/useMedia/, with a few bugs fixed.
-import {map, watchAll} from "mithril/state"
+import {chain, distinct, shallowEqual} from "mithril/cell"
 
-export function watchMedia(queries, values, defaultValue) {
-	return map(
-		watchAll(queries, (context, queries) => {
-			const mqls = queries.map((q) => window.matchMedia(q))
-			const handler = () => context.update()
-			mqls.forEach((mql) => mql.addListener(handler))
-			return {
-				value: mqls,
-				done() { mqls.forEach((mql) => mql.removeListener(handler)) },
+export function watchMedia(queries, defaultValue) {
+	return chain(
+		distinct(queries, shallowEqual),
+		(queries) => (context) => {
+			const mqls = queries.map(([q, v]) => [window.matchMedia(q), v])
+			const handler = () => {
+				const index = mqls.findIndex((mql) => mql[0].matches)
+				context.send(index >= 0 ? mqls[index][1] : defaultValue)
 			}
-		}),
-		(mqls) => {
-			const index = mqls.findIndex((mql) => mql.matches)
-			return index >= 0 ? values[index] : defaultValue
+			mqls.forEach((mql) => mql.addListener(handler))
+			handler()
+			return () => mqls.forEach((mql) => mql.removeListener(handler))
 		}
 	)
 }

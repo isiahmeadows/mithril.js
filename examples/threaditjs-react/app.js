@@ -1,8 +1,8 @@
-// Mithril v3: 163 lines.
-// React (this): 242 lines.
+// Mithril v3 (this): 179 lines.
+// React: 242 lines.
 // React + experimental Hooks: 210 lines.
 // Totals exclude this header comment.
-// Mithril v3 is ~33% smaller than React, ~22% smaller than React + hooks.
+// Mithril v3 is ~26% smaller than React, ~15% smaller than React + hooks.
 import {BrowserRouter, Link, Route} from "react-router"
 import React from "react"
 import ReactDOM from "react-dom"

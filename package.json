@@ -1,0 +1,27 @@
+{
+  "name": "mithril",
+  "private": true,
+  "version": "0-redesign",
+  "description": "A framework for building brilliant applications",
+  "contributors": [
+    "Leo Horie",
+    "Isiah Meadows <contact@isiahmeadows.com>"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "lint": "eslint . || true",
+    "lint:fix": "eslint . --fix"
+  },
+  "devDependencies": {
+    "eslint": "^5.13.0",
+    "eslint-plugin-react": "^7.12.4",
+    "lint-staged": "^8.1.3",
+    "terser": "^3.16.1"
+  },
+  "lint-staged": {
+    "*.js": [
+      "eslint . --fix",
+      "git add"
+    ]
+  }
+}

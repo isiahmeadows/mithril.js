@@ -26,15 +26,13 @@ const state = {
 }
 
 //view
-const Editor = component((context) => {
-	return () => [
-		m("textarea.input", {
-			oninput(e) { state.update(e.target.value) },
-			value: state.text
-		}),
-		m(".preview", trust(marked(state.text))),
-	]
-})
+const Editor = component(() => () => [
+	m("textarea.input", {
+		oninput(e) { state.update(e.target.value) },
+		value: state.text
+	}),
+	m(".preview", trust(marked(state.text))),
+])
 
 Mithril.mount(document.getElementById("editor"), () => m(Editor))
 		</script>

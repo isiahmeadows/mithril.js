@@ -1,12 +1,16 @@
 // Translated from https://usehooks.com/useLocalStorage/, but doesn't assume the
-// reducer has full control over the storage.
-export default function localStorage(key, defaultValue) {
+// cell has full control over the storage.
+export default function localStorage(key) {
 	return (context) => {
-		const item = window.localStorage.getItem(key)
-		const value = item ? JSON.parse(item) : defaultValue
-		return {value, ref: (value) => {
-			window.localStorage.setItem(key, JSON.stringify(value))
-			context.update()
-		}}
+		function sendValue() {
+			const item = window.localStorage.getItem(key)
+			context.send([item ? JSON.parse(item) : undefined, (value) => {
+				window.localStorage.setItem(key, JSON.stringify(value))
+				sendValue()
+			}])
+		}
+		window.addEventListener("storage", sendValue, false)
+		sendValue()
+		return () => window.removeEventListener("storage", sendValue, false)
 	}
 }

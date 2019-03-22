@@ -1,108 +1,70 @@
-// This is highly optimized to minimize retained memory. It also is fairly
-// fault-tolerant and dummy-proof.
-
 // Note:
-// `state.s === 0`: Loading
-// `state.s === 1`: Ready
-// `state.s === 2`: Error
-// `state.s === 3`: Destroyed
-// `(state.s & 2) === 0`: Loading or Ready
-// `(state.s & 2) !== 0`: Error or Destroyed
+// `state === 0`: Init
+// `state === 1`: Loading
+// `state === 2`: Ready
+// `state === 3`: Error
+// `state === 4`: Destroyed
 
-export function Async(attrs) {
-	return function (context, state) {
-		var value
+function Async(attrs) {
+	return function (render) {
+		var state = 0
+		var value, current
 
-		if (state == null) {
-			state = {s: 0, v: []}
-
+		function destroy() {
+			var prevState = state
+			var prevValue = value
+			state = 4; value = void 0
 			try {
-				value = attrs.init(function (f) {
-					if (state.s === 0) state.v.push(f)
-				})
-				if (typeof value.then === "function") {
-					value.then(function (v) {
-						state.s = 1
-						state.v = v
-						context.update()
-					}, function (e) {
-						state.s = 2
-						state.v = e
-						context.update()
-					})
+				if (prevState === 1) {
+					for (var i = 0; i < prevValue.length; i++) {
+						(0, prevValue[i])()
+					}
+				} else if (prevState === 2) {
+					current.destroy(value)
+				} else {
 					return
 				}
-				state.s = 1
-				state.v = value
-				context.update()
+				render(current.destroyed())
 			} catch (e) {
-				state.s = 2
-				state.v = e
-				context.update()
+				state = 3
+				render(current.error(e))
 			}
 		}
 
-		switch (state.s) {
-			case 0: value = attrs.loading(); break
-			case 1: value = attrs.ready(state.v); break
-			case 2: value = attrs.error(state.v); break
-			case 3: value = attrs.destroyed(); break
-			default: throw new Error("Unknown state: " + state.s)
-		}
+		var done = attrs(function (methods) {
+			if (state === 0) {
+				state = 1
+				current = methods
 
-		return {
-			state: state, value: value,
-
-			ref: function () {
-				var current = state.s, prev = state.v
-				// Let's be fault tolerant in case the user has a bug where they
-				// retain the `destroy` ref too long.
-				if (state.s & 2) return // eslint-disable-line no-bitwise
-				state.s = 3
-				state.v = undefined
-				try {
-					if (current === 0) {
-						// Let's actually catch any errors from loading, since
-						// we can realistically handle them.
-						for (var i = 0; i < prev.length; i++) (0, prev[i])()
-					} else {
-						var result = attrs.destroy(prev)
-						if (typeof result.then === "function") {
-							result.then(
-								function () { context.update() },
-								function (e) {
-									state.s = 2
-									state.v = e
-									context.update()
-								}
-							)
-							return
-						}
+				new Promise(function (resolve) {
+					resolve(methods.init(function (f) {
+						if (state === 1) value.push(f)
+					}))
+				}).then(
+					function (v) {
+						if (state !== 1) return
+						state = 2; value = v
+						render(current.ready(v, destroy))
+					},
+					function (e) {
+						if (state !== 4) return
+						state = 3; value = void 0
+						render(current.error(e))
 					}
-				} catch (e) {
-					state.s = 2
-					state.v = e
-				}
-				context.update()
-			},
+				)
+			}
 
-			done: state.s === 0 ? function () {
-				// Let's be fault tolerant in case this somehow gets
-				// double-destroyed (likely due to user bug).
-				if (state.s !== 0) return
-				var prev = state.v
-				state.s = 3
-				state.v = undefined
-				try {
-					for (var i = 0; i < prev.length; i++) (0, prev[i])()
-				} catch (e) {
-					state.v = e
-					state.s = 2
-					// If there's an error, let it propagate. There's no way
-					// we can realistically make sense of it at this point.
-					throw e
-				}
-			} : undefined,
+			render(methods[state]())
+		})
+
+		return function () {
+			try {
+				if (done != null) done()
+			} finally {
+				destroy()
+			}
 		}
 	}
 }
+
+export {Async as default}

@@ -1,46 +1,44 @@
 "use strict"
 
-const {m, Keyed} = Mithril
+const {m, Cell, Keyed} = Mithril
 
 perfMonitor.startFPSMonitor()
 perfMonitor.startMemMonitor()
 perfMonitor.initProfiler("render")
 
-Mithril.render(document.getElementById("app"), (context, data) => {
-	function update() {
-		requestAnimationFrame(update)
+function dataStream(send) {
+	loop()
+	function loop() {
+		requestAnimationFrame(loop)
 		perfMonitor.startProfile("render")
-		context.update(ENV.generateData().toArray()).then(() => {
+		send(ENV.generateData().toArray()).then(() => {
 			perfMonitor.endProfile("render")
 		})
 	}
+}
 
-	if (data == null) update()
-
-	return {
-		state: data || [],
-		value: m("div", [
-			m("table.table.table-striped.latest-data", [
-				m("tbody", m(Keyed, data.map(({dbname, lastSample}) =>
-					m("tr", {key: dbname}, [
-						m("td.dbname", dbname),
-						m("td.query-count", [
-							m("span", {class: lastSample.countClassName}, [
-								lastSample.nbQueries
+Mithril.render(document.getElementById("app"), m("div", [
+	m("table.table.table-striped.latest-data", [
+		m("tbody", Cell.map(dataStream, (data) =>
+			m(Keyed, data.map(({dbname, lastSample}) =>
+				m("tr", {key: dbname}, [
+					m("td.dbname", dbname),
+					m("td.query-count", [
+						m("span", {class: lastSample.countClassName}, [
+							lastSample.nbQueries
+						])
+					]),
+					lastSample.topFiveQueries.map((query) =>
+						m("td", {class: query.elapsedClassName}, [
+							query.formatElapsed,
+							m("div.popover.left", [
+								m("div.popover-content", query.query),
+								m("div.arrow")
 							])
-						]),
-						lastSample.topFiveQueries.map((query) =>
-							m("td", {class: query.elapsedClassName}, [
-								query.formatElapsed,
-								m("div.popover.left", [
-									m("div.popover-content", query.query),
-									m("div.arrow")
-								])
-							])
-						)
-					])
-				)))
-			])
-		])
-	}
-})
+						])
+					)
+				])
+			))
+		))
+	])
+]))

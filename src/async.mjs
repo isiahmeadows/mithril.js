@@ -1,39 +1,57 @@
-// This is mostly equivalent to `./async.mjs`, but without all the
-// optimizations.
+export default function Async(attrs) {
+	return (render) => {
+		let state = "init"
+		let value, current
 
-export function Async(attrs) {
-	return (context, [state, value, hooks] = ["loading"]) => {
-		if (state === "loading" && hooks == null) {
-			hooks = []
-			new Promise((resolve) => resolve(attrs.init((f) => {
-				if (state === "loading") hooks.push(f)
-			}))).then(
-				(v) => { context.update(["ready", v]) },
-				(e) => { context.update(["error", e]) }
-			)
+		function destroy() {
+			const prevState = state
+			const prevValue = value
+			state = "destroyed"; value = undefined
+			try {
+				if (prevState === "loading") {
+					prevValue.forEach((hook) => { hook() })
+				} else if (prevState === "ready") {
+					current.destroy(value)
+				} else {
+					return
+				}
+				render(current.destroyed())
+			} catch (e) {
+				state = "error"
+				render(current.error(e))
+			}
 		}
 
-		function destroy(automatic) {
-			// Let's be fault tolerant in case the user has a bug where they
-			// retain the `destroy` ref too long.
-			if (state !== "loading" && (automatic || state !== "ready")) return
-			// Let's actually catch any errors from loading, since
-			// we can realistically handle them.
-			new Promise((resolve) => resolve(
-				state === "loading"
-					? hooks.forEach((hook) => { hook() })
-					: attrs.destroy(value)
-			)).then(
-				(v) => { context.update(["ready", v]) },
-				(e) => { context.update(["error", e]) }
-			)
-		}
+		const done = attrs((methods) => {
+			if (state === "init") {
+				state = "loading"
+				current = methods
 
-		return {
-			state: [state, value],
-			value: attrs[state](value),
-			ref: () => destroy(true),
-			done: () => destroy(false),
+				new Promise((resolve) => resolve(methods.init((f) => {
+					if (state === "loading") value.push(f)
+				}))).then(
+					(v) => {
+						if (state !== "loading") return
+						state = "ready"; value = v
+						render(current.ready(v, destroy))
+					},
+					(e) => {
+						if (state !== "destroyed") return
+						state = "error"; value = undefined
+						render(current.error(e))
+					}
+				)
+			}
+
+			render(methods[state]())
+		})
+
+		return () => {
+			try {
+				if (done != null) done()
+			} finally {
+				destroy()
+			}
 		}
 	}
 }
