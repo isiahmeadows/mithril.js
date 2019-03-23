@@ -1,46 +1,15 @@
-// Mithril v3 (this): 179 lines.
-// React: 242 lines.
-// React + experimental Hooks: 210 lines.
+// Mithril redesign (this): 144 lines.
+// React: 206 lines.
+// React + experimental Hooks: 174 lines.
 // Totals exclude this header comment.
-// Mithril v3 is ~26% smaller than React, ~15% smaller than React + hooks.
+// Mithril redesign is ~30% smaller than React, ~17% smaller than React + hooks.
 import * as Cell from "mithril/cell"
-import {Fragment, Keyed, Trust, component, m, render as mount} from "mithril"
+import {Fragment, Keyed, Trust, m, render as mount, ref} from "mithril"
+import {api, demoSource} from "../threaditjs-common/common.mjs"
 import Async from "mithril/async"
 import Router from "mithril/route"
-import request from "mithril/request"
-
-T.time("Setup")
-
-//API calls
-const apiUrl = (ref) => T.apiUrl + ref
-const api = {
-	async home() {
-		T.timeEnd("Setup")
-		return request(apiUrl("/threads"))
-	},
-	async thread(id) {
-		T.timeEnd("Setup")
-		return T.transformResponse(
-			await request(apiUrl("/comments/:id"), {params: {id}})
-		)
-	},
-	async newThread(text) {
-		return request(apiUrl("/threads/create"), {
-			method: "POST",
-			params: {text: text},
-		})
-	},
-	async newComment(text, id) {
-		return request(apiUrl("/comments/create"), {
-			method: "POST",
-			params: {text: text, parent: id},
-		})
-	}
-}
 
 //shared
-const demoSource =
-	"https://github.com/MithrilJS/mithril.js/tree/master/examples/threaditjs"
 function Header() {
 	return [
 		m("p.head_links", [
@@ -54,56 +23,56 @@ function Header() {
 }
 
 //home
-const Home = component((_, context) => {
-	let threads = []
-	return () => [
+function Home() {
+	return [
 		m(Header),
 		m(".main", m(Async, {
-			init: () => context.wrap(() => api.home().then((response) => {
+			init: () => api.home().then((response) => {
 				document.title = "ThreaditJS: Mithril | Home"
-				threads = response.data
-			})),
+				return response.data
+			}),
 			loading: () => m("h2", "Loading"),
 			error: (e) => e.status === 404
 				? m("h2", "Not found! Don't try refreshing!")
 				: m("h2", "Error! Try refreshing."),
-			ready: () => [
-				m(Keyed, threads.map((thread) =>
-					m(Fragment, {key: thread.id}, [
-						m("p", [
-							m(Router.Link, m("a", {
-								href: `/thread/${thread.id}`,
-								innerHTML: T.trimTitle(thread.text),
-							})),
-						]),
-						m("p.comment_count", [
-							thread.comment_count, " comment(s)"
-						]),
-						m("hr"),
-					])
-				)),
-				m(NewThread, {onsave(thread) {
-					threads.push(thread)
-				}}),
-			]
+			ready: (threads) => (render) => {
+				const update = (threads) => render([
+					// eslint-disable-next-line camelcase
+					m(Keyed, threads.map(({id, text, comment_count}) =>
+						m(Fragment, {key: id}, [
+							m("p", [
+								m(Router.Link, m("a", {
+									href: `/thread/${id}`,
+									innerHTML: T.trimTitle(text),
+								})),
+							]),
+							m("p.comment_count", comment_count, " comment(s)"),
+							m("hr"),
+						])
+					)),
+					m(NewThread, {onsave(thread) {
+						update([...threads, thread])
+					}}),
+				])
+				update(threads)
+			}
 		}))
 	]
-})
+}
 
 function NewThread(attrs) {
-	return Cell.map(attrs, ({onsave}) =>
-		m("form", {onsubmit(ev) {
-			const textarea = ev.target.elements[0]
-			api.newThread(textarea.value).then(({data: thread}) => {
-				if (onsave) onsave(thread)
-				textarea.value = ""
-			})
-			return false
-		}}, [
-			m("textarea[value='']"),
-			m("input[type=submit][value='Post!']"),
-		])
-	)
+	attrs = Cell.ref(attrs)
+	const textarea = ref()
+	return m("form", {onsubmit() {
+		api.newThread(textarea.current.value).then(({data: thread}) => {
+			if (attrs.current.onsave) attrs.current.onsave(thread)
+			textarea.value = ""
+		})
+		return false
+	}}, [
+		m("textarea", {ref: textarea}),
+		m("input[type=submit][value='Post!']"),
+	])
 }
 
 //thread

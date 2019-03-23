@@ -45,9 +45,28 @@ There's a few reasons:
 
 Also, there's a handful of helpers [here](https://github.com/isiahmeadows/mithril.js/tree/v3-redesign/helpers) based on [some of these hooks](https://usehooks.com/), in case you want to know what it could look like in practice. Some of those use [some built-in utilities](mvp-utils.md#cell-utilities).
 
+## Vnode inspection utilities
+
+This is exposed in each component via a `Vnodes` object parameter.
+
+- `Vnodes.tag(vnode)` - Get the resolved tag name or component reference.
+- `Vnodes.attrs(vnode)` - Get the resolved attributes as an object, including `is` for customized built-in elements, `key` for the key, `ref` for the ref, and `children` for the resolved children. This does *not* return the original instance, but always a clone of it, and it never returns an empty object. It does *not* clone the children, so be aware of that.
+    - This is mostly what components receive through the `attrs` cell.
+    - Consider this the inverse of what's done to normalize attributes in `m("tag", attrs)`.
+- `Vnodes.attr(vnode, key)` - Equivalent to `Vnodes.attrs(vnode)[key]`, but avoids the overhead of creating a full attributes object. Some attributes, like `is` (for customized built-in elements), `key`, `ref`, and `children`, are normalized in the representation, so this skips that for keys that don't really matter much.
+- `Vnodes.attrKeys(vnode)` - Equivalent to `Object.keys(Vnodes.attrs(vnode))`, but avoids the overhead of creating a full attributes object. Some attributes, like `is`, `key`, `ref`, and `children`, require some unusual processing, so it would take a bit of extra processing to include them.
+- `Vnodes.create(mask, tag, attrs, children, key, ref)` - The vnode factory
+	- This function is intentionally *not* part of semver.
+- `Vnodes.normalize(child)` - Normalize a single child into a vnode
+- `Vnodes.normalizeChildren(children)` - Normalize an array of children into an array of vnodes
+
+### Why?
+
+Given that [vnode allocation and inspection now requires significant interpretation](vnode-structure.md), there needs to be some standard library functions for easily inspecting various properties of attributes.
+
 ## Components
 
-- Components: `component(attrs): view`
+- Components: `component(m, attrs, Vnodes): view`
 	- Component attributes are a cell containing each attribute.
 	- Component views are simply vnode children. Conveniently, this *does* include state cells.
 - Components simply map attributes to a view. Mithril only cares about them in that it can more intelligently diff things.
@@ -57,12 +76,13 @@ Also, there's a handful of helpers [here](https://github.com/isiahmeadows/mithri
 - If you want to remember attributes, store them in the state.
 - If you want to remember old attributes or state, store them in the new state.
 - Note: incoming vnode children are accessible via `attrs.children`.
+- Note: attributes support multiple `send` callbacks. So you can do things like have multiple `Cell.map(attrs, ...)` in your view, without issue.
 
 ### Why separate the updating from components?
 
 There's a few reasons:
 
-1. Instead of component attributes being stored on the internal model, it's stored in a closure (the control vnode's body) that implicitly gets replaced on update. In most cases, this provides a substantial memory win, since in practice, attributes are often not necessary.
+1. Instead of component attributes being stored on the internal model, it's stored in a closure (the control vnode's body) that implicitly gets replaced on update. In many cases, this provides a substantial memory win, since in practice, attributes are often not necessary.
 2. This *only* updates when the attributes have to update. This cuts down *tremendously* on redraw times, so auto-redraws are never global.
 2. Updating can happen anywhere, and it doesn't matter where it is as long as the tree is updated appropriately. This brings a lot of added flexbility.
 3. Components now only serve one master: abstraction. Control components serve the single master of enabling subtree updates.
@@ -86,62 +106,83 @@ I've used React Redux in a few boilerplates and seen several other React Redux p
 
 ## Vnodes
 
+### Hyperscript API
+
+The primary hyperscript API is still exposed as usual, just as an argument to components and to the initialization method of `Mithril.render`.
+
+### Vnode types
+
 - Element: `m("div", ...)`
-	- `xmlns` sets the raw namespace to construct this with.
+	- `xmlns` sets the raw namespace to construct this with. For the DOM renderer, this by default just follows HTML's rules regarding namespace inference.
 	- DOM attributes other than event handlers *may* be set to cells rather than raw values. This enables updates without actually performing a full diff, which is significantly faster. (We'll trash benchmarks that way, but it also just makes more sense in this model.)
-- Fragment: `m(Fragment, ...)`, `[...]`
-- Keyed: `m(Keyed, ...)`
-- Text: `m(Text, ...)`, `"..."`
-- Raw: `m(Raw, {length = 1}, [...])`
-	- Children may either be nodes (when rendering to DOM) or strings (when rendering to string).
-	- This is retained as long as the children array remains the same. Note that you *should not* insert siblings between the managed children - you should use a fragment of raw vnodes instead.
-	- If the node is a fragment, the fragment's length *is* tracked accordingly.
-	- The underlying renderer decides what `elem` should be.
-	- This replaces `m.trust` - you should instead do one of the following:
-		- Set `innerHTML` directly. 99.999999% of the time, this is sufficient. It's worth noting React, as popular as it is, only lets you do this.
-		- Create a node, set `innerHTML` into it, and copy its children into a fragment, and return the fragment in a raw vnode. (This is what Mithril v1 and v2 do internally, and it's what the [built-in `Trust` component](mvp-utils.md#trusted-vnodes) does.)
-	- It's *highly* advised that you diff the attributes appropriately here.
-    - This is partially to integrate better with certain third-party utilities that [return their own DOM nodes](https://fontawesome.com/how-to-use/with-the-api/setup/getting-started) for you to add.
-- Control: `m(Control, {body: controlBody})`, `controlBody`
-- Request element/ref access: `ref: (elem) => ...`, `ref: (value) => ...`, etc.
-	- For component vnodes, `ref` is ignored and has no special semantics. If there really *is* any interesting value for a ref, you should just call it directly from the attributes itself.
-	- For element and text vnodes, `ref` is called with the backing DOM node. It's internally ignored on all other vnode types.
-	- For keyed and unkeyed fragments, `ref` is called with no arguments.
-	- For control vnodes, `ref` is ignored as their body itself functions not unlike one.
-	- For raw vnodes, `ref` is ignored. You already have the underlying value, so it's pointless to have a reference.
-	- The callback is scheduled to run after rendering or in the next frame.
-	- There's a `Mithril.Ref` utility for combining and composing refs a little more easily. This is particularly useful when dealing with lists of refs and when dealing with forms.
+	- This follows mostly the same hyperscript API as usual.
+- Fragment: `m(":fragment", ...)`, `[...]`
+- Keyed: `m(":keyed", ...)`
+- Text: `m(":text", ...)`, `"..."`
+- Trust: `m(":html", ...)`
+- Control: `m(":control", {body: controlBody})`, `controlBody`
+- Component: `m(Component, ...)`
+
+When JSX users need to reference these names, they should just alias them locally, like `const Fragment = ":fragment"`. But in addition, they should set the following Babel JSX plugin options:
+
+- `pragma` - `m`
+- `pragmaFrag` - `":fragment"`
+
+### Attributes
+
+Attributes are the bread and butter of element manipulation. These are how things actually get reacted to, other than children. For DOM vnodes, this is how you update values, classes, and the like. For components, this is how you pass data and callbacks to them.
+
+There are three special vnode attributes:
+
+- `key` - This tracks vnode identity and serves two functions:
+	- In `Keyed` children: linking an instance to a particular identity. This is how keyed fragments work today. Note that in this case, they're treated as object properties.
+	- In other cases: linking an instance to a particular state. This is how single-item keyed fragments work, and it's diffed as part of the vnode's logical type.
+- `ref` - This allows accessing the underlying DOM instance or provided component ref of a particular component or vnode.
+- `children` - This is the attribute's list of children.
+
+Attributes other than `key`, `children`, and event handlers (like `onclick` or a component's `onupdate`) *may* be set to cells rather than raw values. This simplifies a lot of attribute binding for components and DOM elements. Also, by side effect, it reduces a lot of our diff calculation overhead, but this isn't why I chose to allow this.
+
+- For components, this emits a new set of attributes for that component.
+- This gives us much of the benefits of a system like Glimmer's pre-compiled VM architecture without the tooling overhead.
+
+### Refs
+
+TODO: make this more sensible prose
+
+- Create a ref: `const ref = (current = undefined) => ({current})`
+	- Just simple sugar for when you want to create a ref. It's smaller than creating a full `{current: null}` object, so it's a little easier to use.
+	- This is exposed from `mithril/ref` as its sole default export.
+
+- Request element/ref access: `ref: {current}`
+	- For element and text vnodes, `ref` is set to the backing DOM node. It's internally ignored on all other vnode types.
+	- For trusted vnodes, `ref` is set to array containing the newly added DOM nodes.
+	- For all other vnodes, `ref` is ignored. Mithril itself doesn't have any sensible value to set it to.
+		- For component vnodes, `ref` is also not censored from the attributes. If there really *is* any interesting value for a ref, you should just set it directly from the attributes itself.
+		- For control vnodes and fragments, Mithril *could* set to the list of nodes, but that list could include nested fragments and components, so it's debatable what values those could/should be.
+
+TODO: make this more sensible prose
 
 Notes:
 
-- There are two special vnode attributes:
-	- `key` - This tracks vnode identity and allows two functions:
-		- In `Keyed` children, linking an instance to a particular identity. This is how keyed fragments work today.
-		- In other cases, linking an instance to a particular state. This is how single-item keyed fragments work.
-	- `ref` - This allows accessing the underlying DOM instance or provided component ref of a particular component or vnode.
-- Attributes other than event handlers (like `onclick` or a component's `onupdate`) and special keys (`key` and `ref`) *may* be set to cells rather than raw values. This simplifies a lot of attribute binding for components and DOM elements. Also, by side effect, it reduces a lot of our diff calculation overhead, but this isn't why I chose to allow this.
-	- This gives us much of the benefits of a system like Glimmer's pre-compiled VM architecture without the tooling overhead.
-- Vnode keys in `Keyed` are tracked like keyed fragments today
-- Vnode keys in all other cases are diffed as part of the logical "tag name"
-- Vnode keys are treated as object properties. Don't assume they're compared by literal identity, but treat them as if they're compared by property identity.
-- Vnode children are stored in `attrs.children`
-	- If no children exist and no `attrs.children` property is passed, this is set to an empty array.
-- There is no `vnode.text` - it's `children: ["..."]` for `trust`/`text` and `children: [m(text, "...")]` elsewhere
-- An error would be thrown during normalization if a child is an object without a numeric `.mask` field.
 - Refs are somewhat different from React's:
 	- Refs are designed to be control mechanisms, not simply exposure mechanisms. They work more like a single-use token you can pass around and asynchronously query. Likewise, these are *not* saved in subsequent renders.
 	- [React cares about ref identity](https://reactjs.org/docs/refs-and-the-dom.html#caveats-with-callback-refs), but this complicates the model a lot, especially when it's designed only for exposure.
-- Technically, I could just do `Promise.resolve().then(callback)` and provide `vnode.dom` instead of `ref`, but there's four main reasons why I'm not:
-	1. I wouldn't be able to convert errors within the callback to a more informative rejection.
+	- You can see refs in action in [the TodoMVC example](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/examples/todomvc/view.mjs)
+- Technically, I could just provide `vnode.dom` instead of `ref`, but there's three main reasons why I'm not:
 	2. It's generally poor practice to try to mutate the DOM outside of event handlers (which provide it via `ev.target.value`) or a batched request. Forcing batching also keeps performance up and running.
 	3. It makes it impossible to access an uninitialized element, simplifying types and avoiding potential for bugs.
-	4. It slightly complicates access for simpler cases.
+	4. It complicates access for simpler cases.
+
+### Why inject the factory and attribute methods?
+
+1. It keeps the data representation independent of the component.
+1. Components can just declare a peer dependency and support almost any version, even if it's a custom renderer that has practically nothing in common with standard Mithril.
 
 ## Control vnodes
 
 Control vnodes are just wrapped [cells](#cells) which receive an extra `context` parameter - yes, really. This gives you a handle to update them manually, but easily. Note that trees can only be patched through the use of control vnodes.
 
-When you "update" a control vnode, it detaches the previous control vnode's tree before initializing the new one, but invokes the `done` callback *after* the new one is first rendered. I can do this because I convert updates from invoking a `render` method to emitting through a stream, and I convert updates to *just* .
+When you "update" a control vnode, it detaches the previous control vnode's tree before initializing the new one, but invokes the `done` callback *after* the new one is first rendered. I can do this because I convert updates from invoking a `render` method to just emitting through a stream.
 
 In case you're curious, yes, this effectively works as an explicit one-way binding mechanism.
 
@@ -152,12 +193,20 @@ In case you're curious, yes, this effectively works as an explicit one-way bindi
 
 ### Rendering
 
-Rendering takes one of two forms: `render(vnode).then(...)` (invoking the first parameter). It schedules a subtree redraw for the current control vnode with a new tree.
+Rendering takes one of two forms: `render((m, Vnodes) => vnode).then(...)` (invoking the first parameter). It schedules a subtree redraw for the current control vnode with a new tree.
 
 - This schedules a subtree redraw for the relevant control vnode.
 - `vnode` is the children to write.
 - This commits asynchronously, but is *not* guaranteed beyond that.
-- This is technically just sugar for `context.schedule(() => context.renderSync(vnode))`, but it can be optimized for internally. (For example, when synchronously called, it can just store the tree and recurse.)
+- This is mostly just sugar for `context.scheduleLayout(() => context.renderSync(vnode))`, but async renders are run *before* the callbacks scheduled via `scheduleLayout`. So do note that.
+
+Async rendering frames operate in this order for each root being redrawn:
+
+1. Update the root's subtree with the given updated trees. If a child has an updated tree after sending new attributes, that subtree is updated, too.
+	1. Each update is attached to a fragment and added to the DOM immediately after this step.
+1. Invoke all `scheduleLayout` callbacks in order of appearance.
+1. Invoke all cell `done` callbacks in order of appearance.
+1. Invoke all vnode `ref` callbacks in order of appearance.
 
 ### Context
 
@@ -167,14 +216,14 @@ In addition to the `render` callback, there's an additional `context` parameter 
 	- This is for cases like third party integration when you need to *not* invoke DOM-dependent libraries in server-side code.
 	- This is used by `mithril/trust` to determine what to render.
 	- This is returns `"html"` for `mithril/render-html` and `"dom"` for `mithril/render`
-- Update view sync: `context.renderSync(vnode)`
-	- This is similar to `render(vnode)`, but operates synchronously and either synchronously throws or synchronously returns `undefined`.
+- Update view sync: `context.renderSync(factory)`
+	- This is similar to `render(factory)`, but operates synchronously and either synchronously throws or synchronously returns `undefined`.
 	- An error is thrown if this tree is currently being redrawn or this control vnode's body is being invoked. (As in, this does not support recursive invocations.)
 	- This is intended to support things that require [DOM calculation or similar](https://github.com/MithrilJS/mithril.js/issues/1166#issuecomment-234965960) immediately after rendering.
 - Schedule a render callback: `context.scheduleLayout(callback, cancel?).then(...)`
 	- This returns a promise resolved when completed.
 	- The callback is always called asynchronously relative to the cell, but *not* necessarily relative to the global event loop. In particular:
-		- Calls scheduled during initialization are scheduled to run right before ref callbacks.
+		- Calls scheduled during initialization are scheduled to run right after refs are set.
 		- Calls scheduled at any other point in time are scheduled for the next frame.
 	- In the callback, it's safe to synchronously render.
 	- If a previous callback was scheduled for this context, it's dropped and `cancel` is called (if given).
@@ -201,11 +250,12 @@ The full type for control vnodes is this:
 ```ts
 // Depends on the types for `CellDone`
 type ControlBody = (render: ControlRender, context: ControlContext) => void | CellDone;
-type ControlRender = (children: Children) => Promise<void>;
+type ControlRender = (children: ChildrenFactory) => Promise<void>;
+type ChildrenFactory = (m: Hyperscript) => Children;
 
 interface ControlContext {
 	renderType(): string;
-	renderSync(children: Children): void;
+	renderSync(children: ChildrenFactory): void;
 	scheduleLayout(callback: () => any, cancel?: () => any): Promise<void>
 }
 ```
@@ -214,8 +264,8 @@ interface ControlContext {
 
 Those have been split into two parts:
 
-- `oncreate`/`onupdate`/`onremove` - `ref` attributes
-- `onremove` - Your returned `done` callback from both ref callbacks and control vnodes.
+- `oncreate`/`onupdate`/`onremove` - `context.scheduleLayout` + refs
+- `onremove` - Your returned `done` callback from control vnodes.
 - `oninit` - Just put the state in your cell.
 - `onbeforeupdate` - If nothing changed, just don't update. If you'd like some sugar for this, there's a `distinct(cell, by?)` method in [the core cell utilities](mvp-utils.md#cell-utilities) that you can use for equivalent effect.
 - `onbeforeremove` - In the attributes, set an option to start the transition, then remove the vnode after it completes. [I do plan to expose a built-in utility for assisting with this](mvp-utils.md#transition-api) as part of the MVP, and the hard part of doing this for lists is [another component I want to include](future-utils.md#list-transition-api), just not required for the MVP itself.
@@ -224,55 +274,37 @@ It's worth noting we're currently the exception, not the norm, in baking async r
 
 The solution to async removal without framework support is through an intent system:
 
-- Set a flag on a component when you're about to remove it. That component should then toggle a class as necessary.
-- Set a flag on
-
-## Hyperscript API
-
-This is the existing hyperscript API, exposed via exports of `mithril/m`. Each of these are exposed from the browser bundle with properties of the same name.
-
-- `m`/`default` - The hyperscript factory
-- `Fragment`, `Keyed`, `Text`, `Trust`, `Retain` - Built-in components
-- `create(mask, tag, attrs, children, key, ref)` - The vnode factory
-- `RETAIN_MEMO` - A reference to the memoized `m(Retain)`, for `mopt`
-- `normalize` - Normalize a single child into a vnode
-- `normalizeChildren` - Normalize a child or array of children into an array of vnodes
-
-Note: as an added bonus, this works better with Rollup, too.
+1. Set a flag on a component when you're about to remove it. That component should then do whatever it needs to do first, like toggle a class.
+1. Once the component has done the necessary processing (like after the animation runs), it should invoke a callback to signal it's ready to be removed.
+1. Finally, remove the node itself.
 
 ## DOM renderer API
 
-This is mostly the existing renderer API, but with some modifications. It's exposed via `mithril/render` and depends on `mithril/m`.
+This is mostly the existing renderer API, but with some modifications. It's exposed via `mithril/dom`.
 
-- `render(root, vnode?)` - Render a tree to a root using an optional previous internal representation. This is exposed via `Mithril.render`.
+- `render(root, (m, Vnodes) => vnode)` - Render a tree to a root using an optional previous internal representation. This is exposed in the core bundle via `Mithril.render`.
 	- If `root` is currently being redrawn, an error is thrown.
-	- This is synchronous - it only makes sense to do this.
-	- `sync:` is a boolean option, but it does *not* result in a non-promise return value or synchronously thrown error. So this function is sometimes-sync in when side effects occur, but it *never* is sometimes-sync in error handling.
+	- This is synchronous - it only makes sense to do it this way.
 	- This assigns an expando `._ir` to the root if one doesn't exist already.
 
-- `new Context(ir)` - Create a context instance from an IR node.
-	- This exists mostly for `hydrate`.
+- `render(root)` - Clear a root.
+
+- `hydrate(root, (m, Vnodes) => vnode)` - Renders a root vnode. This is exposed in the full bundle via `Mithril.hydrate`, but is *not* exposed in the core bundle. (It's tree-shaken out.)
+	- This assigns an expando `._ir` to the root.
 
 Notes:
 
-- First renders are always synchronous. Subsequent renders await async unmounting before rendering subtrees. (This avoids certain async complications.)
-- If any subtree redraws are scheduled, they are cleared to make room for the global redraw.
-- This depends on `window` and `document` globals - those are *not* dependency-injected. This does *not* include module instantiation, so it's safe to load without side effects on server-side.
-- Callbacks are deduplicated via `requestAnimationFrame` on update, requesting a time slot to update the DOM tree before committing. This is intentionally coupled to the renderer as it has some non-trivial deduplication logic to ensure trees get merged with their ancestors when their updates get scheduled.
+- For `render`:
+	- First renders are always synchronous. Subsequent renders await async unmounting before rendering subtrees. (This avoids certain async complications.)
+	- If any subtree redraws are scheduled, they are cleared to make room for the global redraw.
+	- This depends on `window` and `document` globals - those are *not* dependency-injected. This does *not* include module instantiation, so it's safe to load without side effects on server-side.
+	- Callbacks are deduplicated via `requestAnimationFrame` on update, requesting a time slot to update the DOM tree before committing. This is intentionally coupled to the renderer as it has some non-trivial deduplication logic to ensure trees get merged with their ancestors when their updates get scheduled.
 
-## DOM hydration API
-
-The DOM hydration API is exposed under `mithril/hydrate` and is exposed via `Mithril.hydrate`. It depends on `mithril/render` and `mithril/m`.
-
-- `hydrate(root, vnode?)` - Renders a root vnode.
-	- This assigns an expando `._ir` to the root if one doesn't exist already.
-
-Notes:
-
-- An error is thrown if `root._ir` already exists.
-- An error is thrown if any differences exist between the existing DOM tree the incoming vnode tree.
-- If an error is thrown at any point, all successfully added removal hooks are called immediately before throwing the caught error. If any of these throw, their errors replace the initially caught error and are rethrown instead.
-- This shares a lot of internal subscription code with `mithril/render`, so those need to share a common backend.
+- For `hydrate`:
+	- An error is thrown if `root._ir` already exists.
+	- An error is thrown if any differences exist between the existing DOM tree the incoming vnode tree.
+	- If an error is thrown at any point, all successfully added removal hooks are called immediately before throwing the caught error. If any of these throw, their errors replace the initially caught error and are rethrown instead.
+	- This shares a lot of code with `render`, hence why they're in the same module.
 
 ## Closure components
 
@@ -286,11 +318,12 @@ This is exposed under `mithril/component` and exposed via `Mithril.component`.
 		- `context.redraw()` - Schedule an async redraw.
 		- `context.redrawSync()` - Perform a sync redraw.
 		- `context.wrap(func)` - When `func` returns/resolves/rejects/throws, schedule an async redraw.
-		- `ref` - Set the current ref. If it changes
 	- This is just like `closure`, but sugars over attributes, too.
 	- This wraps all event handlers, including component event handlers, to schedule an auto-redraw if you return anything other than `false`.
 
 Note that this doesn't pierce through control vnodes and component vnodes to their children - it simply rewrites the returned vnode tree internally.
+
+Also, note that this must be from the same library version as `mithril/dom`.
 
 This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/component.mjs), with an optimized implementation [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/optimized/component.mjs).
 
@@ -327,7 +360,15 @@ Is this a common enough *need* (not simply *want*) to include in the core bundle
 
 It's worth noting that the optimized variant's vnode rewriting mechanism dives into some arcane details about vnode representation to avoid slowdown while it tries to minimize copies.
 
+## Core bundle
+
+The core bundle, `mithril/core`, exposes the following:
+
+- `render` from `mithril/dom` (but not `hydrate`)
+- `component` from `mithril/component`
+- `ref` from `mithril/ref`
+
 ## General notes
 
 - This separation keeps it a little more clearly tree-shakable and more cleanly abstracted.
-- The global bundle is exported via a `m` global.
+- The global bundle is exported via a `Mithril` global.

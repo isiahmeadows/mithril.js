@@ -1,4 +1,4 @@
-export default function Async(attrs) {
+export default function Async(_, attrs) {
 	return (render) => {
 		let state = "init"
 		let value, current

@@ -5,7 +5,7 @@
 // `state === 3`: Error
 // `state === 4`: Destroyed
 
-function Async(attrs) {
+function Async(_, attrs) {
 	return function (render) {
 		var state = 0
 		var value, current

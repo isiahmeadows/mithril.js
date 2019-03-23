@@ -85,3 +85,18 @@ Notes:
 ### Why?
 
 1. List transitions aren't easy to get right.
+
+## Cell optimization utility
+
+This would come in two parts:
+
+1. Calls to various `mithril/cell` methods could be inlined to avoid most of the overhead in them.
+1. Cells that emit mostly-static vnode trees could be optimized to have only the dependent properties updated where possible.
+
+### Why?
+
+Users of `mopt` would also appreciate this.
+
+1. It would sharply reduce the memory requirements of these pipelines, since some (like `map` and `filter`) require no real memory and others (like `distinct`, `scan`, and `scanMap`) require very little.
+1. The overhead of polymorphic dispatch would basically disappear, as there wouldn't be any significant call overhead to speak of.
+1. Localizing updates ahead of time would dramatically reduce the overhead in patching them.

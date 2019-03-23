@@ -2,7 +2,7 @@
 
 These are things I need to do at some point, but just haven't gotten to yet. Obviously, this is not exhaustive, but it should give some insight into my plans.
 
-- Reconsider whether normalizing DOM attributes to an array *really* helps. (I'm pretty sure it wouldn't.)
+- Update all the examples.
 
 - Document what my inspirations were
     - Similar inspirations to that of state reducers, like Redux and React Hooks
@@ -11,13 +11,13 @@ These are things I need to do at some point, but just haven't gotten to yet. Obv
     - Also: dataflow programming and stream processing in general
     - Also: functional programming in general. This is truly functional and reactive, at a deeper level than even Elm. (Really, this is Scheme/OCaml territory.)
 
-- Update the vnode structure to reflect the recent changes.
-
 - Document my proposed hooks API
     - It will resemble React's API, but it won't be an exact clone.
     - No `setState((prev) => next)` - use a reducer if you really want to do that.
 
 - Resolve that README TODO eventually.
+
+- Reconsider whether normalizing DOM attributes to an array *really* helps. (I'm pretty sure it *would*, but only under limited circumstances.)
 
 - Maybe later show how this API is more easily interfaced with languages other than JS.
     - It'd certainly be interesting to have a serious and decent interop story with languages that aren't JS.

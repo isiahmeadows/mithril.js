@@ -4,62 +4,6 @@
 
 These are all various utilities that are, unless otherwise listed, kept out of the core bundle, but they are part of the MVP of this proposal.
 
-## Vnode inspection Utilities
-
-This is exposed under `mithril/vnodes` and in the full bundle via `Mithril.Vnodes`.
-
-- `Vnodes.tag(vnode)` - Get the resolved tag name, component reference, or built-in component reference.
-- `Vnodes.attrs(vnode)` - Get the resolved attributes as an object, including `is` for DOM `is` attributes, `key` for the key, and `ref` for the ref, and `children` for the resolved children. This does *not* return the original instance, but always a clone of it, and it never returns an empty object. It does *not* clone the children, so be aware of that.
-    - This is mostly what components receive through the `attrs` cell.
-- `Vnodes.children(vnode)` - Equivalent to `Vnodes.attrs(vnode).children`, but avoids the overhead of creating a full attributes object.
-
-### Why?
-
-Given that [vnode allocation and inspection now requires interpretation](vnode-structure.md), there needs to be some standard library functions for easily inspecting various properties of attributes.
-
-## Composable refs
-
-This is exposed under `mithril/ref` and in the full bundle via `Mithril.Ref`. It exists to help make refs considerably more manageable.
-
-- `m(Ref, {join: ({...elems}) => ...}, (refs) => ...)` - Create a combined ref that invokes a callback once all named refs are received as well as if any of them update.
-- `m(Ref, {all: ([...elems]) => ...}, (refs) => ...)` - Create a combined ref that invokes a callback once all named refs are received as well as if any of them update.
-- `ref = refs(keyOrIndex)` - Create and get a ref linked to that key or index.
-    - Note: it must be either a number, a symbol, or a string, and you *should* coerce it first if it's not.
-- `ref = refs(null)` - Get a ref called to send an empty array, or `undefined` if named refs exist.
-- `value = refs()` - Get the resolved values or `undefined` if some are still pending.
-
-Notes:
-
-- The resulting refs only propagate the first argument, the element or component ref.
-- The returned `done` callback from the `join:`/`all:` callback replaces any previous ones on update.
-- These don't type check the values themselves apart from checking identity with a private sentinel object.
-- Be sure to *not* use these inside callbacks.
-
-This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/ref.mjs), with an optimized ES5 implementation [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/optimized/ref.mjs).
-
-If you're using an ES6 environment, `mithril/proxy-ref` returns a similar API, but with a few changes for ease of use.
-
-- The main component is exposed via a named export `ProxyRef.Ref`
-- `ref = refs[keyOrIndex]` - Equivalent to `refs(keyOrIndex)`
-- `ref = refs[ProxyRef.fallback]` - Equivalent to `refs(false)`
-- `ref = refs[ProxyRef.resolved]` - Equivalent to `refs()`
-
-## Trusted vnodes
-
-This is exposed under `mithril/trust` and in the full bundle via `Mithril.Trust`. is a userland implementation of `m.trust`, something that's been around since v0.1. It's out-of-core because `innerHTML` is better for most use cases.
-
-- `m(Trust, {tag = "div", xmlns = null}, ...children)`
-    - `tag:` - The tag name to use for the temporary parent. By default, it uses `"div"`
-    - `xmlns:` - The namespace to use for the temporary parent. By default, it falls back to just using the default document namespace.
-    - `children:` - An array of children strings to render as part of the fragment.
-    - `ref:` - This provides an array of child nodes for its ref.
-
-This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/trust.mjs), with an optimized implementation [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/optimized/trust.mjs).
-
-### Why?
-
-People are going to ask for it anyways, so why not? Plus, it shows off some of the flexibility of the component model.
-
 ## Router API
 
 This is exposed under `mithril/router` and in the full bundle via `Mithril.Router`. The default export is a global router instance. It depends on the internal path parsing utilities, but that's it.
@@ -122,6 +66,7 @@ This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-re
 - Prefer `Router.Link` over explicit `router.push(...)`/`router.replace(...)`/`router.pop(...)` for URLs. Mithril handles most of the boilerplate and
 - Each of these strips the prefix as necessary, and they wrap inconsistencies in the history passed to `Router.create(...)`.
 - This is fully zero-dependency and the only utility that requires vnodes is the `router.Link` component, so you *could* use this in both cells and the virtual DOM tree without issue as long as you don't use `router.Link`.
+- You can have multiple separate `Router.match` instances active at once. So for example, you could use one in your navigation to select which item is considered "active" *and* one in the main page to select which page body to render. As mentioned above, it returns a cell that passes through its output (as long as it doesn't contain routes and isn't literally `Router.NEXT`), so you can still use it in other contexts like your data model.
 
 ## Request API
 
@@ -242,6 +187,9 @@ This is exposed under `mithril/cell` and in the full bundle via `Mithril.Cell`.
     - Note: this closes previously created cells before initializing the next one. If that's not what you intend, create a custom cell that delegates to this.
 
 - `cell = Cell.onDone(oldCell, done)` - Return a cell that invokes a `done` callback on completion.
+
+- `ref = Cell.ref(cell, selector?)` - Return a ref that is set to the latest value of a cell. This is *very* useful when working with custom event callbacks and to just unnest dynamic attributes in otherwise static views. (For example, you might have a static form where the only thing that could change is the handlers for certain events.)
+    - `selector(current): value` - Change the value to set the ref to.
 
 - `Cell.shallowEqual(a, b)` - Shallow-compare two objects or arrays, optionally using a comparison function.
     - This compares values as per the ES operation SameValueZero(`a`, `b`), which is mostly like `a === b` except NaNs are considered equal. (This is what maps and sets use.)

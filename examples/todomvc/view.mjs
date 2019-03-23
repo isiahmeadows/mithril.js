@@ -1,12 +1,12 @@
+//view
 import * as Cell from "../../../mithril/cell.mjs"
-import {Keyed, m} from "../../../mithril.mjs"
+import {Keyed, m, ref} from "../../../mithril.mjs"
 import {
 	countRemaining, dispatch, getTodosByStatus, hasRemaining,
 	state
 } from "./model.mjs"
 import Router from "../../../mithril/router.mjs"
 
-//view
 function Header() {
 	return m("header.header", [
 		m("h1", "todos"),
@@ -22,26 +22,28 @@ function Header() {
 }
 
 function Todo(attrs) {
-	function save(ev) {
-		if (ev.keyCode === 13 || ev.type === "blur") {
-			dispatch({type: "update", title: ev.target.value})
-		} else if (ev.keyCode === 27) {
-			dispatch({type: "reset"})
-		}
-	}
+	return (render, context) => attrs(({todo}) => {
+		const input = ref()
 
-	return Cell.map(attrs, ({todo}) => {
-		const inputRef = todo === state.editing
-			? (input) => {
-				if (input !== document.activeElement) {
-					input.focus()
-					input.selectionStart = todo.title.length
-					input.selectionEnd = todo.title.length
+		if (todo === state.editing) {
+			context.scheduleLayout(() => {
+				if (input.current !== document.activeElement) {
+					input.current.focus()
+					input.current.selectionStart = todo.title.length
+					input.current.selectionEnd = todo.title.length
 				}
-			}
-			: undefined
+			})
+		}
 
-		return m("li", {
+		function save(ev) {
+			if (ev.keyCode === 13 || ev.type === "blur") {
+				dispatch({type: "update", title: input.value})
+			} else if (ev.keyCode === 27) {
+				dispatch({type: "reset"})
+			}
+		}
+
+		render(m("li", {
 			class: (todo.completed ? "completed" : "") + " " +
 				(todo === state.editing ? "editing" : "")
 		}, [
@@ -63,10 +65,10 @@ function Todo(attrs) {
 				}}),
 			]),
 			m("input.edit", {
-				ref: inputRef, value: todo.title,
+				ref: input, value: todo.title,
 				onkeyup: save, onblur: save,
 			}),
-		])
+		]))
 	})
 }
 

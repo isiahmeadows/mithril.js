@@ -1,13 +1,4 @@
-import {create, normalize} from "mithril/m"
-
 var sentinel = {}
-var hasOwn = Object.prototype.hasOwnProperty
-
-var assign = Object.assign || function (target, source) {
-	for (var key in source) {
-		if (hasOwn.call(source, key)) target[key] = source[key]
-	}
-}
 
 function isEventHandler(key) {
 	// Compare characters by char code to avoid string allocation overhead.
@@ -36,10 +27,10 @@ function wrapHandler(handler, redraw) {
 }
 
 /* eslint-disable no-bitwise */
-function wrapRedraw(child, redraw) {
+function wrapRedraw(Vnodes, child, redraw) {
 	var attrs = child.attrs
 	cloneChildren: {
-		if ((child.mask & 0xF0) !== 0x00) {
+		if ((child.mask & 0xFF) > 0x0E) {
 			for (var i = 0; i !== child.attrs.length; i += 2) {
 				if (
 					isEventHandler(child.attrs[i]) &&
@@ -65,25 +56,6 @@ function wrapRedraw(child, redraw) {
 		} else if ((child.mask & 0xFD) === 0x02 && child.children != null) {
 			break cloneChildren
 			// eslint-disable-next-line no-bitwise
-		} else if ((child.mask & 0xFF) === 0x0F && child.attrs != null) {
-			for (var key in child.attrs) {
-				if (hasOwn.call(child.attrs, key)) {
-					var value = child.attrs[key]
-					if (isEventHandler(key) && typeof value === "function") {
-						if (attrs === child.attrs) {
-							assign(attrs = {}, child.attrs)
-						}
-						attrs[key] = wrapHandler(value, redraw)
-					}
-				}
-			}
-
-			if (attrs !== child.attrs) {
-				return create(
-					child.mask, child.tag, attrs,
-					child.children, child.key, child.ref
-				)
-			}
 		}
 
 		return child
@@ -94,15 +66,17 @@ function wrapRedraw(child, redraw) {
 	if (child.children != null) {
 		children = []
 		for (var i = 0; i < child.children.length; i++) {
-			children[i] = wrapRedraw(child.children[i], redraw)
+			children[i] = wrapRedraw(Vnodes, child.children[i], redraw)
 		}
 	}
 
-	return create(child.mask, child.tag, attrs, children, child.key, child.ref)
+	return Vnodes.create(
+		child.mask, child.tag, attrs, children, child.key, child.ref
+	)
 }
 /* eslint-enable no-bitwise */
 
-function component(init) {
+function component(_, init, Vnodes) {
 	return function (attrs) {
 		return function (_, context) {
 			var view = sentinel
@@ -117,7 +91,9 @@ function component(init) {
 				try {
 					var result = view(prev, next)
 					if (result != null && result !== prev) {
-						context.renderSync(wrapRedraw(normalize(result), redraw))
+						context.renderSync(
+							wrapRedraw(Vnodes, Vnodes.normalize(result), redraw)
+						)
 					}
 				} finally {
 					current = next

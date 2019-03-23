@@ -1,50 +1,14 @@
-// Mithril v3 (this): 179 lines.
-// React: 242 lines.
-// React + experimental Hooks: 210 lines.
+// Mithril redesign: 144 lines.
+// React (this): 206 lines.
+// React + experimental Hooks: 174 lines.
 // Totals exclude this header comment.
-// Mithril v3 is ~26% smaller than React, ~15% smaller than React + hooks.
+// Mithril redesign is ~30% smaller than React, ~17% smaller than React + hooks.
 import {BrowserRouter, Link, Route} from "react-router"
+import {api, demoSource} from "../threaditjs-common/common.mjs"
 import React from "react"
 import ReactDOM from "react-dom"
 
-T.time("Setup")
-
-//API calls
-const apiUrl = (ref) => T.apiUrl + ref
-const api = {
-	async home() {
-		T.timeEnd("Setup")
-		const response = await fetch(apiUrl("/threads"))
-		await response.json()
-	},
-	async thread(id) {
-		T.timeEnd("Setup")
-		id = encodeURIComponent(id)
-		const response = await fetch(apiUrl(`/comments/${id}`))
-		return T.transformResponse(await response.json())
-	},
-	async newThread(text) {
-		text = encodeURIComponent(text)
-		const response = await fetch(
-			apiUrl(`/threads/create?text=${text}`),
-			{method: "POST"}
-		)
-		return response.json()
-	},
-	async newComment(text, id) {
-		id = encodeURIComponent(id)
-		text = encodeURIComponent(text)
-		const response = await fetch(
-			apiUrl(`/comments/create?text=${text}&parent=${id}`),
-			{method: "POST"}
-		)
-		return response.json()
-	}
-}
-
 //shared
-const demoSource =
-	"https://github.com/MithrilJS/mithril.js/tree/master/examples/threaditjs-react"
 function Header() {
 	return <>
 		<p className="head_links">

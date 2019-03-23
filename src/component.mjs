@@ -1,12 +1,9 @@
 // This uses ES2019's `Object.fromEntries` in `join` for simplicity
-import * as Vnodes from "mithril/vnodes"
-import {Control, Fragment, Keyed, Raw, Text, m, normalize} from "mithril/m"
-
 function isObject(value) {
 	return value != null && typeof value === "object"
 }
 
-export default function component(init) {
+export default function component(m, init, Vnodes) {
 	return (attrs) => (_, context) => {
 		let locked = false
 		let view, currentAttrs
@@ -19,7 +16,7 @@ export default function component(init) {
 			try {
 				const result = view(prev, next)
 				if (result != null) {
-					context.renderSync(wrapRedraw(normalize(result)))
+					context.renderSync(wrapRedraw(Vnodes.normalize(result)))
 				}
 			} finally {
 				locked = false
@@ -59,8 +56,8 @@ export default function component(init) {
 		function wrapRedraw(child) {
 			const tag = Vnodes.tag(child)
 			switch (tag) {
-				case Text: case Raw: case Control: return child
-				case Keyed: case Fragment: {
+				case ":text": case ":trust": case ":control": return child
+				case ":keyed": case ":fragment": {
 					const {children, ...attrs} = Vnodes.attrs(child)
 					return m(tag, {
 						...attrs,

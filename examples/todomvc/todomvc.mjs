@@ -1,3 +1,4 @@
+//setup
 import {m, render} from "../../../mithril.mjs"
 import Router from "../../../mithril/router.mjs"
 import View from "./view.mjs"

@@ -21,14 +21,14 @@ Other notes:
 
 - `(mask & 0xF0) === 0x00`
 
-| Function      |   ID   | Example                                      |
-|:-------------:|:------:|:-------------------------------------------- |
-| Text*         | `0x00` | `m(Text, ...)`, `"..."`                      |
-| Raw*          | `0x01` | `m(Raw, ...)`                                |
-| Keyed*        | `0x02` | `m(Keyed, ...)`                              |
-| Fragment      | `0x03` | `m(Fragment, ...)`, `[...]`                  |
-| Control*      | `0x08` | `m(Control, ...)`, `(context) => ...`        |
-| Component*    | `0x0F` | `m(Component, ...)`                          |
+| Function      |   ID   | Example                                  |
+|:-------------:|:------:|:---------------------------------------- |
+| Text*         | `0x00` | `m(":text", ...)`, `"..."`               |
+| Trust*        | `0x01` | `m(":trust", ...)`                       |
+| Keyed*        | `0x02` | `m(":keyed", ...)`                       |
+| Fragment      | `0x03` | `m(":fragment", ...)`, `[...]`           |
+| Control*      | `0x08` | `m(":control", ...)`, `(context) => ...` |
+| Component*    | `0x0F` | `m(":component", ...)`                   |
 
 ## DOM elements
 
