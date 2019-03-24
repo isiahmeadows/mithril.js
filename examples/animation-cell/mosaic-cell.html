@@ -21,11 +21,8 @@
 	</head>
 	<body>
 		<div id="root"></div>
-		<script src="../../mithril.js"></script>
-		<script src="../../stream/stream.js"></script>
+		<script src="../../mithril/full.js"></script>
 		<script>
-const {m, Cell} = Mithril
-
 const range = (start, end) =>
 	Array.from({length: end - start}, (_, i) => i + start)
 
@@ -55,7 +52,7 @@ Mithril.render(document.getElementById("root"), Cell.run(
 		["hide", rangeMemo], ["hide", undefined],
 	])
 	// pipe cell into view
-	cell => Cell.map(cell, ([state, cells]) => view(state, cells))
+	(cell) => Cell.map(cell, ([state, cells]) => view(state, cells))
 ))
 		</script>
 	</body>

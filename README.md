@@ -16,7 +16,6 @@ If you have *any* feedback, questions, or concerns, please do feel free to [file
 - [Utilities added to `mithril/*`, not part of the MVP](future-utils.md)
 - [Other general notes](notes.md)
 - [Rationale](rationale.md)
-- [Element type-to-ID mapping](element-type-ids.md)
 - [Bitwise operations explainer](bitwise.md)
 
 ## Summary

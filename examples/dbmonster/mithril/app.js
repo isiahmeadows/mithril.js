@@ -1,7 +1,5 @@
 "use strict"
 
-const {m, Cell, Keyed} = Mithril
-
 perfMonitor.startFPSMonitor()
 perfMonitor.startMemMonitor()
 perfMonitor.initProfiler("render")
@@ -20,7 +18,7 @@ function dataStream(send) {
 Mithril.render(document.getElementById("app"), m("div", [
 	m("table.table.table-striped.latest-data", [
 		m("tbody", Cell.map(dataStream, (data) =>
-			m(Keyed, data.map(({dbname, lastSample}) =>
+			m("#keyed", data.map(({dbname, lastSample}) =>
 				m("tr", {key: dbname}, [
 					m("td.dbname", dbname),
 					m("td.query-count", [

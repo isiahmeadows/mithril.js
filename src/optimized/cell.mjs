@@ -156,12 +156,6 @@ function onDone(cell, func) {
 	}
 }
 
-function ref(cell, func) {
-	const ref = {current: undefined}
-	cell(function (value) { ref.current = func != null ? func(value) : value })
-	return ref
-}
-
 function shallowEqual(a, b, compare) {
 	if (compare == null) compare = sameValueZero
 
@@ -183,6 +177,6 @@ function shallowEqual(a, b, compare) {
 }
 
 export {
-	all, chain, distinct, filter, join, map, of, onDone, reduce, ref, run, scan,
+	all, chain, distinct, filter, join, map, of, onDone, reduce, run, scan,
 	scanMap, shallowEqual, tap,
 }

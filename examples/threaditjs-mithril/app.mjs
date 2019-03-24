@@ -4,13 +4,13 @@
 // Totals exclude this header comment.
 // Mithril redesign is ~30% smaller than React, ~17% smaller than React + hooks.
 import * as Cell from "mithril/cell"
-import {Fragment, Keyed, Trust, m, render as mount, ref} from "mithril"
 import {api, demoSource} from "../threaditjs-common/common.mjs"
+import {m, render} from "mithril"
 import Async from "mithril/async"
 import Router from "mithril/route"
 
 //shared
-function Header() {
+function Header(m) {
 	return [
 		m("p.head_links", [
 			m("a", {href: demoSource}, "Source"), " | ",
@@ -38,8 +38,8 @@ function Home() {
 			ready: (threads) => (render) => {
 				const update = (threads) => render([
 					// eslint-disable-next-line camelcase
-					m(Keyed, threads.map(({id, text, comment_count}) =>
-						m(Fragment, {key: id}, [
+					m("#keyed", threads.map(({id, text, comment_count}) =>
+						m("#fragment", {key: id}, [
 							m("p", [
 								m(Router.Link, m("a", {
 									href: `/thread/${id}`,
@@ -61,16 +61,16 @@ function Home() {
 }
 
 function NewThread(attrs) {
-	attrs = Cell.ref(attrs)
-	const textarea = ref()
+	let textarea, onsave
+	attrs((current) => onsave = current.onsave)
 	return m("form", {onsubmit() {
-		api.newThread(textarea.current.value).then(({data: thread}) => {
-			if (attrs.current.onsave) attrs.current.onsave(thread)
+		api.newThread(textarea.value).then(({data: thread}) => {
+			if (onsave) onsave(thread)
 			textarea.value = ""
 		})
 		return false
 	}}, [
-		m("textarea", {ref: textarea}),
+		m("textarea", {ref: (elem) => textarea = elem}),
 		m("input[type=submit][value='Post!']"),
 	])
 }
@@ -105,7 +105,7 @@ function Thread(attrs) {
 
 function ThreadNode(attrs) {
 	return Cell.map(attrs, ({node}) => m(".comment", [
-		m("p", m(Trust, node.text)),
+		m("p", m("#html", node.text)),
 		m(".reply", m(Reply, {node})),
 		m(".children", node.children.map((child) =>
 			m(ThreadNode, {node: child})
@@ -128,7 +128,7 @@ function Reply(attrs) {
 					oninput(ev) { updateReplying(ev.target.value) },
 				}),
 				m("input[type=submit][value='Reply!']"),
-				m(".preview", m(Trust, T.previewComment(newComment))),
+				m(".preview", m("#html", T.previewComment(newComment))),
 			])
 		)
 
@@ -141,7 +141,7 @@ function Reply(attrs) {
 }
 
 //router
-mount(document.getElementById("app"), Router.match({
+render(document.getElementById("app"), Router.match({
 	default: "/",
 	"/thread/:id": ({id}) => m(Thread, {id}),
 	"/": () => m(Home),

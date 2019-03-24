@@ -10,17 +10,22 @@ You can emulate Mithril's current API by adding a subscription mechanism that in
 
 ```js
 import render from "mithril/render"
-const subtrees = []
+const subtrees = new Map()
 
 export function mount(root, func) {
-    render(root, (render, context) => {
-        subtrees.push({context, func})
-        render(func())
-    })
+    if (func != null) {
+        render(root, (render, context) => {
+            subtrees.set(root, {context, func})
+            render(func())
+        })
+    } else {
+        subtrees.delete(root)
+        render(root)
+    }
 }
 
 export function redraw() {
-    for (const {context, func} of subtrees) {
+    for (const {context, func} of subtrees.values()) {
         context.scheduleLayout(() => {
             context.renderSync(func())
         })
@@ -28,7 +33,7 @@ export function redraw() {
 }
 
 export function redrawSync() {
-    for (const {context, func} of subtrees) {
+    for (const {context, func} of subtrees.values()) {
         context.renderSync(func())
     }
 }
@@ -60,8 +65,8 @@ Each of these are very thoroughly addressed:
 3. This trap is easy to run into at any point, but the very hard abstraction nature of this redesign makes it much harder to do it without at least noticing that it shouldn't be so complicated. So the better way is also the more natural way, and so the easy route is almost *always* the best route. And of course, when possible, we should be optimizing for what people *naturally do* rather than just telling them what not to do.
 4. This is more or less the same as 3, just referring to accidentally global state rather than intentionally global state.
 
-### Making the vnode a black box
+### Moving children into the attributes
 
-The vnode structure is now considered an implementation detail, with `mithril/vnodes` being the recommended way to access the relevant data on vnodes if you want any API version guarantee.
+The vnode children have been moved into the attributes.
 
-This is specifically to enable performance optimizations while working with vnodes and to abstract the vnodes themselves from their representation.
+This is one of the few things React did *correctly* from the start. It's *much* easier to proxy attributes through when children are packaged like any other attribute. It's also much easier to pass them around sensibly - you don't need to specially package them.

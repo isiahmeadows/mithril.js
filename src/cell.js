@@ -162,12 +162,6 @@ function onDone(cell, func) {
 	}
 }
 
-function ref(cell, func) {
-	const ref = {current: undefined}
-	cell(function (value) { ref.current = func != null ? func(value) : value })
-	return ref
-}
-
 function shallowEqual(a, b, compare) {
 	if (compare == null) compare = sameValueZero
 
@@ -198,7 +192,6 @@ var Cell = {
 	of: of,
 	onDone: onDone,
 	reduce: reduce,
-	ref: ref,
 	run: run,
 	scan: scan,
 	scanMap: scanMap,

@@ -1,11 +1,11 @@
 //view
 import * as Cell from "../../../mithril/cell.mjs"
-import {Keyed, m, ref} from "../../../mithril.mjs"
 import {
 	countRemaining, dispatch, getTodosByStatus, hasRemaining,
 	state
 } from "./model.mjs"
 import Router from "../../../mithril/router.mjs"
+import {m} from "../../../mithril/core.mjs"
 
 function Header() {
 	return m("header.header", [
@@ -23,14 +23,14 @@ function Header() {
 
 function Todo(attrs) {
 	return (render, context) => attrs(({todo}) => {
-		const input = ref()
+		let input
 
 		if (todo === state.editing) {
 			context.scheduleLayout(() => {
-				if (input.current !== document.activeElement) {
-					input.current.focus()
-					input.current.selectionStart = todo.title.length
-					input.current.selectionEnd = todo.title.length
+				if (input !== document.activeElement) {
+					input.focus()
+					input.selectionStart = todo.title.length
+					input.selectionEnd = todo.title.length
 				}
 			})
 		}
@@ -65,7 +65,8 @@ function Todo(attrs) {
 				}}),
 			]),
 			m("input.edit", {
-				ref: input, value: todo.title,
+				ref: (elem) => input = elem,
+				value: todo.title,
 				onkeyup: save, onblur: save,
 			}),
 		]))
@@ -81,7 +82,7 @@ function Todos(attrs) {
 			},
 		}),
 		m("label[for=toggle-all]", "Mark all as complete"),
-		m("ul#todo-list", m(Keyed, Cell.map(attrs, ({showing}) =>
+		m("ul#todo-list", m("#keyed", Cell.map(attrs, ({showing}) =>
 			getTodosByStatus({showing}).map((todo) =>
 				m(Todo, {key: todo.id, todo})
 			)

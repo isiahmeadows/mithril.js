@@ -6,7 +6,7 @@ These are all various utilities that are, unless otherwise listed, kept out of t
 
 ## Router API
 
-This is exposed under `mithril/router` and in the full bundle via `Mithril.Router`. The default export is a global router instance. It depends on the internal path parsing utilities, but that's it.
+This is exposed under `mithril/router` and in the full bundle via `Router`. The default export is a global router instance. It depends on the internal path parsing utilities, but that's it.
 
 - `newRouter = Router.create(init: (update) => history)` - Create a new global router instance with a different history.
     - `{href, state} = history.current()` - Return the current URL + state pair
@@ -78,7 +78,7 @@ Beyond that, the API is probably fine as-is after [#2335](https://github.com/Mit
 
 ## Async loading sugar
 
-This is exposed under `mithril/async` and in the full bundle via `Mithril.async`.
+This is exposed under `mithril/async` and in the full bundle via `Async`.
 
 Basically https://github.com/MithrilJS/mithril.js/issues/2282.
 
@@ -104,7 +104,7 @@ This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-re
 
 ## Transition API
 
-This is exposed under `mithril/transition` and in the full bundle via `Mithril.Transition`.
+This is exposed under `mithril/transition` and in the full bundle via `Transition`.
 
 - `m(Transition, {in, out, show, onin, onout}, children)` - Define a transitioned element
     - `in:` - Zero or more space-separated classes to toggle while transitioning inward.
@@ -146,7 +146,7 @@ This is exposed under `mithril/stream`, and is the same as what's there today. N
 
 ## Cell utilities
 
-This is exposed under `mithril/cell` and in the full bundle via `Mithril.Cell`.
+This is exposed under `mithril/cell` and in the full bundle via `sCell`.
 
 - `cell = Cell.all([...cells], ([...values]) => ...)` - Join multiple cells in an array into a single cell with each named by index
     - The resulting cell emits arrays for its children.
@@ -187,9 +187,6 @@ This is exposed under `mithril/cell` and in the full bundle via `Mithril.Cell`.
     - Note: this closes previously created cells before initializing the next one. If that's not what you intend, create a custom cell that delegates to this.
 
 - `cell = Cell.onDone(oldCell, done)` - Return a cell that invokes a `done` callback on completion.
-
-- `ref = Cell.ref(cell, selector?)` - Return a ref that is set to the latest value of a cell. This is *very* useful when working with custom event callbacks and to just unnest dynamic attributes in otherwise static views. (For example, you might have a static form where the only thing that could change is the handlers for certain events.)
-    - `selector(current): value` - Change the value to set the ref to.
 
 - `Cell.shallowEqual(a, b)` - Shallow-compare two objects or arrays, optionally using a comparison function.
     - This compares values as per the ES operation SameValueZero(`a`, `b`), which is mostly like `a === b` except NaNs are considered equal. (This is what maps and sets use.)

@@ -2,8 +2,6 @@
 
 These are things I need to do at some point, but just haven't gotten to yet. Obviously, this is not exhaustive, but it should give some insight into my plans.
 
-- Update all the examples.
-
 - Document what my inspirations were
     - Similar inspirations to that of state reducers, like Redux and React Hooks
     - Also: https://cycle.js.org/

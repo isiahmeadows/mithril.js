@@ -1,9 +1,6 @@
-// This uses ES2019's `Object.fromEntries` in `join` for simplicity
-function isObject(value) {
-	return value != null && typeof value === "object"
-}
+import {m} from "mithril/m"
 
-export default function component(m, init, Vnodes) {
+export default function component(init) {
 	return (attrs) => (_, context) => {
 		let locked = false
 		let view, currentAttrs
@@ -16,7 +13,7 @@ export default function component(m, init, Vnodes) {
 			try {
 				const result = view(prev, next)
 				if (result != null) {
-					context.renderSync(wrapRedraw(Vnodes.normalize(result)))
+					context.renderSync(wrapRedraw(result))
 				}
 			} finally {
 				locked = false
@@ -32,13 +29,13 @@ export default function component(m, init, Vnodes) {
 		}
 
 		function bindProperties(attrs, isComponent) {
-			return Object.fromEntries(
-				Object.entries(attrs).map(([key, value]) => {
-					if (!key.startsWith("on")) return [key, value]
-					if (typeof value !== "function") {
-						if (isComponent || !isObject(value)) return [key, value]
-					}
-					return [key, function (ev) {
+			const bound = {}
+			for (const [key, value] of Object.entries(attrs)) {
+				bound[key] = key.startsWith("on") && value != null && (
+					typeof value === "function" ||
+					!isComponent && typeof value === "object"
+				)
+					? function (ev) {
 						let result = false
 						if (typeof value === "function") {
 							result = value.apply(this, arguments)
@@ -48,33 +45,23 @@ export default function component(m, init, Vnodes) {
 						}
 						if (result !== false) redraw()
 						return result
-					}]
-				})
-			)
+					}
+					: value
+			}
+			return bound
 		}
 
 		function wrapRedraw(child) {
-			const tag = Vnodes.tag(child)
-			switch (tag) {
-				case ":text": case ":trust": case ":control": return child
-				case ":keyed": case ":fragment": {
-					const {children, ...attrs} = Vnodes.attrs(child)
-					return m(tag, {
-						...attrs,
-						children: children.map(wrapRedraw)
-					})
-				}
-				default:
-					if (typeof tag === "function") {
-						return m(tag, bindProperties(Vnodes.attrs(child), true))
-					} else {
-						const {children, ...attrs} = Vnodes.attrs(child)
-						return m(tag, {
-							...bindProperties(attrs, false),
-							children: children.map(wrapRedraw)
-						})
-					}
-			}
+			if (child == null || typeof child !== "object") return child
+			if (Array.isArray(child)) return child.map(wrapRedraw)
+			if (child.attrs == null || child.tag === "#html") return child
+			const {children = [], ...attrs} = child.attrs || {}
+			return m(child.tag, {
+				...child.tag === "#keyed" && child.tag === "#fragment"
+					? attrs
+					: bindProperties(attrs, typeof child.tag === "function"),
+				children: children.map(wrapRedraw)
+			})
 		}
 
 		const innerContext = {

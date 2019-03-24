@@ -126,12 +126,6 @@ export function onDone(cell, func) {
 	}
 }
 
-export function ref(cell, func = (x) => x) {
-	const ref = {current: undefined}
-	cell((value) => { ref.current = func(value) })
-	return ref
-}
-
 export function shallowEqual(a, b, compare = sameValueZero) {
 	if (Array.isArray(a) !== Array.isArray(b)) return false
 	if (Array.isArray(a)) {

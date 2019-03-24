@@ -45,28 +45,9 @@ There's a few reasons:
 
 Also, there's a handful of helpers [here](https://github.com/isiahmeadows/mithril.js/tree/v3-redesign/helpers) based on [some of these hooks](https://usehooks.com/), in case you want to know what it could look like in practice. Some of those use [some built-in utilities](mvp-utils.md#cell-utilities).
 
-## Vnode inspection utilities
-
-This is exposed in each component via a `Vnodes` object parameter.
-
-- `Vnodes.tag(vnode)` - Get the resolved tag name or component reference.
-- `Vnodes.attrs(vnode)` - Get the resolved attributes as an object, including `is` for customized built-in elements, `key` for the key, `ref` for the ref, and `children` for the resolved children. This does *not* return the original instance, but always a clone of it, and it never returns an empty object. It does *not* clone the children, so be aware of that.
-    - This is mostly what components receive through the `attrs` cell.
-    - Consider this the inverse of what's done to normalize attributes in `m("tag", attrs)`.
-- `Vnodes.attr(vnode, key)` - Equivalent to `Vnodes.attrs(vnode)[key]`, but avoids the overhead of creating a full attributes object. Some attributes, like `is` (for customized built-in elements), `key`, `ref`, and `children`, are normalized in the representation, so this skips that for keys that don't really matter much.
-- `Vnodes.attrKeys(vnode)` - Equivalent to `Object.keys(Vnodes.attrs(vnode))`, but avoids the overhead of creating a full attributes object. Some attributes, like `is`, `key`, `ref`, and `children`, require some unusual processing, so it would take a bit of extra processing to include them.
-- `Vnodes.create(mask, tag, attrs, children, key, ref)` - The vnode factory
-	- This function is intentionally *not* part of semver.
-- `Vnodes.normalize(child)` - Normalize a single child into a vnode
-- `Vnodes.normalizeChildren(children)` - Normalize an array of children into an array of vnodes
-
-### Why?
-
-Given that [vnode allocation and inspection now requires significant interpretation](vnode-structure.md), there needs to be some standard library functions for easily inspecting various properties of attributes.
-
 ## Components
 
-- Components: `component(m, attrs, Vnodes): view`
+- Components: `component(attrs): view`
 	- Component attributes are a cell containing each attribute.
 	- Component views are simply vnode children. Conveniently, this *does* include state cells.
 - Components simply map attributes to a view. Mithril only cares about them in that it can more intelligently diff things.
@@ -108,25 +89,28 @@ I've used React Redux in a few boilerplates and seen several other React Redux p
 
 ### Hyperscript API
 
-The primary hyperscript API is still exposed as usual, just as an argument to components and to the initialization method of `Mithril.render`.
+The primary hyperscript API is still exposed as usual via `mithril/m` and `Mithril.m` in the core bundle.
 
 ### Vnode types
 
+- Hole: `null`/`undefined`/`true`/`false`
 - Element: `m("div", ...)`
-	- `xmlns` sets the raw namespace to construct this with. For the DOM renderer, this by default just follows HTML's rules regarding namespace inference.
+	- `xmlns` sets the raw namespace to construct this with. For the DOM renderer, this by default just follows HTML's rules regarding namespace inference. Note that this sets the implicit namespace to use for child nodes, too.
 	- DOM attributes other than event handlers *may* be set to cells rather than raw values. This enables updates without actually performing a full diff, which is significantly faster. (We'll trash benchmarks that way, but it also just makes more sense in this model.)
 	- This follows mostly the same hyperscript API as usual.
-- Fragment: `m(":fragment", ...)`, `[...]`
-- Keyed: `m(":keyed", ...)`
-- Text: `m(":text", ...)`, `"..."`
-- Trust: `m(":html", ...)`
-- Control: `m(":control", {body: controlBody})`, `controlBody`
+- Fragment: `m("#fragment", ...)`, `[...]`
+- Keyed: `m("#keyed", ...)`
+- Text: `"..."`
+- Trust: `m("#html", ...)`
+- Control: `controlBody`
 - Component: `m(Component, ...)`
 
-When JSX users need to reference these names, they should just alias them locally, like `const Fragment = ":fragment"`. But in addition, they should set the following Babel JSX plugin options:
+If you're a JSX user needing to reference these names, you should just alias them locally, like `const Fragment = ":fragment"`. But in addition, you should set the following Babel JSX plugin options when using `@babel/preset-react`:
 
-- `pragma` - `m`
-- `pragmaFrag` - `":fragment"`
+- `pragma: "m"`
+- `pragmaFrag: "':fragment'"`
+
+Or if you're using the `@jsx` and `@jsxFrag` special comments, you should use `/* @jsx m @jsxFrag ":fragment" */`.
 
 ### Attributes
 
@@ -135,30 +119,28 @@ Attributes are the bread and butter of element manipulation. These are how thing
 There are three special vnode attributes:
 
 - `key` - This tracks vnode identity and serves two functions:
-	- In `Keyed` children: linking an instance to a particular identity. This is how keyed fragments work today. Note that in this case, they're treated as object properties.
+	- In `"#keyed"` children: linking an instance to a particular identity. This is how keyed fragments work today. Note that in this case, they're treated as object properties.
 	- In other cases: linking an instance to a particular state. This is how single-item keyed fragments work, and it's diffed as part of the vnode's logical type.
 - `ref` - This allows accessing the underlying DOM instance or provided component ref of a particular component or vnode.
 - `children` - This is the attribute's list of children.
+	- Children are always normalized to an array, even if just an empty array and even if it's for a component vnode. Note that the selector and attributes still take precedence over any children parameters.
 
 Attributes other than `key`, `children`, and event handlers (like `onclick` or a component's `onupdate`) *may* be set to cells rather than raw values. This simplifies a lot of attribute binding for components and DOM elements. Also, by side effect, it reduces a lot of our diff calculation overhead, but this isn't why I chose to allow this.
 
 - For components, this emits a new set of attributes for that component.
 - This gives us much of the benefits of a system like Glimmer's pre-compiled VM architecture without the tooling overhead.
 
+Note that the hyperscript API always normalizes attributes to an object, even if it's an empty one. The renderer expects and assumes this.
+
 ### Refs
 
 TODO: make this more sensible prose
 
-- Create a ref: `const ref = (current = undefined) => ({current})`
-	- Just simple sugar for when you want to create a ref. It's smaller than creating a full `{current: null}` object, so it's a little easier to use.
-	- This is exposed from `mithril/ref` as its sole default export.
-
-- Request element/ref access: `ref: {current}`
-	- For element and text vnodes, `ref` is set to the backing DOM node. It's internally ignored on all other vnode types.
-	- For trusted vnodes, `ref` is set to array containing the newly added DOM nodes.
-	- For all other vnodes, `ref` is ignored. Mithril itself doesn't have any sensible value to set it to.
-		- For component vnodes, `ref` is also not censored from the attributes. If there really *is* any interesting value for a ref, you should just set it directly from the attributes itself.
-		- For control vnodes and fragments, Mithril *could* set to the list of nodes, but that list could include nested fragments and components, so it's debatable what values those could/should be.
+- Request element/ref access: `ref: (elem) => ...`
+	- For element vnodes, `ref` is called with the backing DOM node. It's internally ignored on all other vnode types.
+	- For trusted vnodes, `ref` is called with an array containing the newly added DOM nodes.
+	- For fragments, `ref` is called with the first DOM node + the total number of DOM nodes in the fragment.
+	- For components, `ref:` is ignored and it's also not censored from the attributes. If there really *is* any interesting value for a ref, you should just call it directly from the attributes itself.
 
 TODO: make this more sensible prose
 
@@ -173,10 +155,38 @@ Notes:
 	3. It makes it impossible to access an uninitialized element, simplifying types and avoiding potential for bugs.
 	4. It complicates access for simpler cases.
 
-### Why inject the factory and attribute methods?
+### Selectors
 
-1. It keeps the data representation independent of the component.
-1. Components can just declare a peer dependency and support almost any version, even if it's a custom renderer that has practically nothing in common with standard Mithril.
+Selectors are mostly the same, but the tag name is now always required.
+
+- `m(".class")` &rarr; `m("div.class")`
+- `m("#id")` &rarr; `m("div#id")`
+- `m("[attr=value]")` &rarr; `m("div[attr=value]")`
+
+There's three reasons I mandate this:
+
+- It's one of the biggest stumbling blocks people have had with selectors. I see this as a frequent stumbling block that people write `m(".foo")` instead of `m("span.foo")` and wonder why things aren't working. The implicit default clearly is tripping people up, and the common case is only really saving 3 characters for something that you're more often changing than writing to begin with. (Hyperscript isn't exactly Emmet.)
+- It avoids the question of what to do with `m("")` - if you follow the rules logically, it's equivalent to `m("div")`, but intuitively, for many, it's equivalent to `null`.
+	- Relevant GitHub issue: [#723](https://github.com/MithrilJS/mithril.js/issues/723)
+	- Relevant Gitter discussion: [11 Dec 2015](https://gitter.im/mithriljs/mithril.js/archives/2015/12/11), [12 Dec 2015](https://gitter.im/mithriljs/mithril.js/archives/2015/12/12)
+- Special built-in components can now just start with a `#`, aligning with the DOM.
+	- `"#text"` - This is the actual `nodeName` of text nodes
+	- Other DOM nodes have their own special node names:
+		- CDATA sections: `"#cdata-section"`
+		- Comments: `"#comment"`
+		- Documents: `"#document"`
+		- Document fragments: `"#document-fragment"`
+
+## Why keep vnodes JSON-compatible?
+
+This is in large part due to disagreement with [React's decision to block it](https://overreacted.io/why-do-react-elements-have-typeof-property/) somewhat. They make security claims, but I'm not convinced they're serious in any remotely sane set-up:
+
+- They note that it's *very* difficult to block arbitrary JavaScript in general and that their defense could still be penetrated in many circumstances.
+- Some of the potential vulnerabilities they claim exist are almost certainly *not* exploitable in practice.
+	- The section on "[...] if your server has a hole that lets the user store an arbitrary JSON object while the client code expects a string, [...]" is itself fairly niche, and even in this case, you almost always do further processing before rendering the value.
+	- It notes pretty clearly it *doesn't* protect against things like `href: "javascript:doSomethingReallyEvil()"` or spreading untrusted attributes.
+	- Most of the hypotheticals are just about things frameworks already address, like unescaped strings and the like.
+- The obvious case of an object without a `.tag` is already rejected for reasons other than this, but it'd also catch 99% of the issues that'd really occur in practice, including some I've encountered personally.
 
 ## Control vnodes
 
@@ -193,7 +203,7 @@ In case you're curious, yes, this effectively works as an explicit one-way bindi
 
 ### Rendering
 
-Rendering takes one of two forms: `render((m, Vnodes) => vnode).then(...)` (invoking the first parameter). It schedules a subtree redraw for the current control vnode with a new tree.
+Rendering takes one of two forms: `render(vnode).then(...)` (invoking the first parameter). It schedules a subtree redraw for the current control vnode with a new tree.
 
 - This schedules a subtree redraw for the relevant control vnode.
 - `vnode` is the children to write.
@@ -237,25 +247,24 @@ In addition to the `render` callback, there's an additional `context` parameter 
 
 In short:
 
-- Control vnodes are `(render, context) => done?` functions, optionally within the `body` of a `m(Control, {body})`.
+- Control vnodes are `(render, context) => done?` functions.
 - That `render` is a `render(view)`, which explicitly renders as necessary and returns a promise resolved once it's committed.
 - `done` is invoked before removing and/or replacing the control vnode.
 - `context` is an object with some helpful contextual methods, to enable and augment more advanced use cases:
 	- `context.renderType()` - Return a descriptive string of the current rendering environment.
 	- `context.renderSync(view)` - Like `render(view)`, but synchronous. Errors are thrown synchronously, and it just returns `undefined`.
-	- `context.schedule(callback, cancel?)` - Schedule a callback for this context and resolve once it runs. Only one callback can be scheduled per context, so the previous one is cancelled first, invoking the previous `cancel` if applicable.
+	- `context.scheduleLayout(callback, cancel?)` - Schedule a callback for this context and resolve once it runs. Only one callback can be scheduled per context, so the previous one is cancelled first, invoking the previous `cancel` if applicable.
 
 The full type for control vnodes is this:
 
 ```ts
 // Depends on the types for `CellDone`
 type ControlBody = (render: ControlRender, context: ControlContext) => void | CellDone;
-type ControlRender = (children: ChildrenFactory) => Promise<void>;
-type ChildrenFactory = (m: Hyperscript) => Children;
+type ControlRender = (children: Children) => Promise<void>;
 
 interface ControlContext {
 	renderType(): string;
-	renderSync(children: ChildrenFactory): void;
+	renderSync(children: Children): void;
 	scheduleLayout(callback: () => any, cancel?: () => any): Promise<void>
 }
 ```
@@ -282,14 +291,14 @@ The solution to async removal without framework support is through an intent sys
 
 This is mostly the existing renderer API, but with some modifications. It's exposed via `mithril/dom`.
 
-- `render(root, (m, Vnodes) => vnode)` - Render a tree to a root using an optional previous internal representation. This is exposed in the core bundle via `Mithril.render`.
+- `render(root, vnode)` - Render a tree to a root using an optional previous internal representation. This is exposed in the core bundle via `Mithril.render`.
 	- If `root` is currently being redrawn, an error is thrown.
 	- This is synchronous - it only makes sense to do it this way.
 	- This assigns an expando `._ir` to the root if one doesn't exist already.
 
 - `render(root)` - Clear a root.
 
-- `hydrate(root, (m, Vnodes) => vnode)` - Renders a root vnode. This is exposed in the full bundle via `Mithril.hydrate`, but is *not* exposed in the core bundle. (It's tree-shaken out.)
+- `hydrate(root, vnode)` - Renders a root vnode. This is exposed in the full bundle via `Mithril.hydrate`, but is *not* exposed in the core bundle. (It's tree-shaken out.)
 	- This assigns an expando `._ir` to the root.
 
 Notes:
@@ -325,7 +334,7 @@ Note that this doesn't pierce through control vnodes and component vnodes to the
 
 Also, note that this must be from the same library version as `mithril/dom`.
 
-This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/component.mjs), with an optimized implementation [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/optimized/component.mjs).
+This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/component.mjs).
 
 ### Why?
 
@@ -362,11 +371,13 @@ It's worth noting that the optimized variant's vnode rewriting mechanism dives i
 
 ## Core bundle
 
-The core bundle, `mithril/core`, exposes the following:
+The core bundle, `mithril/core.js`, exposes the following under the `Mithril` namespace:
 
 - `render` from `mithril/dom` (but not `hydrate`)
 - `component` from `mithril/component`
 - `ref` from `mithril/ref`
+
+It also exposes `mithril/m` as `m` globally.
 
 ## General notes
 

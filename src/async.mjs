@@ -44,6 +44,7 @@ export default function Async(_, attrs) {
 			}
 
 			render(methods[state]())
+			if (methods.ref) methods.ref(destroy)
 		})
 
 		return () => {
