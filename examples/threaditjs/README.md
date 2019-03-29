@@ -5,9 +5,9 @@
 This is a set of [ThreaditJS](http://threaditjs.com/) implementations to show how the redesign compares to Mithril v2, traditional React, and React with their experimental Hooks API. It implements effectively identical functionality, but they come out with dramatically different source features and sizes, particularly the redesign compared to the rest.
 
 - [Mithril redesign](https://github.com/isiahmeadows/mithril.js/tree/v3-design/examples/threaditjs/mithril-redesign)
-- [Mithril v1/v2](https://github.com/isiahmeadows/mithril.js/tree/v3-redesign/examples/threaditjs/mithril-v2)
-- [React](https://github.com/isiahmeadows/mithril.js/tree/v3-redesign/examples/threaditjs/react)
-- [React + experimental Hooks API](https://github.com/isiahmeadows/mithril.js/tree/v3-redesign/examples/threaditjs/react-hooks)
+- [Mithril v1/v2](https://github.com/isiahmeadows/mithril.js/tree/v3-design/examples/threaditjs/mithril-v2)
+- [React](https://github.com/isiahmeadows/mithril.js/tree/v3-design/examples/threaditjs/react)
+- [React + experimental Hooks API](https://github.com/isiahmeadows/mithril.js/tree/v3-design/examples/threaditjs/react-hooks)
 
 ### Source format
 

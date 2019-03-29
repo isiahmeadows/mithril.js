@@ -68,7 +68,7 @@ There's a few reasons:
 - This is part 1 of our answer to React Hooks, just substantially lower in overhead. And hey, you don't actually *need* a library to use this.
 - Most streaming needs can directly translate to this.
 
-Also, there's a handful of helpers [here](https://github.com/isiahmeadows/mithril.js/tree/v3-redesign/helpers) based on [some of these hooks](https://usehooks.com/), in case you want to know what it could look like in practice. Some of those use [some built-in utilities](mvp-utils.md#cell-utilities).
+Also, there's a handful of helpers [here](https://github.com/isiahmeadows/mithril.js/tree/v3-design/helpers) based on [some of these hooks](https://usehooks.com/), in case you want to know what it could look like in practice. Some of those use [some built-in utilities](mvp-utils.md#cell-utilities).
 
 ### What about streams?
 
@@ -180,7 +180,7 @@ Notes:
 - Refs are somewhat different from React's:
 	- Refs are designed to be control mechanisms, not simply exposure mechanisms. They work more like a single-use token you can pass around and asynchronously query. Likewise, these are *not* saved in subsequent renders.
 	- [React cares about ref identity](https://reactjs.org/docs/refs-and-the-dom.html#caveats-with-callback-refs), but this complicates the model a lot, especially when it's designed only for exposure.
-	- You can see refs in action in [the TodoMVC example](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/examples/todomvc/view.mjs)
+	- You can see refs in action in [the TodoMVC example](https://github.com/isiahmeadows/mithril.js/blob/v3-design/examples/todomvc/view.mjs)
 - Technically, I could just provide `vnode.dom` instead of `ref`, but there's three main reasons why I'm not:
 	2. It's generally poor practice to try to mutate the DOM outside of event handlers (which provide it via `ev.target.value`) or a batched request. Forcing batching also keeps performance up and running.
 	3. It makes it impossible to access an uninitialized element, simplifying types and avoiding potential for bugs.
@@ -375,7 +375,7 @@ This is exposed under `mithril/component` with each exposed in the core bundle.
 
 Note that this doesn't pierce through control vnodes and component vnodes to their children - it simply rewrites the returned vnode tree internally.
 
-This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/component.mjs).
+This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-design/src/component.mjs).
 
 ### Why?
 

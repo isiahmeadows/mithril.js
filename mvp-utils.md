@@ -233,7 +233,7 @@ This is exposed under `mithril/cell` and in the full bundle via `Mithril.Cell`.
 	- An error is thrown if either parameter is *not* an object.
 	- This is particularly useful with `Cell.distinct` - you can just do `Cell.distinct(attrs, Cell.shallowEqual)` and have automatically diffed attributes for the most common case. This is about the only reason it's in the core `mithril/cell` module, and not completely out of core.
 
-This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/cell.mjs), with an optimized implementation [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/optimized/cell.mjs). This is actually *smaller* than streams, despite providing better, more powerful functionality.
+This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-design/src/cell.mjs), with an optimized implementation [here](https://github.com/isiahmeadows/mithril.js/blob/v3-design/src/optimized/cell.mjs). This is actually *smaller* than streams, despite providing better, more powerful functionality.
 
 Notes:
 
@@ -249,7 +249,7 @@ A few reasons:
 - This is what would be our answer to React Hooks, just substantially lower in overhead.
 - Most streaming utilities can directly translate to this.
 
-Also, there's a handful of helpers [here](https://github.com/isiahmeadows/mithril.js/tree/v3-redesign/helpers) based on [some of these hooks](https://usehooks.com/), in case you want to know what it could look like in practice.
+Also, there's a handful of helpers [here](https://github.com/isiahmeadows/mithril.js/tree/v3-design/helpers) based on [some of these hooks](https://usehooks.com/), in case you want to know what it could look like in practice.
 
 This utility is slightly smaller than Mithril's existing streams utility when minified and gzipped. Also, the names compress a bit better when bundled with other things, especially if you use Rollup, and it ends up comparable in source size *to* code using hooks exclusively, if not sometimes substantially smaller.
 
@@ -318,7 +318,7 @@ Notes:
 	2. Invoke the hook body and return its result
 - This intentionally doesn't provide support for `context.renderSync(view)`
 
-This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/cell.mjs), with an optimized implementation [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/optimized/cell.mjs). Incidentally, the optimized standalone version is only nominally larger than the unoptimized one - both are about 1.1KB. Contrast this with v1/v2 streams, which are just under 1.0KB (it rounds up to it).
+This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-design/src/cell.mjs), with an optimized implementation [here](https://github.com/isiahmeadows/mithril.js/blob/v3-design/src/optimized/cell.mjs). Incidentally, the optimized standalone version is only nominally larger than the unoptimized one - both are about 1.1KB. Contrast this with v1/v2 streams, which are just under 1.0KB (it rounds up to it).
 
 ### Why diverge from React?
 
