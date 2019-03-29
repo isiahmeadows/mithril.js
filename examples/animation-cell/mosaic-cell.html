@@ -23,6 +23,8 @@
 		<div id="root"></div>
 		<script src="../../mithril/full.js"></script>
 		<script>
+const {m, Cell} = Mithril
+
 const range = (start, end) =>
 	Array.from({length: end - start}, (_, i) => i + start)
 
@@ -30,8 +32,8 @@ const backgroundPosition = (i, step) =>
 	// X% Y%
 	`${i % step * (step + 1)}% ${Math.floor(i / step) * (step + 1)}%`
 
-const view = (state, cells) => m(".container",
-	cells == null ? undefined : cells.map((i) => m(".slice", {
+const view = (state, cells) => m("div.container",
+	cells == null ? undefined : cells.map((i) => m("div.slice", {
 		class: state === "hide" ? "exit" : undefined,
 		style: {backgroundPosition: backgroundPosition(i, 10)},
 	}))

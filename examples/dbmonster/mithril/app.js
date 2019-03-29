@@ -1,4 +1,6 @@
+(function () {
 "use strict"
+const {m, Cell} = Mithril
 
 perfMonitor.startFPSMonitor()
 perfMonitor.startMemMonitor()
@@ -40,3 +42,4 @@ Mithril.render(document.getElementById("app"), m("div", [
 		))
 	])
 ]))
+})()

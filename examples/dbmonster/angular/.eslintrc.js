@@ -1,5 +1,5 @@
 module.exports = {
 	"globals": {
-		"Mithril": false,
+		"ng": false,
 	}
 };

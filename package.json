@@ -1,7 +1,7 @@
 {
   "name": "mithril",
   "private": true,
-  "version": "0-redesign",
+  "version": "0.0.0-redesign",
   "description": "A framework for building brilliant applications",
   "contributors": [
     "Leo Horie",
@@ -15,6 +15,7 @@
   "devDependencies": {
     "eslint": "^5.13.0",
     "eslint-plugin-react": "^7.12.4",
+    "eslint-plugin-react-hooks": "^1.6.0",
     "lint-staged": "^8.1.3",
     "terser": "^3.16.1"
   },

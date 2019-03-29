@@ -9,6 +9,8 @@
 		<div id="root"></div>
 		<script src="../../mithril/core.js"></script>
 		<script>
+const {m} = Mithril
+
 //http://codepen.io/RobinVr/pen/kEoqc
 Mithril.render(document.getElementById("root"), m(".top",
 	m(".middle",
@@ -137,689 +139,588 @@ Mithril.render(document.getElementById("root"), m(".top",
 					m("path[d=M78.9616179,403.498844 L82.9181326,435.194283 L90.7064894,407.907305 L78.9616179,403.498844 Z]#Path-117[sketch:type=MSShapeGroup]")
 				])
 			),
-			m("style", [
-				"html {" +
-				"    background-color: #17D3D0" +
-				"}" +
-				".top {" +
-				"    height: 100%;" +
-				"    background-color: #17D3D0;" +
-				"    margin: 2% auto" +
-				"}" +
-				".middle {" +
-				"    margin: 0 auto;" +
-				"    width: 100%;" +
-				"    max-width: 500px;" +
-				"    -webkit-transform: rotate(180deg);" +
-				"    -ms-transform: rotate(180deg);" +
-				"    transform: rotate(180deg)" +
-				"}" +
-				".middle svg {" +
-				"    transform-origin: 50% 50%;" +
-				"    -webkit-animation: fader 1s 1 ease-in forwards, filler 1s 1 ease-in forwards;" +
-				"    animation: fader 1s 1 ease-in forwards, filler 1s 1 ease-in forwards;" +
-				"    -webkit-animation-fill-mode: forwards;" +
-				"    animation-fill-mode: forwards" +
-				"}" +
-				"@-webkit-keyframes rotater {" +
-				"    0% {" +
-				"        -webkit-transform: rotate(0deg);" +
-				"        transform: rotate(0deg)" +
-				"    }" +
-				"    100% {" +
-				"        -webkit-transform: rotate(90deg);" +
-				"        transform: rotate(90deg)" +
-				"    }" +
-				"}" +
-				"@keyframes rotater {" +
-				"    0% {" +
-				"        -webkit-transform: rotate(0deg);" +
-				"        transform: rotate(0deg)" +
-				"    }" +
-				"    100% {" +
-				"        -webkit-transform: rotate(90deg);" +
-				"        transform: rotate(90deg)" +
-				"        /* Chrome, Safari, Opera */" +
-				"    }" +
-				"}" +
-				"@-webkit-keyframes fader {" +
-				"    0% {" +
-				"        opacity: 0" +
-				"    }" +
-				"    100% {" +
-				"        opacity: 100" +
-				"    }" +
-				"}" +
-				"@keyframes fader {" +
-				"    0% {" +
-				"        opacity: 0" +
-				"    }" +
-				"    100% {" +
-				"        opacity: 100" +
-				"    }" +
-				"}" +
-				"@-webkit-keyframes filler {" +
-				"    0% {" +
-				"        fill: 0" +
-				"    }" +
-				"    100% {" +
-				"        fill: 100" +
-				"    }" +
-				"}" +
-				"@keyframes filler {" +
-				"    0% {" +
-				"        fill: 0" +
-				"    }" +
-				"    100% {" +
-				"        fill: 100" +
-				"    }" +
-				"}" +
-				"#Path-1," +
-				"#Path-2," +
-				"#Path-3," +
-				"#Path-4," +
-				"#Path-5," +
-				"#Path-6," +
-				"#Path-7," +
-				"#Path-8," +
-				"#Path-9," +
-				"#Path-10," +
-				"#Path-11," +
-				"#Path-12," +
-				"#Path-13," +
-				"#Path-14," +
-				"#Path-15," +
-				"#Path-16," +
-				"#Path-17," +
-				"#Path-18," +
-				"#Path-19," +
-				"#Path-20," +
-				"#Path-21," +
-				"#Path-22," +
-				"#Path-23," +
-				"#Path-24," +
-				"#Path-25," +
-				"#Path-26," +
-				"#Path-27," +
-				"#Path-28," +
-				"#Path-29," +
-				"#Path-30," +
-				"#Path-31," +
-				"#Path-32," +
-				"#Path-33," +
-				"#Path-34," +
-				"#Path-35," +
-				"#Path-36," +
-				"#Path-37," +
-				"#Path-38," +
-				"#Path-39," +
-				"#Path-40," +
-				"#Path-41," +
-				"#Path-42," +
-				"#Path-43," +
-				"#Path-44," +
-				"#Path-45," +
-				"#Path-46," +
-				"#Path-47," +
-				"#Path-48," +
-				"#Path-49," +
-				"#Path-50," +
-				"#Path-51," +
-				"#Path-52," +
-				"#Path-53," +
-				"#Path-54," +
-				"#Path-55," +
-				"#Path-56," +
-				"#Path-57," +
-				"#Path-58," +
-				"#Path-59," +
-				"#Path-60," +
-				"#Path-61," +
-				"#Path-62," +
-				"#Path-63," +
-				"#Path-64," +
-				"#Path-65," +
-				"#Path-66," +
-				"#Path-67," +
-				"#Path-68," +
-				"#Path-69," +
-				"#Path-70," +
-				"#Path-71," +
-				"#Path-72," +
-				"#Path-73," +
-				"#Path-74," +
-				"#Path-75," +
-				"#Path-76," +
-				"#Path-77," +
-				"#Path-78," +
-				"#Path-79," +
-				"#Path-80," +
-				"#Path-81," +
-				"#Path-82," +
-				"#Path-83," +
-				"#Path-84," +
-				"#Path-85," +
-				"#Path-86," +
-				"#Path-87," +
-				"#Path-88," +
-				"#Path-89," +
-				"#Path-90," +
-				"#Path-91," +
-				"#Path-92," +
-				"#Path-93," +
-				"#Path-94," +
-				"#Path-95," +
-				"#Path-96," +
-				"#Path-97," +
-				"#Path-98," +
-				"#Path-99," +
-				"#Path-100," +
-				"#Path-101," +
-				"#Path-102," +
-				"#Path-103," +
-				"#Path-104," +
-				"#Path-105," +
-				"#Path-106," +
-				"#Path-107," +
-				"#Path-108," +
-				"#Path-109," +
-				"#Path-110," +
-				"#Path-111," +
-				"#Path-112," +
-				"#Path-113," +
-				"#Path-114," +
-				"#Path-115," +
-				"#Path-116," +
-				"#Path-117 {" +
-				"    vector-effect: non-scaling-stroke;" +
-				"    stroke-dasharray: 1000;" +
-				"    stroke-dashoffset: 1000" +
-				"}" +
-				"#Path-1 {" +
-				"    -webkit-animation: large-shape 10s 100ms ease-out 1 forwards;" +
-				"    animation: large-shape 10s 100ms ease-out 1 forwards" +
-				"}" +
-				"#Path-2 {" +
-				"    -webkit-animation: large-shape 12s 120ms ease-out 1 forwards;" +
-				"    animation: large-shape 12s 120ms ease-out 1 forwards" +
-				"}" +
-				"#Path-6 {" +
-				"    -webkit-animation: large-shape 20s 200ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 200ms ease-out 1 forwards" +
-				"}" +
-				"#Path-3 {" +
-				"    -webkit-animation: large-shape 12s 140ms ease-out 1 forwards;" +
-				"    animation: large-shape 12s 140ms ease-out 1 forwards" +
-				"}" +
-				"#Path-4 {" +
-				"    -webkit-animation: large-shape 14s 160ms ease-out 1 forwards;" +
-				"    animation: large-shape 14s 160ms ease-out 1 forwards" +
-				"}" +
-				"#Path-5 {" +
-				"    -webkit-animation: large-shape 12s 180ms ease-out 1 forwards;" +
-				"    animation: large-shape 12s 180ms ease-out 1 forwards" +
-				"}" +
-				"#Path-7 {" +
-				"    -webkit-animation: large-shape 20s 220ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 220ms ease-out 1 forwards" +
-				"}" +
-				"#Path-8 {" +
-				"    -webkit-animation: large-shape 20s 240ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 240ms ease-out 1 forwards" +
-				"}" +
-				"#Path-9 {" +
-				"    -webkit-animation: large-shape 20s 260ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 260ms ease-out 1 forwards" +
-				"}" +
-				"#Path-10 {" +
-				"    -webkit-animation: large-shape 20s 280ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 280ms ease-out 1 forwards" +
-				"}" +
-				"#Path-11 {" +
-				"    -webkit-animation: large-shape 20s 300ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 300ms ease-out 1 forwards" +
-				"}" +
-				"#Path-12 {" +
-				"    -webkit-animation: large-shape 20s 320ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 320ms ease-out 1 forwards" +
-				"}" +
-				"#Path-13 {" +
-				"    -webkit-animation: large-shape 20s 320ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 320ms ease-out 1 forwards" +
-				"}" +
-				"#Path-14 {" +
-				"    -webkit-animation: large-shape 20s 340ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 340ms ease-out 1 forwards" +
-				"}" +
-				"#Path-15 {" +
-				"    -webkit-animation: large-shape 20s 360ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 360ms ease-out 1 forwards" +
-				"}" +
-				"#Path-16 {" +
-				"    -webkit-animation: large-shape 20s 380ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 380ms ease-out 1 forwards" +
-				"}" +
-				"#Path-17 {" +
-				"    -webkit-animation: large-shape 20s 400ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 400ms ease-out 1 forwards" +
-				"}" +
-				"#Path-18 {" +
-				"    -webkit-animation: large-shape 20s 420ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 420ms ease-out 1 forwards" +
-				"}" +
-				"#Path-19 {" +
-				"    -webkit-animation: large-shape 20s 440ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 440ms ease-out 1 forwards" +
-				"}" +
-				"#Path-20 {" +
-				"    -webkit-animation: large-shape 20s 460ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 460ms ease-out 1 forwards" +
-				"}" +
-				"#Path-21 {" +
-				"    -webkit-animation: large-shape 12s 480ms ease-out 1 forwards;" +
-				"    animation: large-shape 12s 480ms ease-out 1 forwards" +
-				"}" +
-				"#Path-22 {" +
-				"    -webkit-animation: large-shape 20s 500ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 500ms ease-out 1 forwards" +
-				"}" +
-				"#Path-23 {" +
-				"    -webkit-animation: large-shape 20s 520ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 520ms ease-out 1 forwards" +
-				"}" +
-				"#Path-24 {" +
-				"    -webkit-animation: large-shape 20s 540ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 540ms ease-out 1 forwards" +
-				"}" +
-				"#Path-25 {" +
-				"    -webkit-animation: large-shape 20s 560ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 560ms ease-out 1 forwards" +
-				"}" +
-				"#Path-26 {" +
-				"    -webkit-animation: large-shape 20s 580ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 580ms ease-out 1 forwards" +
-				"}" +
-				"#Path-27 {" +
-				"    -webkit-animation: large-shape 20s 600ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 600ms ease-out 1 forwards" +
-				"}" +
-				"#Path-28 {" +
-				"    -webkit-animation: large-shape 20s 620ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 620ms ease-out 1 forwards" +
-				"}" +
-				"#Path-29 {" +
-				"    -webkit-animation: large-shape 20s 640ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 640ms ease-out 1 forwards" +
-				"}" +
-				"#Path-30 {" +
-				"    -webkit-animation: large-shape 20s 660ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 660ms ease-out 1 forwards" +
-				"}" +
-				"#Path-31 {" +
-				"    -webkit-animation: large-shape 20s 680ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 680ms ease-out 1 forwards" +
-				"}" +
-				"#Path-32 {" +
-				"    -webkit-animation: large-shape 20s 700ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 700ms ease-out 1 forwards" +
-				"}" +
-				"#Path-33 {" +
-				"    -webkit-animation: large-shape 20s 720ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 720ms ease-out 1 forwards" +
-				"}" +
-				"#Path-34 {" +
-				"    -webkit-animation: large-shape 20s 740ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 740ms ease-out 1 forwards" +
-				"}" +
-				"#Path-35 {" +
-				"    -webkit-animation: large-shape 20s 780ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 780ms ease-out 1 forwards" +
-				"}" +
-				"#Path-36 {" +
-				"    -webkit-animation: large-shape 20s 800ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 800ms ease-out 1 forwards" +
-				"}" +
-				"#Path-37 {" +
-				"    -webkit-animation: large-shape 20s 820ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 820ms ease-out 1 forwards" +
-				"}" +
-				"#Path-38 {" +
-				"    -webkit-animation: large-shape 20s 840ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 840ms ease-out 1 forwards" +
-				"}" +
-				"#Path-39 {" +
-				"    -webkit-animation: large-shape 20s 860ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 860ms ease-out 1 forwards" +
-				"}" +
-				"#Path-40 {" +
-				"    -webkit-animation: large-shape 20s 880ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 880ms ease-out 1 forwards" +
-				"}" +
-				"#Path-41 {" +
-				"    -webkit-animation: large-shape 20s 860ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 860ms ease-out 1 forwards" +
-				"}" +
-				"#Path-42 {" +
-				"    -webkit-animation: large-shape 20s 880ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 880ms ease-out 1 forwards" +
-				"}" +
-				"#Path-43 {" +
-				"    -webkit-animation: large-shape 20s 900ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 900ms ease-out 1 forwards" +
-				"}" +
-				"#Path-44 {" +
-				"    -webkit-animation: large-shape 20s 920ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 920ms ease-out 1 forwards" +
-				"}" +
-				"#Path-45 {" +
-				"    -webkit-animation: large-shape 20s 940ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 940ms ease-out 1 forwards" +
-				"}" +
-				"#Path-46 {" +
-				"    -webkit-animation: large-shape 20s 960ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 960ms ease-out 1 forwards" +
-				"}" +
-				"#Path-47 {" +
-				"    -webkit-animation: large-shape 20s 980ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 980ms ease-out 1 forwards" +
-				"}" +
-				"#Path-48 {" +
-				"    -webkit-animation: large-shape 20s 1000ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1000ms ease-out 1 forwards" +
-				"}" +
-				"#Path-53 {" +
-				"    -webkit-animation: large-shape 20s 1020ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1020ms ease-out 1 forwards" +
-				"}" +
-				"#Path-49 {" +
-				"    -webkit-animation: large-shape 20s 1040ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1040ms ease-out 1 forwards" +
-				"}" +
-				"#Path-51 {" +
-				"    -webkit-animation: large-shape 17s 1080ms ease-out 1 forwards;" +
-				"    animation: large-shape 17s 1080ms ease-out 1 forwards" +
-				"}" +
-				"#Path-116 {" +
-				"    -webkit-animation: large-shape 20s 1080ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1080ms ease-out 1 forwards" +
-				"}" +
-				"#Path-52 {" +
-				"    -webkit-animation: large-shape 20s 1100ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1100ms ease-out 1 forwards" +
-				"}" +
-				"#Path-52 {" +
-				"    -webkit-animation: large-shape 20s 1120ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1120ms ease-out 1 forwards" +
-				"}" +
-				"#Path-50 {" +
-				"    -webkit-animation: large-shape 20s 1140ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1140ms ease-out 1 forwards" +
-				"}" +
-				"#Path-54 {" +
-				"    -webkit-animation: large-shape 20s 1160ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1160ms ease-out 1 forwards" +
-				"}" +
-				"#Path-55 {" +
-				"    -webkit-animation: large-shape 20s 1180ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1180ms ease-out 1 forwards" +
-				"}" +
-				"#Path-56 {" +
-				"    -webkit-animation: large-shape 20s 1200ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1200ms ease-out 1 forwards" +
-				"}" +
-				"#Path-57 {" +
-				"    -webkit-animation: large-shape 20s 1220ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1220ms ease-out 1 forwards" +
-				"}" +
-				"#Path-58 {" +
-				"    -webkit-animation: large-shape 20s 1240ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1240ms ease-out 1 forwards" +
-				"}" +
-				"#Path-59 {" +
-				"    -webkit-animation: large-shape 20s 1260ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1260ms ease-out 1 forwards" +
-				"}" +
-				"#Path-60 {" +
-				"    -webkit-animation: large-shape 20s 1280ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1280ms ease-out 1 forwards" +
-				"}" +
-				"#Path-61 {" +
-				"    -webkit-animation: large-shape 20s 1280ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1280ms ease-out 1 forwards" +
-				"}" +
-				"#Path-112 {" +
-				"    -webkit-animation: large-shape 20s 1320ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1320ms ease-out 1 forwards" +
-				"}" +
-				"#Path-113 {" +
-				"    -webkit-animation: large-shape 20s 1340ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1340ms ease-out 1 forwards" +
-				"}" +
-				"#Path-109 {" +
-				"    -webkit-animation: large-shape 20s 1360ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1360ms ease-out 1 forwards" +
-				"}" +
-				"#Path-110 {" +
-				"    -webkit-animation: large-shape 20s 1380ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1380ms ease-out 1 forwards" +
-				"}" +
-				"#Path-111 {" +
-				"    -webkit-animation: large-shape 20s 1400ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1400ms ease-out 1 forwards" +
-				"}" +
-				"#Path-102 {" +
-				"    -webkit-animation: large-shape 20s 1420ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1420ms ease-out 1 forwards" +
-				"}" +
-				"#Path-103 {" +
-				"    -webkit-animation: large-shape 20s 1440ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1440ms ease-out 1 forwards" +
-				"}" +
-				"#Path-104 {" +
-				"    -webkit-animation: large-shape 20s 1460ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1460ms ease-out 1 forwards" +
-				"}" +
-				"#Path-105 {" +
-				"    -webkit-animation: large-shape 20s 1480ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1480ms ease-out 1 forwards" +
-				"}" +
-				"#Path-106 {" +
-				"    -webkit-animation: large-shape 20s 1500ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1500ms ease-out 1 forwards" +
-				"}" +
-				"#Path-107 {" +
-				"    -webkit-animation: large-shape 20s 1520ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1520ms ease-out 1 forwards" +
-				"}" +
-				"#Path-108 {" +
-				"    -webkit-animation: large-shape 20s 1540ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1540ms ease-out 1 forwards" +
-				"}" +
-				"#Path-100 {" +
-				"    -webkit-animation: large-shape 20s 1560ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1560ms ease-out 1 forwards" +
-				"}" +
-				"#Path-101 {" +
-				"    -webkit-animation: large-shape 20s 1580ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1580ms ease-out 1 forwards" +
-				"}" +
-				"#Path-97 {" +
-				"    -webkit-animation: large-shape 20s 1600ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1600ms ease-out 1 forwards" +
-				"}" +
-				"#Path-98 {" +
-				"    -webkit-animation: large-shape 20s 1620ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1620ms ease-out 1 forwards" +
-				"}" +
-				"#Path-99 {" +
-				"    -webkit-animation: large-shape 20s 1640ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1640ms ease-out 1 forwards" +
-				"}" +
-				"#Path-93 {" +
-				"    -webkit-animation: large-shape 20s 1680ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1680ms ease-out 1 forwards" +
-				"}" +
-				"#Path-94 {" +
-				"    -webkit-animation: large-shape 20s 1700ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1700ms ease-out 1 forwards" +
-				"}" +
-				"#Path-95 {" +
-				"    -webkit-animation: large-shape 20s 1720ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1720ms ease-out 1 forwards" +
-				"}" +
-				"#Path-96 {" +
-				"    -webkit-animation: large-shape 20s 1740ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1740ms ease-out 1 forwards" +
-				"}" +
-				"#Path-92 {" +
-				"    -webkit-animation: large-shape 20s 1760ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1760ms ease-out 1 forwards" +
-				"}" +
-				"#Path-88 {" +
-				"    -webkit-animation: large-shape 10s 1780ms ease-out 1 forwards;" +
-				"    animation: large-shape 10s 1780ms ease-out 1 forwards" +
-				"}" +
-				"#Path-91 {" +
-				"    -webkit-animation: large-shape 20s 1800ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1800ms ease-out 1 forwards" +
-				"}" +
-				"#Path-87 {" +
-				"    -webkit-animation: large-shape 20s 1820ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1820ms ease-out 1 forwards" +
-				"}" +
-				"#Path-90 {" +
-				"    -webkit-animation: large-shape 20s 1840ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1840ms ease-out 1 forwards" +
-				"}" +
-				"#Path-89 {" +
-				"    -webkit-animation: large-shape 20s 1860ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1860ms ease-out 1 forwards" +
-				"}" +
-				"#Path-86 {" +
-				"    -webkit-animation: large-shape 20s 1880ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1880ms ease-out 1 forwards" +
-				"}" +
-				"#Path-85 {" +
-				"    -webkit-animation: large-shape 20s 1900ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1900ms ease-out 1 forwards" +
-				"}" +
-				"#Path-84 {" +
-				"    -webkit-animation: large-shape 20s 1920ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1920ms ease-out 1 forwards" +
-				"}" +
-				"#Path-82 {" +
-				"    -webkit-animation: large-shape 20s 1940ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1940ms ease-out 1 forwards" +
-				"}" +
-				"#Path-80 {" +
-				"    -webkit-animation: large-shape 20s 1960ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1960ms ease-out 1 forwards" +
-				"}" +
-				"#Path-81 {" +
-				"    -webkit-animation: large-shape 20s 1980ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 1980ms ease-out 1 forwards" +
-				"}" +
-				"#Path-79 {" +
-				"    -webkit-animation: large-shape 20s 2000ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 2000ms ease-out 1 forwards" +
-				"}" +
-				"#Path-77 {" +
-				"    -webkit-animation: large-shape 20s 2020ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 2020ms ease-out 1 forwards" +
-				"}" +
-				"#Path-78 {" +
-				"    -webkit-animation: large-shape 20s 2040ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 2040ms ease-out 1 forwards" +
-				"}" +
-				"#Path-71 {" +
-				"    -webkit-animation: large-shape 20s 2060ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 2060ms ease-out 1 forwards" +
-				"}" +
-				"#Path-72 {" +
-				"    -webkit-animation: large-shape 20s 2080ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 2080ms ease-out 1 forwards" +
-				"}" +
-				"#Path-73 {" +
-				"    -webkit-animation: large-shape 20s 2100ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 2100ms ease-out 1 forwards" +
-				"}" +
-				"#Path-74 {" +
-				"    -webkit-animation: large-shape 20s 2120ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 2120ms ease-out 1 forwards" +
-				"}" +
-				"#Path-75 {" +
-				"    -webkit-animation: large-shape 20s 2120ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 2120ms ease-out 1 forwards" +
-				"}" +
-				"#Path-76 {" +
-				"    -webkit-animation: large-shape 20s 2140ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 2140ms ease-out 1 forwards" +
-				"}" +
-				"#Path-83 {" +
-				"    -webkit-animation: large-shape 20s 2160ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 2160ms ease-out 1 forwards" +
-				"}" +
-				"#Path-62 {" +
-				"    -webkit-animation: large-shape 20s 2180ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 2180ms ease-out 1 forwards" +
-				"}" +
-				"#Path-63 {" +
-				"    -webkit-animation: large-shape 20s 2200ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 2200ms ease-out 1 forwards" +
-				"}" +
-				"#Path-69 {" +
-				"    -webkit-animation: large-shape 20s 2220ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 2220ms ease-out 1 forwards" +
-				"}" +
-				"#Path-70 {" +
-				"    -webkit-animation: large-shape 20s 2220ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 2220ms ease-out 1 forwards" +
-				"}" +
-				"#Path-64 {" +
-				"    -webkit-animation: large-shape 20s 2240ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 2240ms ease-out 1 forwards" +
-				"}" +
-				"#Path-65 {" +
-				"    -webkit-animation: large-shape 20s 2260ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 2260ms ease-out 1 forwards" +
-				"}" +
-				"#Path-66 {" +
-				"    -webkit-animation: large-shape 20s 2280ms ease-out 1 forwards;" +
-				"    animation: large-shape 20s 2280ms ease-out 1 forwards" +
-				"}" +
-				"#Path-67 {" +
-				"    -webkit-animation: large-shape 22s 2300ms ease-out 1 forwards;" +
-				"    animation: large-shape 22s 2300ms ease-out 1 forwards" +
-				"}" +
-				"#Path-68 {" +
-				"    -webkit-animation: large-shape 18s 2320ms ease-out 1 forwards;" +
-				"    animation: large-shape 18s 2320ms ease-out 1 forwards" +
-				"}" +
-				"#Path-114 {" +
-				"    -webkit-animation: large-shape 24s 2320ms ease-out 1 forwards;" +
-				"    animation: large-shape 24s 2320ms ease-out 1 forwards" +
-				"}" +
-				"#Path-117 {" +
-				"    -webkit-animation: large-shape 25s 2320ms ease-out 1 forwards;" +
-				"    animation: large-shape 25s 2320ms ease-out 1 forwards" +
-				"}" +
-				"@-webkit-keyframes large-shape {" +
-				"    0% {" +
-				"        stroke-dashoffset: 1000" +
-				"    }" +
-				"    100% {" +
-				"        stroke-dashoffset: 0" +
-				"    }" +
-				"}" +
-				"@keyframes large-shape {" +
-				"    0% {" +
-				"        stroke-dashoffset: 1000" +
-				"    }" +
-				"    100% {" +
-				"        stroke-dashoffset: 0" +
-				"    }" +
-				"}"
-			])
+			m("style", `
+html {
+	background-color: #17D3D0;
+}
+.top {
+	height: 100%;
+	background-color: #17D3D0;
+	margin: 2% auto;
+}
+.middle {
+	margin: 0 auto;
+	width: 100%;
+	max-width: 500px;
+	-webkit-transform: rotate(180deg);
+	-ms-transform: rotate(180deg);
+	transform: rotate(180deg);
+}
+.middle svg {
+	transform-origin: 50% 50%;
+	-webkit-animation: fader 1s 1 ease-in forwards, filler 1s 1 ease-in forwards;
+	animation: fader 1s 1 ease-in forwards, filler 1s 1 ease-in forwards;
+	-webkit-animation-fill-mode: forwards;
+	animation-fill-mode: forwards;
+}
+@-webkit-keyframes rotater {
+	0% {
+		-webkit-transform: rotate(0deg);
+		transform: rotate(0deg);
+	}
+	100% {
+		-webkit-transform: rotate(90deg);
+		transform: rotate(90deg);
+	}
+}
+@keyframes rotater {
+	0% {
+		-webkit-transform: rotate(0deg);
+		transform: rotate(0deg);
+	}
+	100% {
+		-webkit-transform: rotate(90deg);
+		transform: rotate(90deg);
+		/* Chrome, Safari, Opera */
+	}
+}
+@-webkit-keyframes fader {
+	0% {
+		opacity: 0;
+	}
+	100% {
+		opacity: 100;
+	}
+}
+@keyframes fader {
+	0% {
+		opacity: 0;
+	}
+	100% {
+		opacity: 100;
+	}
+}
+@-webkit-keyframes filler {
+	0% {
+		fill: 0;
+	}
+	100% {
+		fill: 100;
+	}
+}
+@keyframes filler {
+	0% {
+		fill: 0;
+	}
+	100% {
+		fill: 100;
+	}
+}
+#Path-1, #Path-2, #Path-3, #Path-4, #Path-5,
+#Path-6, #Path-7, #Path-8, #Path-9, #Path-10,
+#Path-11, #Path-12, #Path-13, #Path-14, #Path-15,
+#Path-16, #Path-17, #Path-18, #Path-19, #Path-20,
+#Path-21, #Path-22, #Path-23, #Path-24, #Path-25,
+#Path-26, #Path-27, #Path-28, #Path-29, #Path-30,
+#Path-31, #Path-32, #Path-33, #Path-34, #Path-35,
+#Path-36, #Path-37, #Path-38, #Path-39, #Path-40,
+#Path-41, #Path-42, #Path-43, #Path-44, #Path-45,
+#Path-46, #Path-47, #Path-48, #Path-49, #Path-50,
+#Path-51, #Path-52, #Path-53, #Path-54, #Path-55,
+#Path-56, #Path-57, #Path-58, #Path-59, #Path-60,
+#Path-61, #Path-62, #Path-63, #Path-64, #Path-65,
+#Path-66, #Path-67, #Path-68, #Path-69, #Path-70,
+#Path-71, #Path-72, #Path-73, #Path-74, #Path-75,
+#Path-76, #Path-77, #Path-78, #Path-79, #Path-80,
+#Path-81, #Path-82, #Path-83, #Path-84, #Path-85,
+#Path-86, #Path-87, #Path-88, #Path-89, #Path-90,
+#Path-91, #Path-92, #Path-93, #Path-94, #Path-95,
+#Path-96, #Path-97, #Path-98, #Path-99, #Path-100,
+#Path-101, #Path-102, #Path-103, #Path-104, #Path-105,
+#Path-106, #Path-107, #Path-108, #Path-109, #Path-110,
+#Path-111, #Path-112, #Path-113, #Path-114, #Path-115,
+#Path-116, #Path-117 {
+	vector-effect: non-scaling-stroke;
+	stroke-dasharray: 1000;
+	stroke-dashoffset: 1000;
+}
+#Path-1 {
+	-webkit-animation: large-shape 10s 100ms ease-out 1 forwards;
+	animation: large-shape 10s 100ms ease-out 1 forwards;
+}
+#Path-2 {
+	-webkit-animation: large-shape 12s 120ms ease-out 1 forwards;
+	animation: large-shape 12s 120ms ease-out 1 forwards;
+}
+#Path-6 {
+	-webkit-animation: large-shape 20s 200ms ease-out 1 forwards;
+	animation: large-shape 20s 200ms ease-out 1 forwards;
+}
+#Path-3 {
+	-webkit-animation: large-shape 12s 140ms ease-out 1 forwards;
+	animation: large-shape 12s 140ms ease-out 1 forwards;
+}
+#Path-4 {
+	-webkit-animation: large-shape 14s 160ms ease-out 1 forwards;
+	animation: large-shape 14s 160ms ease-out 1 forwards;
+}
+#Path-5 {
+	-webkit-animation: large-shape 12s 180ms ease-out 1 forwards;
+	animation: large-shape 12s 180ms ease-out 1 forwards;
+}
+#Path-7 {
+	-webkit-animation: large-shape 20s 220ms ease-out 1 forwards;
+	animation: large-shape 20s 220ms ease-out 1 forwards;
+}
+#Path-8 {
+	-webkit-animation: large-shape 20s 240ms ease-out 1 forwards;
+	animation: large-shape 20s 240ms ease-out 1 forwards;
+}
+#Path-9 {
+	-webkit-animation: large-shape 20s 260ms ease-out 1 forwards;
+	animation: large-shape 20s 260ms ease-out 1 forwards;
+}
+#Path-10 {
+	-webkit-animation: large-shape 20s 280ms ease-out 1 forwards;
+	animation: large-shape 20s 280ms ease-out 1 forwards;
+}
+#Path-11 {
+	-webkit-animation: large-shape 20s 300ms ease-out 1 forwards;
+	animation: large-shape 20s 300ms ease-out 1 forwards;
+}
+#Path-12 {
+	-webkit-animation: large-shape 20s 320ms ease-out 1 forwards;
+	animation: large-shape 20s 320ms ease-out 1 forwards;
+}
+#Path-13 {
+	-webkit-animation: large-shape 20s 320ms ease-out 1 forwards;
+	animation: large-shape 20s 320ms ease-out 1 forwards;
+}
+#Path-14 {
+	-webkit-animation: large-shape 20s 340ms ease-out 1 forwards;
+	animation: large-shape 20s 340ms ease-out 1 forwards;
+}
+#Path-15 {
+	-webkit-animation: large-shape 20s 360ms ease-out 1 forwards;
+	animation: large-shape 20s 360ms ease-out 1 forwards;
+}
+#Path-16 {
+	-webkit-animation: large-shape 20s 380ms ease-out 1 forwards;
+	animation: large-shape 20s 380ms ease-out 1 forwards;
+}
+#Path-17 {
+	-webkit-animation: large-shape 20s 400ms ease-out 1 forwards;
+	animation: large-shape 20s 400ms ease-out 1 forwards;
+}
+#Path-18 {
+	-webkit-animation: large-shape 20s 420ms ease-out 1 forwards;
+	animation: large-shape 20s 420ms ease-out 1 forwards;
+}
+#Path-19 {
+	-webkit-animation: large-shape 20s 440ms ease-out 1 forwards;
+	animation: large-shape 20s 440ms ease-out 1 forwards;
+}
+#Path-20 {
+	-webkit-animation: large-shape 20s 460ms ease-out 1 forwards;
+	animation: large-shape 20s 460ms ease-out 1 forwards;
+}
+#Path-21 {
+	-webkit-animation: large-shape 12s 480ms ease-out 1 forwards;
+	animation: large-shape 12s 480ms ease-out 1 forwards;
+}
+#Path-22 {
+	-webkit-animation: large-shape 20s 500ms ease-out 1 forwards;
+	animation: large-shape 20s 500ms ease-out 1 forwards;
+}
+#Path-23 {
+	-webkit-animation: large-shape 20s 520ms ease-out 1 forwards;
+	animation: large-shape 20s 520ms ease-out 1 forwards;
+}
+#Path-24 {
+	-webkit-animation: large-shape 20s 540ms ease-out 1 forwards;
+	animation: large-shape 20s 540ms ease-out 1 forwards;
+}
+#Path-25 {
+	-webkit-animation: large-shape 20s 560ms ease-out 1 forwards;
+	animation: large-shape 20s 560ms ease-out 1 forwards;
+}
+#Path-26 {
+	-webkit-animation: large-shape 20s 580ms ease-out 1 forwards;
+	animation: large-shape 20s 580ms ease-out 1 forwards;
+}
+#Path-27 {
+	-webkit-animation: large-shape 20s 600ms ease-out 1 forwards;
+	animation: large-shape 20s 600ms ease-out 1 forwards;
+}
+#Path-28 {
+	-webkit-animation: large-shape 20s 620ms ease-out 1 forwards;
+	animation: large-shape 20s 620ms ease-out 1 forwards;
+}
+#Path-29 {
+	-webkit-animation: large-shape 20s 640ms ease-out 1 forwards;
+	animation: large-shape 20s 640ms ease-out 1 forwards;
+}
+#Path-30 {
+	-webkit-animation: large-shape 20s 660ms ease-out 1 forwards;
+	animation: large-shape 20s 660ms ease-out 1 forwards;
+}
+#Path-31 {
+	-webkit-animation: large-shape 20s 680ms ease-out 1 forwards;
+	animation: large-shape 20s 680ms ease-out 1 forwards;
+}
+#Path-32 {
+	-webkit-animation: large-shape 20s 700ms ease-out 1 forwards;
+	animation: large-shape 20s 700ms ease-out 1 forwards;
+}
+#Path-33 {
+	-webkit-animation: large-shape 20s 720ms ease-out 1 forwards;
+	animation: large-shape 20s 720ms ease-out 1 forwards;
+}
+#Path-34 {
+	-webkit-animation: large-shape 20s 740ms ease-out 1 forwards;
+	animation: large-shape 20s 740ms ease-out 1 forwards;
+}
+#Path-35 {
+	-webkit-animation: large-shape 20s 780ms ease-out 1 forwards;
+	animation: large-shape 20s 780ms ease-out 1 forwards;
+}
+#Path-36 {
+	-webkit-animation: large-shape 20s 800ms ease-out 1 forwards;
+	animation: large-shape 20s 800ms ease-out 1 forwards;
+}
+#Path-37 {
+	-webkit-animation: large-shape 20s 820ms ease-out 1 forwards;
+	animation: large-shape 20s 820ms ease-out 1 forwards;
+}
+#Path-38 {
+	-webkit-animation: large-shape 20s 840ms ease-out 1 forwards;
+	animation: large-shape 20s 840ms ease-out 1 forwards;
+}
+#Path-39 {
+	-webkit-animation: large-shape 20s 860ms ease-out 1 forwards;
+	animation: large-shape 20s 860ms ease-out 1 forwards;
+}
+#Path-40 {
+	-webkit-animation: large-shape 20s 880ms ease-out 1 forwards;
+	animation: large-shape 20s 880ms ease-out 1 forwards;
+}
+#Path-41 {
+	-webkit-animation: large-shape 20s 860ms ease-out 1 forwards;
+	animation: large-shape 20s 860ms ease-out 1 forwards;
+}
+#Path-42 {
+	-webkit-animation: large-shape 20s 880ms ease-out 1 forwards;
+	animation: large-shape 20s 880ms ease-out 1 forwards;
+}
+#Path-43 {
+	-webkit-animation: large-shape 20s 900ms ease-out 1 forwards;
+	animation: large-shape 20s 900ms ease-out 1 forwards;
+}
+#Path-44 {
+	-webkit-animation: large-shape 20s 920ms ease-out 1 forwards;
+	animation: large-shape 20s 920ms ease-out 1 forwards;
+}
+#Path-45 {
+	-webkit-animation: large-shape 20s 940ms ease-out 1 forwards;
+	animation: large-shape 20s 940ms ease-out 1 forwards;
+}
+#Path-46 {
+	-webkit-animation: large-shape 20s 960ms ease-out 1 forwards;
+	animation: large-shape 20s 960ms ease-out 1 forwards;
+}
+#Path-47 {
+	-webkit-animation: large-shape 20s 980ms ease-out 1 forwards;
+	animation: large-shape 20s 980ms ease-out 1 forwards;
+}
+#Path-48 {
+	-webkit-animation: large-shape 20s 1000ms ease-out 1 forwards;
+	animation: large-shape 20s 1000ms ease-out 1 forwards;
+}
+#Path-53 {
+	-webkit-animation: large-shape 20s 1020ms ease-out 1 forwards;
+	animation: large-shape 20s 1020ms ease-out 1 forwards;
+}
+#Path-49 {
+	-webkit-animation: large-shape 20s 1040ms ease-out 1 forwards;
+	animation: large-shape 20s 1040ms ease-out 1 forwards;
+}
+#Path-51 {
+	-webkit-animation: large-shape 17s 1080ms ease-out 1 forwards;
+	animation: large-shape 17s 1080ms ease-out 1 forwards;
+}
+#Path-116 {
+	-webkit-animation: large-shape 20s 1080ms ease-out 1 forwards;
+	animation: large-shape 20s 1080ms ease-out 1 forwards;
+}
+#Path-52 {
+	-webkit-animation: large-shape 20s 1100ms ease-out 1 forwards;
+	animation: large-shape 20s 1100ms ease-out 1 forwards;
+}
+#Path-52 {
+	-webkit-animation: large-shape 20s 1120ms ease-out 1 forwards;
+	animation: large-shape 20s 1120ms ease-out 1 forwards;
+}
+#Path-50 {
+	-webkit-animation: large-shape 20s 1140ms ease-out 1 forwards;
+	animation: large-shape 20s 1140ms ease-out 1 forwards;
+}
+#Path-54 {
+	-webkit-animation: large-shape 20s 1160ms ease-out 1 forwards;
+	animation: large-shape 20s 1160ms ease-out 1 forwards;
+}
+#Path-55 {
+	-webkit-animation: large-shape 20s 1180ms ease-out 1 forwards;
+	animation: large-shape 20s 1180ms ease-out 1 forwards;
+}
+#Path-56 {
+	-webkit-animation: large-shape 20s 1200ms ease-out 1 forwards;
+	animation: large-shape 20s 1200ms ease-out 1 forwards;
+}
+#Path-57 {
+	-webkit-animation: large-shape 20s 1220ms ease-out 1 forwards;
+	animation: large-shape 20s 1220ms ease-out 1 forwards;
+}
+#Path-58 {
+	-webkit-animation: large-shape 20s 1240ms ease-out 1 forwards;
+	animation: large-shape 20s 1240ms ease-out 1 forwards;
+}
+#Path-59 {
+	-webkit-animation: large-shape 20s 1260ms ease-out 1 forwards;
+	animation: large-shape 20s 1260ms ease-out 1 forwards;
+}
+#Path-60 {
+	-webkit-animation: large-shape 20s 1280ms ease-out 1 forwards;
+	animation: large-shape 20s 1280ms ease-out 1 forwards;
+}
+#Path-61 {
+	-webkit-animation: large-shape 20s 1280ms ease-out 1 forwards;
+	animation: large-shape 20s 1280ms ease-out 1 forwards;
+}
+#Path-112 {
+	-webkit-animation: large-shape 20s 1320ms ease-out 1 forwards;
+	animation: large-shape 20s 1320ms ease-out 1 forwards;
+}
+#Path-113 {
+	-webkit-animation: large-shape 20s 1340ms ease-out 1 forwards;
+	animation: large-shape 20s 1340ms ease-out 1 forwards;
+}
+#Path-109 {
+	-webkit-animation: large-shape 20s 1360ms ease-out 1 forwards;
+	animation: large-shape 20s 1360ms ease-out 1 forwards;
+}
+#Path-110 {
+	-webkit-animation: large-shape 20s 1380ms ease-out 1 forwards;
+	animation: large-shape 20s 1380ms ease-out 1 forwards;
+}
+#Path-111 {
+	-webkit-animation: large-shape 20s 1400ms ease-out 1 forwards;
+	animation: large-shape 20s 1400ms ease-out 1 forwards;
+}
+#Path-102 {
+	-webkit-animation: large-shape 20s 1420ms ease-out 1 forwards;
+	animation: large-shape 20s 1420ms ease-out 1 forwards;
+}
+#Path-103 {
+	-webkit-animation: large-shape 20s 1440ms ease-out 1 forwards;
+	animation: large-shape 20s 1440ms ease-out 1 forwards;
+}
+#Path-104 {
+	-webkit-animation: large-shape 20s 1460ms ease-out 1 forwards;
+	animation: large-shape 20s 1460ms ease-out 1 forwards;
+}
+#Path-105 {
+	-webkit-animation: large-shape 20s 1480ms ease-out 1 forwards;
+	animation: large-shape 20s 1480ms ease-out 1 forwards;
+}
+#Path-106 {
+	-webkit-animation: large-shape 20s 1500ms ease-out 1 forwards;
+	animation: large-shape 20s 1500ms ease-out 1 forwards;
+}
+#Path-107 {
+	-webkit-animation: large-shape 20s 1520ms ease-out 1 forwards;
+	animation: large-shape 20s 1520ms ease-out 1 forwards;
+}
+#Path-108 {
+	-webkit-animation: large-shape 20s 1540ms ease-out 1 forwards;
+	animation: large-shape 20s 1540ms ease-out 1 forwards;
+}
+#Path-100 {
+	-webkit-animation: large-shape 20s 1560ms ease-out 1 forwards;
+	animation: large-shape 20s 1560ms ease-out 1 forwards;
+}
+#Path-101 {
+	-webkit-animation: large-shape 20s 1580ms ease-out 1 forwards;
+	animation: large-shape 20s 1580ms ease-out 1 forwards;
+}
+#Path-97 {
+	-webkit-animation: large-shape 20s 1600ms ease-out 1 forwards;
+	animation: large-shape 20s 1600ms ease-out 1 forwards;
+}
+#Path-98 {
+	-webkit-animation: large-shape 20s 1620ms ease-out 1 forwards;
+	animation: large-shape 20s 1620ms ease-out 1 forwards;
+}
+#Path-99 {
+	-webkit-animation: large-shape 20s 1640ms ease-out 1 forwards;
+	animation: large-shape 20s 1640ms ease-out 1 forwards;
+}
+#Path-93 {
+	-webkit-animation: large-shape 20s 1680ms ease-out 1 forwards;
+	animation: large-shape 20s 1680ms ease-out 1 forwards;
+}
+#Path-94 {
+	-webkit-animation: large-shape 20s 1700ms ease-out 1 forwards;
+	animation: large-shape 20s 1700ms ease-out 1 forwards;
+}
+#Path-95 {
+	-webkit-animation: large-shape 20s 1720ms ease-out 1 forwards;
+	animation: large-shape 20s 1720ms ease-out 1 forwards;
+}
+#Path-96 {
+	-webkit-animation: large-shape 20s 1740ms ease-out 1 forwards;
+	animation: large-shape 20s 1740ms ease-out 1 forwards;
+}
+#Path-92 {
+	-webkit-animation: large-shape 20s 1760ms ease-out 1 forwards;
+	animation: large-shape 20s 1760ms ease-out 1 forwards;
+}
+#Path-88 {
+	-webkit-animation: large-shape 10s 1780ms ease-out 1 forwards;
+	animation: large-shape 10s 1780ms ease-out 1 forwards;
+}
+#Path-91 {
+	-webkit-animation: large-shape 20s 1800ms ease-out 1 forwards;
+	animation: large-shape 20s 1800ms ease-out 1 forwards;
+}
+#Path-87 {
+	-webkit-animation: large-shape 20s 1820ms ease-out 1 forwards;
+	animation: large-shape 20s 1820ms ease-out 1 forwards;
+}
+#Path-90 {
+	-webkit-animation: large-shape 20s 1840ms ease-out 1 forwards;
+	animation: large-shape 20s 1840ms ease-out 1 forwards;
+}
+#Path-89 {
+	-webkit-animation: large-shape 20s 1860ms ease-out 1 forwards;
+	animation: large-shape 20s 1860ms ease-out 1 forwards;
+}
+#Path-86 {
+	-webkit-animation: large-shape 20s 1880ms ease-out 1 forwards;
+	animation: large-shape 20s 1880ms ease-out 1 forwards;
+}
+#Path-85 {
+	-webkit-animation: large-shape 20s 1900ms ease-out 1 forwards;
+	animation: large-shape 20s 1900ms ease-out 1 forwards;
+}
+#Path-84 {
+	-webkit-animation: large-shape 20s 1920ms ease-out 1 forwards;
+	animation: large-shape 20s 1920ms ease-out 1 forwards;
+}
+#Path-82 {
+	-webkit-animation: large-shape 20s 1940ms ease-out 1 forwards;
+	animation: large-shape 20s 1940ms ease-out 1 forwards;
+}
+#Path-80 {
+	-webkit-animation: large-shape 20s 1960ms ease-out 1 forwards;
+	animation: large-shape 20s 1960ms ease-out 1 forwards;
+}
+#Path-81 {
+	-webkit-animation: large-shape 20s 1980ms ease-out 1 forwards;
+	animation: large-shape 20s 1980ms ease-out 1 forwards;
+}
+#Path-79 {
+	-webkit-animation: large-shape 20s 2000ms ease-out 1 forwards;
+	animation: large-shape 20s 2000ms ease-out 1 forwards;
+}
+#Path-77 {
+	-webkit-animation: large-shape 20s 2020ms ease-out 1 forwards;
+	animation: large-shape 20s 2020ms ease-out 1 forwards;
+}
+#Path-78 {
+	-webkit-animation: large-shape 20s 2040ms ease-out 1 forwards;
+	animation: large-shape 20s 2040ms ease-out 1 forwards;
+}
+#Path-71 {
+	-webkit-animation: large-shape 20s 2060ms ease-out 1 forwards;
+	animation: large-shape 20s 2060ms ease-out 1 forwards;
+}
+#Path-72 {
+	-webkit-animation: large-shape 20s 2080ms ease-out 1 forwards;
+	animation: large-shape 20s 2080ms ease-out 1 forwards;
+}
+#Path-73 {
+	-webkit-animation: large-shape 20s 2100ms ease-out 1 forwards;
+	animation: large-shape 20s 2100ms ease-out 1 forwards;
+}
+#Path-74 {
+	-webkit-animation: large-shape 20s 2120ms ease-out 1 forwards;
+	animation: large-shape 20s 2120ms ease-out 1 forwards;
+}
+#Path-75 {
+	-webkit-animation: large-shape 20s 2120ms ease-out 1 forwards;
+	animation: large-shape 20s 2120ms ease-out 1 forwards;
+}
+#Path-76 {
+	-webkit-animation: large-shape 20s 2140ms ease-out 1 forwards;
+	animation: large-shape 20s 2140ms ease-out 1 forwards;
+}
+#Path-83 {
+	-webkit-animation: large-shape 20s 2160ms ease-out 1 forwards;
+	animation: large-shape 20s 2160ms ease-out 1 forwards;
+}
+#Path-62 {
+	-webkit-animation: large-shape 20s 2180ms ease-out 1 forwards;
+	animation: large-shape 20s 2180ms ease-out 1 forwards;
+}
+#Path-63 {
+	-webkit-animation: large-shape 20s 2200ms ease-out 1 forwards;
+	animation: large-shape 20s 2200ms ease-out 1 forwards;
+}
+#Path-69 {
+	-webkit-animation: large-shape 20s 2220ms ease-out 1 forwards;
+	animation: large-shape 20s 2220ms ease-out 1 forwards;
+}
+#Path-70 {
+	-webkit-animation: large-shape 20s 2220ms ease-out 1 forwards;
+	animation: large-shape 20s 2220ms ease-out 1 forwards;
+}
+#Path-64 {
+	-webkit-animation: large-shape 20s 2240ms ease-out 1 forwards;
+	animation: large-shape 20s 2240ms ease-out 1 forwards;
+}
+#Path-65 {
+	-webkit-animation: large-shape 20s 2260ms ease-out 1 forwards;
+	animation: large-shape 20s 2260ms ease-out 1 forwards;
+}
+#Path-66 {
+	-webkit-animation: large-shape 20s 2280ms ease-out 1 forwards;
+	animation: large-shape 20s 2280ms ease-out 1 forwards;
+}
+#Path-67 {
+	-webkit-animation: large-shape 22s 2300ms ease-out 1 forwards;
+	animation: large-shape 22s 2300ms ease-out 1 forwards;
+}
+#Path-68 {
+	-webkit-animation: large-shape 18s 2320ms ease-out 1 forwards;
+	animation: large-shape 18s 2320ms ease-out 1 forwards;
+}
+#Path-114 {
+	-webkit-animation: large-shape 24s 2320ms ease-out 1 forwards;
+	animation: large-shape 24s 2320ms ease-out 1 forwards;
+}
+#Path-117 {
+	-webkit-animation: large-shape 25s 2320ms ease-out 1 forwards;
+	animation: large-shape 25s 2320ms ease-out 1 forwards;
+}
+@-webkit-keyframes large-shape {
+	0% { stroke-dashoffset: 1000; }
+	100% { stroke-dashoffset: 0; }
+}
+@keyframes large-shape {
+	0% { stroke-dashoffset: 1000; }
+	100% { stroke-dashoffset: 0; }
+}
+`)
 		])
 	)
 ))

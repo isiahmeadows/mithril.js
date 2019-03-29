@@ -1,5 +1,3 @@
-import {m} from "mithril/m"
-
 export default function component(init) {
 	return (attrs) => (_, context) => {
 		let locked = false
@@ -28,44 +26,45 @@ export default function component(init) {
 			context.scheduleLayout(redrawSync)
 		}
 
-		function bindProperties(attrs, isComponent) {
-			const bound = {}
-			for (const [key, value] of Object.entries(attrs)) {
-				bound[key] = key.startsWith("on") && value != null && (
-					typeof value === "function" ||
-					!isComponent && typeof value === "object"
-				)
-					? function (ev) {
-						let result = false
-						if (typeof value === "function") {
-							result = value.apply(this, arguments)
-						} else {
-							value.handleEvent(ev)
-							result = Boolean(ev.defaultPrevented)
-						}
-						if (result !== false) redraw()
-						return result
+		function bindKey(key, value, isComponent) {
+			if (key === "children") return wrapRedraw(value)
+			if (key.startsWith("on") && value != null && (
+				typeof value === "function" ||
+				!isComponent && typeof value === "object"
+			)) {
+				return function (ev) {
+					let result = false
+					if (typeof value === "function") {
+						result = value.apply(this, arguments)
+					} else {
+						value.handleEvent(ev)
+						result = Boolean(ev.defaultPrevented)
 					}
-					: value
+					if (result !== false) redraw()
+					return result
+				}
+			} else {
+				return value
 			}
-			return bound
 		}
 
 		function wrapRedraw(child) {
 			if (child == null || typeof child !== "object") return child
 			if (Array.isArray(child)) return child.map(wrapRedraw)
-			if (child.attrs == null || child.tag === "#html") return child
-			const {children = [], ...attrs} = child.attrs || {}
-			return m(child.tag, {
-				...child.tag === "#keyed" && child.tag === "#fragment"
-					? attrs
-					: bindProperties(attrs, typeof child.tag === "function"),
-				children: children.map(wrapRedraw)
-			})
+			if (
+				child.attrs == null || child.tag === "#html" ||
+				child.tag === "#text"
+			) return child
+			const isComponent = typeof child.tag === "function"
+			const bound = {}
+			for (const key of Object.keys(child.attrs)) {
+				bound[key] = bindKey(key, child.attrs[key], isComponent)
+			}
+			return {tag: child.tag, attrs: bound}
 		}
 
 		const innerContext = {
-			renderType: () => context.renderType(),
+			renderInfo: context.renderInfo,
 			redraw, redrawSync,
 			done: undefined,
 		}
@@ -84,5 +83,17 @@ export default function component(init) {
 				if (done != null) done()
 			}
 		}
+	}
+}
+
+export function pure(view) {
+	return (attrs) => (render) => {
+		let current
+		return attrs((next) => {
+			const prev = current
+			current = next
+			const result = view(prev, next)
+			if (result !== prev) render(result)
+		})
 	}
 }

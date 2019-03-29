@@ -7,22 +7,22 @@ const state = {
 const subscribers = []
 let awaitingFrame = false
 
-export function dispatch(action) {
-	switch (action.type) {
+export function dispatch(type, args) {
+	switch (type) {
 		case "createTodo":
-			state.todos.push({title: action.title.trim(), completed: false})
+			state.todos.push({title: args.title.trim(), completed: false})
 			break
 
 		case "setStatuses":
-			for (const todo of state.todos) todo.completed = action.completed
+			for (const todo of state.todos) todo.completed = args.completed
 			break
 
 		case "setStatus":
-			action.todo.completed = action.completed
+			args.todo.completed = args.completed
 			break
 
 		case "destroy": {
-			const index = state.todos.indexOf(action.todo)
+			const index = state.todos.indexOf(args.todo)
 			if (index > -1) state.todos.splice(index, 1)
 			break
 		}
@@ -39,12 +39,12 @@ export function dispatch(action) {
 		}
 
 		case "edit":
-			state.editing = action.todo
+			state.editing = args.todo
 			break
 
 		case "update":
 			if (state.editing != null) {
-				state.editing.title = action.title.trim()
+				state.editing.title = args.title.trim()
 				if (state.editing.title === "") state.destroy(state.editing)
 				state.editing = null
 			}

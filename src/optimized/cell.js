@@ -1,3 +1,9 @@
+// A global, ES5 equivalent of `src/cell.mjs`, for show and to test for file
+// size.
+(function () {
+// eslint-disable-next-line strict
+"use strict"
+
 var sentinel = {}
 
 function id(x) { return x }
@@ -222,7 +228,25 @@ function shallowEqual(a, b, compare) {
 	}
 }
 
-export {
-	all, chain, distinct, filter, join, map, merge, NEVER, of, onDone, reduce,
-	run, scan, scanMap, shallowEqual, tap,
+var Cell = {
+	all: all,
+	chain: chain,
+	distinct: distinct,
+	filter: filter,
+	join: join,
+	map: map,
+	merge: merge,
+	NEVER: NEVER,
+	of: of,
+	onDone: onDone,
+	reduce: reduce,
+	run: run,
+	scan: scan,
+	scanMap: scanMap,
+	shallowEqual: shallowEqual,
+	tap: tap,
 }
+
+if (typeof module !== "undefined" && module.exports) module.exports = Cell
+else window.Cell = Cell
+})()

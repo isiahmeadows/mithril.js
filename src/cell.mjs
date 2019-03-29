@@ -6,24 +6,26 @@ function sameValueZero(a, b) {
 	return a === b || Number.isNaN(a) && Number.isNaN(b)
 }
 
+function wrapDones(dones) {
+	return () => {
+		let error = sentinel
+
+		for (const done of dones) {
+			try { if (done != null) done() } catch (e) { error = e }
+		}
+
+		if (error !== sentinel) throw error
+	}
+}
+
 export function all([...cells], func = (x) => x) {
 	return (send) => {
 		const values = cells.map(() => sentinel)
-		const dones = cells.map((cell, i) => cell((value) => {
+		return wrapDones(cells.map((cell, i) => cell((value) => {
 			values[i] = value
 			if (values.includes(sentinel)) return undefined
 			return send(func([...values]))
-		}))
-
-		return () => {
-			let error = sentinel
-
-			for (const done of dones) {
-				try { if (done != null) done() } catch (e) { error = e }
-			}
-
-			if (error !== sentinel) throw error
-		}
+		})))
 	}
 }
 
@@ -85,22 +87,28 @@ export function reduce(cell, initial, func) {
 }
 
 export function distinct(cell, compare = sameValueZero) {
-	return transformFold(cell, undefined, (send, acc, value) => ({
-		r: compare(acc, value) ? send(value) : undefined,
-		a: value
+	return transformFold(cell, sentinel, (send, acc, value) => ({
+		r: acc === sentinel || compare(acc, value) ? send(value) : undefined,
+		a: value,
 	}))
 }
 
-export function of(value) {
-	return (send) => { send(value) }
+export function of(...values) {
+	return (send) => { for (const value of values) send(value) }
 }
 
+export function merge(...cells) {
+	return (...args) => wrapDones(cells.map((cell) => cell(...args)))
+}
+
+export function NEVER() {}
+
 export function chain(cell, func) {
-	return (send) => {
+	return (...args) => {
 		let innerDone
 		const cellDone = cell((value) => {
 			if (innerDone != null) innerDone()
-			innerDone = func(value)(send)
+			innerDone = func(value)(...args)
 		})
 
 		return () => {
@@ -114,8 +122,8 @@ export function chain(cell, func) {
 }
 
 export function onDone(cell, func) {
-	return (send) => {
-		const cellDone = cell(send)
+	return (...args) => {
+		const cellDone = cell(...args)
 		return () => {
 			try {
 				if (func != null) func()

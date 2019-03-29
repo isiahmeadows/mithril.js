@@ -9,6 +9,8 @@
 		<div id="root"></div>
 		<script src="../../mithril/core.js"></script>
 		<script>
+const {m} = Mithril
+
 const {hour, minute, second} = (() => {
 	var date = new Date()
 	var h = date.getHours() | 0

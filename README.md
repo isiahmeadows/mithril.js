@@ -2,7 +2,9 @@
 
 ## Status
 
-This is a major work in progress, and is very much so a pre-proposal that's still being honed and improved upon. Please don't assume *anything* here is actually going to make it into the next version. Also, don't assume it's targeting version 3 either - I have it listed as such only because it's a major overhaul of the API, but there are no active plans to *make* any of this targeted towards version 3 specifically.
+This is a major work in progress, and is very much so a pre-proposal that's still being honed and improved upon. Please don't assume *anything* here is actually going to make it into the next version. Also, don't assume it's targeting version 3 either - I started out calling it a "v3 redesign" (hence the branch name) because it's a major API overhaul, but there are no active plans for any of this to actively target version 3 specifically.
+
+> I *could* change the branch name, but I don't feel like trying to replace every v3 reference out there *and* break existing links I've thrown out, so it's just easier to do this way.
 
 ## Feedback?
 
@@ -11,11 +13,12 @@ If you have *any* feedback, questions, or concerns, please do feel free to [file
 ## Table of contents
 
 - [Core changes](core.md)
-- [Vnode and IR structural changes](vnode-structure.md)
 - [Utilities added to `mithril/*`, part of the MVP](mvp-utils.md)
 - [Utilities added to `mithril/*`, not part of the MVP](future-utils.md)
-- [Other general notes](notes.md)
 - [Rationale](rationale.md)
+- [App comparison](examples/threaditjs/README.md)
+- [Non-features](non-features.md)
+- [Vnode and IR structural changes](vnode-structure.md)
 - [Bitwise operations explainer](bitwise.md)
 
 ## Summary
@@ -38,65 +41,65 @@ The code you thought you wrote should be the code you meant to write. There shou
 ```js
 // React
 class TextInput extends React.Component {
-    state = {
-        value: ''
-    }
-    componentWillReceiveProps(nextProps) {
-        // This resets local state every time a parent receives properties *and*
-        // it schedules a re-render.
-        this.setState({ value: nextProps.value })
-    }
-    render() {
-        return (
-            <input
-                value={this.state.value}
-                onChange={(e) => {
-                    this.setState({ value: e.target.value })
-                }}
-            />
-        )
-    }
+	state = {
+		value: ''
+	}
+	componentWillReceiveProps(nextProps) {
+		// This resets local state every time a parent receives properties *and*
+		// it schedules a re-render.
+		this.setState({ value: nextProps.value })
+	}
+	render() {
+		return (
+			<input
+				value={this.state.value}
+				onChange={(e) => {
+					this.setState({ value: e.target.value })
+				}}
+			/>
+		)
+	}
 }
 
 // Direct equivalent in this redesign - it *certainly* raises questions, and
 // it's not only not idiomatic, but a little cumbersome to write and hard to
 // follow because the control flow is all over the place.
 function TextInput(attrs) {
-    let value = ""
-    return (render) => {
-        function update() {
-            render(m("input", {
-                value,
-                onchange: (e) => {
-                    value = e.target.value
-                    update()
-                }
-            }))
-        }
+	let value = ""
+	return (render) => {
+		function update() {
+			render(m("input", {
+				value,
+				onchange: (e) => {
+					value = e.target.value
+					update()
+				}
+			}))
+		}
 
-        update()
+		update()
 
-        return attrs((nextAttrs) => {
-            value = nextAttrs.value
-            update()
-        })
-    }
+		return attrs((nextAttrs) => {
+			value = nextAttrs.value
+			update()
+		})
+	}
 }
 
 // Simplified equivalent in this redesign - it *still* raises questions, and
 // it's equally hard to follow due to all the recursion.
 function TextInput(attrs) {
-    return (render) => {
-        function update(value) {
-            render(m("input", {
-                value,
-                onchange: (e) => update(e.target.value),
-            }))
-        }
+	return (render) => {
+		function update(value) {
+			render(m("input", {
+				value,
+				onchange: (e) => update(e.target.value),
+			}))
+		}
 
-        update("")
-        return attrs(({value}) => update(value))
-    }
+		update("")
+		return attrs(({value}) => update(value))
+	}
 }
 ```
 
@@ -108,18 +111,18 @@ In that article, it offers two ways to fix it, both of which are equally simple.
 // React
 // Option 1: Fully controlled component.
 function TextInput({value, onChange}) {
-    return <input value={value} onChange={onChange} />
+	return <input value={value} onChange={onChange} />
 }
 
 // Option 2: Fully uncontrolled component.
 function TextInput() {
-    const [value, setValue] = useState('');
-    return (
-        <input
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-        />
-    )
+	const [value, setValue] = useState('');
+	return (
+		<input
+			value={value}
+			onChange={(e) => setValue(e.target.value)}
+		/>
+	)
 }
 
 // We can reset its internal state later by changing the key:
@@ -128,19 +131,19 @@ function TextInput() {
 // Direct equivalent in this redesign
 // Option 1: Fully controlled component.
 function TextInput(attrs) {
-    return Cell.map(attrs, ({value, onChange}) =>
-        m("input", {value, onChange})
-    )
+	return Cell.map(attrs, ({value, onChange}) =>
+		m("input", {value, onChange})
+	)
 }
 
 // Option 2: Fully uncontrolled component.
 function TextInput() {
-    return (render) => {
-        const update = (value) => render(m("input", {
-            value, onchange: (e) => update(e.target.value)
-        }))
-        update("")
-    }
+	return (render) => {
+		const update = (value) => render(m("input", {
+			value, onchange: (e) => update(e.target.value)
+		}))
+		update("")
+	}
 }
 
 // We can reset its internal state later by changing the key:
@@ -170,6 +173,8 @@ But the focus here is to simplify it for the user, to push it for them. And we s
 No framework is an island unto itself, and most frameworks fail to take this into account, React included. Staying in the framework should be easy, but talking to the outside world should be equally easy, even if you want to go head-first into everything Mithril in your own component. This integration includes both integrating a jQuery component into a Mithril app and integrating a Mithril component into an Angular app. Even if it's not simple, it should still be possible and very practical.
 
 A good framework doesn't just stop at making the simple easy, but it should also make the complex possible. Common complex things like async data loading, transitions, and rendering to string should be things users *don't* have to write. They also shouldn't have to search for them - it should already be there for them. Complex data flow within components should be something users can do without much thought. Even if it's complex, it shouldn't be *hard*, especially hard to do *right*.
+
+And in addition, it should come with the right state primitives to make simple, yet powerful state manipulation with reasonably low effort.
 
 (This doesn't mean that it should all be included *in* the core bundle. They can still be separate modules, just shipped with the npm package *with* the core bundle.)
 

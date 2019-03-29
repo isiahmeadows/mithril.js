@@ -15,6 +15,8 @@ h1,h2,h3,h4,h5,h6,p {margin:0 0 10px;}
 		<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/0.3.2/marked.min.js"></script>
 		<script src="../../mithril/core.js"></script>
 		<script>
+const {m} = Mithril
+
 //model
 const state = {
 	text: "# Markdown Editor\n\nType on the left panel and see the result on the right panel",
@@ -24,15 +26,15 @@ const state = {
 }
 
 //view
-const Editor = Mithril.component((m) => () => [
+const Editor = Mithril.component(() => () => [
 	m("textarea.input", {
 		oninput(e) { state.update(e.target.value) },
 		value: state.text
 	}),
-	m(".preview", trust(marked(state.text))),
+	m("div.preview", trust(marked(state.text))),
 ])
 
-Mithril.mount(document.getElementById("editor"), m(Editor))
+Mithril.render(document.getElementById("editor"), m(Editor))
 		</script>
 	</body>
 </html>

@@ -12,32 +12,34 @@ function sameValueZero(a, b) {
 	return a === b || Number.isNaN(a) && Number.isNaN(b)
 }
 
+function wrapDones(dones) {
+	return function () {
+		var error = sentinel
+
+		for (var i = 0; i < dones.length; i++) {
+			try {
+				if (dones[i] != null) (0, dones[i])()
+			} catch (e) {
+				error = e
+			}
+		}
+
+		if (error !== sentinel) throw error
+	}
+}
+
 function all(cells, func) {
 	if (func == null) func = id
 	return function (send) {
 		var values = cells.map(function () { return sentinel })
-		var dones = cells.map(function (cell, i) {
+		return wrapDones(cells.map(function (cell, i) {
 			return cell(function (value) {
 				values[i] = value
 				if (values.indexOf(sentinel) < 0) {
 					return send(func(values.slice()))
 				}
 			})
-		})
-
-		return function () {
-			var error = sentinel
-
-			for (var i = 0; i < dones.length; i++) {
-				try {
-					if (dones[i] != null) (0, dones[i])()
-				} catch (e) {
-					error = e
-				}
-			}
-
-			if (error !== sentinel) throw error
-		}
+		}))
 	}
 }
 
@@ -122,21 +124,46 @@ function reduce(cell, initial, func) {
 
 function distinct(cell, compare) {
 	if (compare == null) compare = sameValueZero
-	return transformFold(cell, undefined, function (send, acc, value) {
-		return {r: compare(acc, value) ? send(value) : undefined, a: value}
+	return transformFold(cell, sentinel, function (send, acc, value) {
+		return {
+			r: acc === sentinel || compare(acc, value)
+				? send(value)
+				: undefined,
+			a: value,
+		}
 	})
 }
 
-function of(value) {
-	return function (send) { send(value) }
+function of() {
+	var values = []
+	for (var i = 0; i < arguments.length; i++) values.push(arguments[i])
+	return function (send) {
+		for (var i = 0; i < values.length; i++) send(values[i])
+	}
 }
 
+function merge() {
+	var cells = []
+	for (var i = 0; i < arguments.length; i++) cells.push(arguments[i])
+	return function () {
+		var args = []
+		for (var i = 0; i < arguments.length; i++) args.push(arguments[i])
+		return wrapDones(cells.map(function (cell) {
+			return cell.apply(undefined, args)
+		}))
+	}
+}
+
+function NEVER() {}
+
 function chain(cell, func) {
-	return function (send) {
+	return function () {
+		var args = []
+		for (var i = 0; i < arguments.length; i++) args[i] = arguments[i]
 		var innerDone
 		var cellDone = cell(function (value) {
 			if (innerDone != null) innerDone()
-			innerDone = func(value)(send)
+			innerDone = func(value).apply(undefined, args)
 		})
 
 		return function () {
@@ -150,8 +177,8 @@ function chain(cell, func) {
 }
 
 function onDone(cell, func) {
-	return function (send) {
-		var cellDone = cell(send)
+	return function () {
+		var cellDone = cell.apply(undefined, arguments)
 		return function () {
 			try {
 				if (func != null) func()
@@ -189,6 +216,8 @@ var Cell = {
 	filter: filter,
 	join: join,
 	map: map,
+	merge: merge,
+	NEVER: NEVER,
 	of: of,
 	onDone: onDone,
 	reduce: reduce,
@@ -200,5 +229,5 @@ var Cell = {
 }
 
 if (typeof module !== "undefined" && module.exports) module.exports = Cell
-else (window.Mithril || (window.Mithril = {})).Cell = Cell
+else window.Cell = Cell
 })()

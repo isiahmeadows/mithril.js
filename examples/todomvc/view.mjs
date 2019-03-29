@@ -1,10 +1,7 @@
 //view
 import * as Cell from "../../../mithril/cell.mjs"
-import {
-	countRemaining, dispatch, getTodosByStatus, hasRemaining,
-	state
-} from "./model.mjs"
-import Router from "../../../mithril/router.mjs"
+import * as Router from "../../../mithril/router.mjs"
+import * as State from "./model.mjs"
 import {m} from "../../../mithril/core.mjs"
 
 function Header() {
@@ -13,7 +10,7 @@ function Header() {
 		m("input#new-todo[placeholder='What needs to be done?'][autofocus]", {
 			onkeypress(ev) {
 				if (ev.keyCode === 13 && ev.target.value) {
-					dispatch({type: "createTodo", title: ev.target.value})
+					State.dispatch("createTodo", {title: ev.target.value})
 					ev.target.value = ""
 				}
 			},
@@ -25,7 +22,7 @@ function Todo(attrs) {
 	return (render, context) => attrs(({todo}) => {
 		let input
 
-		if (todo === state.editing) {
+		if (todo === State.state.editing) {
 			context.scheduleLayout(() => {
 				if (input !== document.activeElement) {
 					input.focus()
@@ -37,31 +34,30 @@ function Todo(attrs) {
 
 		function save(ev) {
 			if (ev.keyCode === 13 || ev.type === "blur") {
-				dispatch({type: "update", title: input.value})
+				State.dispatch("update", {title: input.value})
 			} else if (ev.keyCode === 27) {
-				dispatch({type: "reset"})
+				State.dispatch("reset")
 			}
 		}
 
 		render(m("li", {
 			class: (todo.completed ? "completed" : "") + " " +
-				(todo === state.editing ? "editing" : "")
+				(todo === State.state.editing ? "editing" : "")
 		}, [
-			m(".view", [
+			m("div.view", [
 				m("input.toggle[type=checkbox]", {
 					checked: todo.completed,
 					onclick() {
-						dispatch({
-							type: "setStatus",
+						State.dispatch("setStatus", {
 							todo, completed: !todo.completed,
 						})
 					},
 				}),
 				m("label", {ondblclick() {
-					dispatch({type: "edit", todo})
+					State.dispatch("edit", {todo})
 				}}, todo.title),
 				m("button.destroy", {onclick() {
-					dispatch({type: "destroy", todo})
+					State.dispatch("destroy", {todo})
 				}}),
 			]),
 			m("input.edit", {
@@ -76,14 +72,14 @@ function Todo(attrs) {
 function Todos(attrs) {
 	return m("section#main", [
 		m("input#toggle-all[type=checkbox]", {
-			checked: !hasRemaining(),
+			checked: !State.hasRemaining(),
 			onchange(ev) {
-				dispatch({type: "setStatuses", completed: ev.target.checked})
+				State.dispatch("setStatuses", {completed: ev.target.checked})
 			},
 		}),
 		m("label[for=toggle-all]", "Mark all as complete"),
 		m("ul#todo-list", m("#keyed", Cell.map(attrs, ({showing}) =>
-			getTodosByStatus({showing}).map((todo) =>
+			State.getTodosByStatus({showing}).map((todo) =>
 				m(Todo, {key: todo.id, todo})
 			)
 		))),
@@ -91,7 +87,7 @@ function Todos(attrs) {
 }
 
 function Footer(attrs) {
-	const remaining = countRemaining()
+	const remaining = State.countRemaining()
 
 	return [
 		m("span#todo-count", [
@@ -113,7 +109,7 @@ function Footer(attrs) {
 			]
 		})),
 		m("button#clear-completed", {
-			onclick() { dispatch({type: "clear"}) }
+			onclick() { State.dispatch("clear") }
 		}, "Clear completed"),
 	]
 }
@@ -121,7 +117,7 @@ function Footer(attrs) {
 export default function View(attrs) {
 	return [
 		m(Header),
-		state.todos.length ? Cell.map(attrs, ({showing}) => [
+		State.state.todos.length ? Cell.map(attrs, ({showing}) => [
 			m(Todos, {showing}),
 			m(Footer, {showing}),
 		]) : null

@@ -18,22 +18,30 @@ If you're confused about all the various bit hacks here and they all look like s
 
 ### Why this complicated mess?
 
-Well, it comes to three things: memory usage, GC churn, and CPU performance. I'm not writing a simple theoretical toy, but a literal UI engine. It's built closer to a game physics engine crossed with a VM, so it's near-zero overhead.
+Well, it comes to three things: memory usage, GC churn, and CPU performance. I'm not writing a simple theoretical toy, but a literal UI engine. I'm imagining it built closer to a game physics engine crossed with a VM, so it's near-zero overhead.
+
+Note that everything beyond the hyperscript vnode structure detailed below is purely implementation detail and is *not* required for any MVP. (It might not even happen, and I'm not going to prototype the redesign's renderer using it - I'll wait until a later point in time to try it out.)
 
 ## Hyperscript vnode structure
 
-The vnodes are initially just this when returned from views.
+The vnodes are initially just this when returned from views. `m` returns either a DOM vnode, component vnode, trusted vnode, fragment vnode, or keyed fragment vnode.
 
-Total: 2 fields
-
-- `vnode.tag` - Tag/component reference
-- `vnode.attrs` - Resolved attributes
+- Holes: `true`, `false`, `null`, and `undefined`
+- Text: `"string"`, `0`, `1.2`, and similar
+- Control: `(render, context) => done?`, `Cell.map(cell, func)`, and similar
+- Fragment arrays: `[...]`
+- Fragment vnodes: `{tag: "#fragment", attrs: {key?, ref?, children: [...]}}`
+- Keyed fragment vnodes: `{tag: "#keyed", attrs: {key?, ref?, children: [...]}}`
+- Trusted vnodes: `{tag: "#trust", attrs: {key?, children: ["value"]}}`
+- DOM vnode: `{tag: "elem", attrs: {key?, ref?, children: [...], ...}}`
+- Component vnode: `{tag: Component, attrs: {key?, ref?, children: [...], ...}}`
 
 Notes:
 
-- This just resolves the hyperscript selector.
-- The attributes is *always* an object, even if it's empty.
+- `m` just resolves the hyperscript selector into attributes.
+- The attributes are *always* an object, even if it's empty.
 - The children are *always* an array, even if it's empty.
+- This is *not* normalized. It's just returned directly.
 
 ## Resolved vnode structure
 
@@ -109,7 +117,7 @@ Here's the general vnode structure, consisting of 5 integers + 5 polymorphic fie
 	- Note: `id & 0x00FF` *must* align with `vnode.mask & 0x00FF`.
 - `idata[(id >>> 8) * 4 + 0] = status` - Status mask
 	- `mask & 1 << 0` = Has removal hook on self or descendant
-	    - This flag is reset on every element after checking, and is re-toggled if it still has one added
+		- This flag is reset on every element after checking, and is re-toggled if it still has one added
 		- This flag is unset on parents with no subscribed children after checking
 	- `mask & 1 << 1` = Has removal hook on self
 	- `mask & 1 << 2` = Has meaningful DOM attributes

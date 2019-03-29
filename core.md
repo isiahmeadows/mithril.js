@@ -35,15 +35,46 @@ type CellDone = () => any;
 
 This is purely a convention commonly used throughout the API. This is heavily inspired by React Hooks, but aims to keep the runtime overhead to a minimum. It also is not present in the core bundle because 99% of uses can generally just be written as a design pattern. And of course, there's a heavy FP inspiration here, but a pragmatic, impure one.
 
+### How you create cells
+
+Cells are simple functions that take a required `send` method and return an optional `done` method. They conceptually just send values from the cell to be eventually listened to, and that listener calls the returned `done` whenever it's done receiving events.
+
+```js
+const cell = (send) => {
+	// These aren't the only things you can do - it's pretty flexible.
+	listenToSomething(thing, event => send(event)) // Send events
+	for (const value of iter) send(value) // Send a list of values
+}
+```
+
+### How you transform cells
+
+Cell transforms take one or more cells (and maybe other parameters like a mapping function or a value) and return a new cell. Basically, something like this most of the time:
+
+```js
+function transform(cell, ...args) {
+	return (send) => {
+		// These aren't the only things you can do - it's pretty flexible.
+		listenToSomething(thing, value => send(value))
+	}
+}
+```
+
 ### Why?
 
 There's a few reasons:
 
-- Components can be functions from a cell of attributes to a vnode tree, so lifecycle hook naturally fall from the model.
-- This is what would be our answer to React Hooks, just substantially lower in overhead. And hey, you don't actually *need* a library to use this.
+- Components can be functions from a cell of attributes to a vnode tree, so lifecycle hooks naturally fall from the model.
+- This is part 1 of our answer to React Hooks, just substantially lower in overhead. And hey, you don't actually *need* a library to use this.
 - Most streaming needs can directly translate to this.
 
 Also, there's a handful of helpers [here](https://github.com/isiahmeadows/mithril.js/tree/v3-redesign/helpers) based on [some of these hooks](https://usehooks.com/), in case you want to know what it could look like in practice. Some of those use [some built-in utilities](mvp-utils.md#cell-utilities).
+
+### What about streams?
+
+Streams have an explicit ability to end themselves. Cells cannot, and this inability aligns better with the fact components can't remove themselves in the model of virtual DOM frameworks - only a parent component can remove a child component.
+
+In addition, cells are purely a function-based design pattern. They require no library at the lowest level, so Mithril can operate on these without any special dependencies.
 
 ## Components
 
@@ -98,10 +129,10 @@ The primary hyperscript API is still exposed as usual via `mithril/m` and `Mithr
 	- `xmlns` sets the raw namespace to construct this with. For the DOM renderer, this by default just follows HTML's rules regarding namespace inference. Note that this sets the implicit namespace to use for child nodes, too.
 	- DOM attributes other than event handlers *may* be set to cells rather than raw values. This enables updates without actually performing a full diff, which is significantly faster. (We'll trash benchmarks that way, but it also just makes more sense in this model.)
 	- This follows mostly the same hyperscript API as usual.
-- Fragment: `m("#fragment", ...)`, `[...]`
-- Keyed: `m("#keyed", ...)`
+- Fragment: `m(":fragment", ...)`, `[...]`
+- Keyed: `m(":keyed", ...)`
 - Text: `"..."`
-- Trust: `m("#html", ...)`
+- Trust: `m(":html", ...)`
 - Control: `controlBody`
 - Component: `m(Component, ...)`
 
@@ -169,13 +200,6 @@ There's three reasons I mandate this:
 - It avoids the question of what to do with `m("")` - if you follow the rules logically, it's equivalent to `m("div")`, but intuitively, for many, it's equivalent to `null`.
 	- Relevant GitHub issue: [#723](https://github.com/MithrilJS/mithril.js/issues/723)
 	- Relevant Gitter discussion: [11 Dec 2015](https://gitter.im/mithriljs/mithril.js/archives/2015/12/11), [12 Dec 2015](https://gitter.im/mithriljs/mithril.js/archives/2015/12/12)
-- Special built-in components can now just start with a `#`, aligning with the DOM.
-	- `"#text"` - This is the actual `nodeName` of text nodes
-	- Other DOM nodes have their own special node names:
-		- CDATA sections: `"#cdata-section"`
-		- Comments: `"#comment"`
-		- Documents: `"#document"`
-		- Document fragments: `"#document-fragment"`
 
 ## Why keep vnodes JSON-compatible?
 
@@ -222,10 +246,17 @@ Async rendering frames operate in this order for each root being redrawn:
 
 In addition to the `render` callback, there's an additional `context` parameter passed to the control vnode's body, with a few useful methods for more advanced cases.
 
-- Get render type: `context.renderType()`
-	- This is for cases like third party integration when you need to *not* invoke DOM-dependent libraries in server-side code.
-	- This is used by `mithril/trust` to determine what to render.
-	- This is returns `"html"` for `mithril/render-html` and `"dom"` for `mithril/render`
+- Get render info: `context.renderInfo`
+	- This is for cases like third party integration when you need to *not* invoke DOM-dependent libraries in server-side code. The data here is considered static and is almost always going to be global to that module.
+	- There are only two required properties, `isStatic` and `type`, but third-party renderers can add anything else they like.
+		- `isStatic` - `true` if the result is being rendered once to a serialized string, `false` otherwise.
+		- `type` - A descriptive string uniquely referring to this renderer. This doesn't need to be unique to all entry points, but only to the backing renderer itself - a native renderer should *not* return `"dom"`, for example.
+	- When `mithril/render-html` is used:
+		- `context.renderInfo.isStatic` is set to `true`
+		- `context.renderInfo.type` is set to `"html"`
+	- When `mithril/render` is used:
+		- `context.renderInfo.isStatic` is set to `false`
+		- `context.renderInfo.type` is set to `"dom"`
 - Update view sync: `context.renderSync(factory)`
 	- This is similar to `render(factory)`, but operates synchronously and either synchronously throws or synchronously returns `undefined`.
 	- An error is thrown if this tree is currently being redrawn or this control vnode's body is being invoked. (As in, this does not support recursive invocations.)
@@ -251,7 +282,7 @@ In short:
 - That `render` is a `render(view)`, which explicitly renders as necessary and returns a promise resolved once it's committed.
 - `done` is invoked before removing and/or replacing the control vnode.
 - `context` is an object with some helpful contextual methods, to enable and augment more advanced use cases:
-	- `context.renderType()` - Return a descriptive string of the current rendering environment.
+	- `context.renderType` - A key/value object describing current rendering environment.
 	- `context.renderSync(view)` - Like `render(view)`, but synchronous. Errors are thrown synchronously, and it just returns `undefined`.
 	- `context.scheduleLayout(callback, cancel?)` - Schedule a callback for this context and resolve once it runs. Only one callback can be scheduled per context, so the previous one is cancelled first, invoking the previous `cancel` if applicable.
 
@@ -263,7 +294,10 @@ type ControlBody = (render: ControlRender, context: ControlContext) => void | Ce
 type ControlRender = (children: Children) => Promise<void>;
 
 interface ControlContext {
-	renderType(): string;
+	renderInfo: {
+		isStatic: boolean;
+		type: string;
+	};
 	renderSync(children: Children): void;
 	scheduleLayout(callback: () => any, cancel?: () => any): Promise<void>
 }
@@ -301,6 +335,8 @@ This is mostly the existing renderer API, but with some modifications. It's expo
 - `hydrate(root, vnode)` - Renders a root vnode. This is exposed in the full bundle via `Mithril.hydrate`, but is *not* exposed in the core bundle. (It's tree-shaken out.)
 	- This assigns an expando `._ir` to the root.
 
+- `abortable((signal, render, context) => ...)` - Invokes a callback with an abort signal (polyfilled with something that works with `request` if necessary) that's called on `done` and ignores the return value (useful if it's a simple async arrow function). This is useful with `fetch` and `mithril/request` for cleaning up requests, and it's a pretty simple utility.
+
 Notes:
 
 - For `render`:
@@ -315,49 +351,60 @@ Notes:
 	- If an error is thrown at any point, all successfully added removal hooks are called immediately before throwing the caught error. If any of these throw, their errors replace the initially caught error and are rethrown instead.
 	- This shares a lot of code with `render`, hence why they're in the same module.
 
-## Closure components
+## Sugared components
 
-This is exposed under `mithril/component` and exposed via `Mithril.component`.
+This is exposed under `mithril/component` with each exposed in the core bundle.
 
-- `component((attrs, context) => (attrs, prev) => view)`
-    - `attrs` - The current attributes.
-    - `prev` - The previous attributes or `undefined` if it's the first render.
+- `component((attrs, context) => (attrs, prev) => view)`, exposed in the global bundle via `Mithril.component`.
+	- `attrs` - The current attributes.
+	- `prev` - The previous attributes or `undefined` if it's the first render.
 	- `context` - The redraw context:
-		- `context.renderType()` - Delegates to the real `context.renderType()`.
-		- `context.redraw()` - Schedule an async redraw.
-		- `context.redrawSync()` - Perform a sync redraw.
-		- `context.wrap(func)` - When `func` returns/resolves/rejects/throws, schedule an async redraw.
-	- This is just like `closure`, but sugars over attributes, too.
+		- `context.renderInfo` - Set to the outer `context.renderInfo`.
+		- `context.redraw()` - Schedule an explicit async redraw for this component.
+		- `context.redrawSync()` - Perform a sync redraw for this component.
+		- `context.onDone = func` - Invoke `func` when this component is being removed.
 	- This wraps all event handlers, including component event handlers, to schedule an auto-redraw if you return anything other than `false`.
 
-Note that this doesn't pierce through control vnodes and component vnodes to their children - it simply rewrites the returned vnode tree internally.
+- `pure((attrs, prev) => view)`, exposed in the global bundle via `Mithril.pure`.
+	- `attrs` - The current attributes.
+	- `prev` - The previous attributes or `undefined` if it's the first render.
+	- Return `prev` directly if you want to retain the previous subtree.
+	- This is just like `closure`, but sugars over attributes, too.
+	- This does *not* schedule any redraws. If you need to redraw locally, it's not a pure component.
+	- This is mostly sugar for `attrs => Cell.scanMap(attrs, undefined, (prev, attrs) => [attrs, view(attrs, prev)])`, but it doesn't have a dependency on [`mithril/cell`](mvp-utils#cell-utilities).
 
-Also, note that this must be from the same library version as `mithril/dom`.
+Note that this doesn't pierce through control vnodes and component vnodes to their children - it simply rewrites the returned vnode tree internally.
 
 This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-redesign/src/component.mjs).
 
 ### Why?
 
-Sometimes, it's easier to think procedurally and method-oriented and in super stateful, relatively static components like controlled forms and some inputs, it's sometimes more concise.
+Sometimes, it's easier to think procedurally and method-oriented and in super stateful, relatively static components like controlled forms and inputs, it's often more concise.
 
 ```js
-// Native reducer
+// Native stateful component
 function Counter() {
-    return (context, count = 0) => [
-        m("button", {onclick: () => context.update(count - 1)}, "-"),
-        m(".display", count),
-        m("button", {onclick: () => context.update(count + 1)}, "+"),
-    ]
+	return (render) => {
+		let count = 0
+		redraw()
+		function redraw() {
+			render([
+				m("button", {onclick() {count--; redraw() }}, "-"),
+				m(".display", count),
+				m("button", {onclick() {count++; redraw() }}, "+"),
+			])
+		}
+	}
 }
 
 // Closure
 const Counter = closure(() => {
-    let count = 0
-    return () => [
-        m("button", {onclick: () => count--}, "-"),
-        m(".display", count),
-        m("button", {onclick: () => count++}, "+"),
-    ]
+	let count = 0
+	return () => [
+		m("button", {onclick: () => count--}, "-"),
+		m(".display", count),
+		m("button", {onclick: () => count++}, "+"),
+	]
 })
 ```
 
@@ -367,17 +414,15 @@ Also, it's just generally useful when you store your model entirely separate fro
 
 Is this a common enough *need* (not simply *want*) to include in the core bundle? I'm leaning towards a yes, since it's *sometimes* more concise and a little more streamlined. However, that "sometimes" is really an "almost never" in practice based on my experimentation, with most use cases being either forms, model-driven components, or something similarly stateful, self-contained, and non-reactive. I've only once in the `src/` or `examples/` folders needed this, and even in many of the cases you'd expect, it's neither more concise nor necessarily more readable.
 
-It's worth noting that the optimized variant's vnode rewriting mechanism dives into some arcane details about vnode representation to avoid slowdown while it tries to minimize copies.
+It's worth noting that optimizing the vnode rewriting mechanism can get slightly arcane at times, so it's probably better that it remains in core.
 
 ## Core bundle
 
-The core bundle, `mithril/core.js`, exposes the following under the `Mithril` namespace:
+The core bundle, `mithril/core`, exposes the following under the `Mithril` namespace and as a UMD module:
 
-- `render` from `mithril/dom` (but not `hydrate`)
-- `component` from `mithril/component`
-- `ref` from `mithril/ref`
-
-It also exposes `mithril/m` as `m` globally.
+- `m` from `mithril/m`
+- `render` and `abortable` from `mithril/dom` (but not `hydrate`)
+- `component` and `pure` from `mithril/component`
 
 ## General notes
 

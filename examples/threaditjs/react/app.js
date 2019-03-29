@@ -1,25 +1,20 @@
-// Mithril redesign: 144 lines.
-// React (this): 206 lines.
-// React + experimental Hooks: 174 lines.
-// Totals exclude this header comment.
-// Mithril redesign is ~30% smaller than React, ~17% smaller than React + hooks.
 import {BrowserRouter, Link, Route} from "react-router"
 import {api, demoSource} from "../threaditjs-common/common.mjs"
 import React from "react"
 import ReactDOM from "react-dom"
 
-//shared
+// shared
 function Header() {
 	return <>
 		<p className="head_links">
-			<a href={demoSource}>Source</a> | {""}
+			<a href={demoSource("react")}>Source</a> | {""}
 			<a href="http://threaditjs.com">ThreaditJS Home</a>
 		</p>
 		<h2><Link href="/">ThreaditJS: React</Link></h2>
 	</>
 }
 
-//home
+// home
 class Home extends React.Component {
 	constructor(...args) {
 		super(...args)
@@ -27,8 +22,9 @@ class Home extends React.Component {
 			state: "loading",
 			threads: [],
 		}
+		this.controller = new AbortController()
 
-		api.home().then((response) => {
+		api.home({signal: this.controller.signal}).then((response) => {
 			document.title = "ThreaditJS: React | Home"
 			this.setState({
 				state: "ready",
@@ -41,36 +37,50 @@ class Home extends React.Component {
 		})
 	}
 
+	componentWillUnmount() {
+		this.controller.abort()
+	}
+
 	render() {
 		const {state, threads} = this.state
+
 		return <>
 			<Header />
-			<div className="main">{
-				state === "loading" ? <h2>Loading</h2>
-					: state === "notFound" ? <h2>Not found! Don't try refreshing!</h2>
-						: state === "error" ? <h2>Error! Try refreshing.</h2>
-							: <>
-					{threads.map((thread) =>
-						<React.Fragment key={thread.id}>
-							<p>
-								<Link
-									href={`/thread/${thread.id}`}
-									dangerouslySetInnerHTML={{
-										__html: T.trimTitle(thread.text)
-									}}
-								/>
-							</p>
-							<p className="comment_count">
-								{thread.comment_count} comment(s)
-							</p>
-							<hr />
-						</React.Fragment>
-					)}
-					<NewThread onSave={(thread) => {
-						this.setState({threads: [...threads, thread]})
-					}} />
-				</>
-			}</div>
+			<div className="main">{(() => {
+				switch (state) {
+					case "loading":
+						return <h2>Loading</h2>
+
+					case "notFound":
+						return <h2>Not found! Don&apos;t try refreshing!</h2>
+
+					case "error":
+						return <h2>Error! Try refreshing.</h2>
+
+					default:
+						return <>
+							{threads.map((thread) =>
+								<React.Fragment key={thread.id}>
+									<p>
+										<Link
+											href={`/thread/${thread.id}`}
+											dangerouslySetInnerHTML={{
+												__html: T.trimTitle(thread.text)
+											}}
+										/>
+									</p>
+									<p className="comment_count">
+										{thread.comment_count} comment(s)
+									</p>
+									<hr />
+								</React.Fragment>
+							)}
+							<NewThread onSave={(thread) => {
+								this.setState({threads: [...threads, thread]})
+							}} />
+						</>
+				}
+			})()}</div>
 		</>
 	}
 }
@@ -92,7 +102,7 @@ class NewThread extends React.Component {
 				ev.preventDefault()
 				ev.stopPropagation()
 				api.newThread(value).then(({data: thread}) => {
-					onSave(thread)
+					if (onSave) onSave(thread)
 					this.setState({value: ""})
 				})
 			}}>
@@ -105,7 +115,7 @@ class NewThread extends React.Component {
 	}
 }
 
-//thread
+// thread
 class Thread extends React.Component {
 	constructor(...args) {
 		super(...args)
@@ -113,19 +123,32 @@ class Thread extends React.Component {
 			state: "loading",
 			node: undefined,
 		}
-
+		this.controller = undefined
 		T.time("Thread render")
+	}
 
-		api.thread(this.props.id).then(({root: node}) => {
-			document.title = `ThreaditJS: React | ${T.trimTitle(node.text)}`
-			this.setState({state: "ready", node})
-		}, (e) => {
-			this.setState({state: e.status === 404 ? "notFound" : "error"})
-		})
+	updateThreads() {
+		this.controller = new AbortController()
+		api.thread(this.props.id, {signal: this.controller.signal})
+			.then(({root: node}) => {
+				document.title = `ThreaditJS: React | ${T.trimTitle(node.text)}`
+				this.setState({state: "ready", node})
+			}, (e) => {
+				this.setState({state: e.status === 404 ? "notFound" : "error"})
+			})
 	}
 
 	componentDidMount() {
 		T.timeEnd("Thread render")
+		this.updateThreads()
+	}
+
+	componentDidUpdate(prevProps) {
+		if (this.props.id !== prevProps.id) this.updateThreads()
+	}
+
+	componentWillUnmount() {
+		if (this.controller != null) this.controller.abort()
 	}
 
 	render() {
@@ -133,12 +156,23 @@ class Thread extends React.Component {
 		const {id} = this.props
 		return <>
 			<Header />
-			<div className="main"><React.Fragment key={id}>{
-				state === "loading" ? <h2>Loading</h2>
-					: state === "notFound" ? <h2>Not found! Don't try refreshing!</h2>
-						: state === "error" ? <h2>Error! Try refreshing.</h2>
-							: <ThreadNode node={node} />
-			}</React.Fragment></div>
+			<div className="main">
+				<React.Fragment key={id}>{(() => {
+					switch (state) {
+						case "loading":
+							return <h2>Loading</h2>
+
+						case "notFound":
+							return <h2>Not found! Don&apos;t try refreshing!</h2>
+
+						case "error":
+							return <h2>Error! Try refreshing.</h2>
+
+						default:
+							return <ThreadNode node={node} />
+					}
+				})()}</React.Fragment>
+			</div>
 		</>
 	}
 }
@@ -149,7 +183,8 @@ function ThreadNode({node}) {
 			<p dangerouslySetInnerHTML={{__html: node.text}} />
 			<div className="reply"><Reply node={node} /></div>
 			<div className="children">
-				{node.children.map((child) => <ThreadNode node={child} />)}
+				{/* eslint-disable-next-line react/jsx-key */}
+				{node.children.map((child) => <ThreadNode key={child.id} node={child} />)}
 			</div>
 		</div>
 	)
@@ -192,7 +227,6 @@ class Reply extends React.Component {
 				<a onClick={(ev) => {
 					ev.preventDefault()
 					ev.stopPropagation()
-					ev.target.value
 					this.setState({replying: true, newComment: ""})
 				}}>
 					Reply!
@@ -202,7 +236,7 @@ class Reply extends React.Component {
 	}
 }
 
-//router
+// router
 ReactDOM.render(document.getElementById("app"), (
 	<BrowserRouter>
 		<Route path="/" exact component={Home} />

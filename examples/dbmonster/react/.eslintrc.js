@@ -1,5 +1,6 @@
 module.exports = {
 	"globals": {
-		"Mithril": false,
+		"React": false,
+		"ReactDOM": false,
 	}
 };
