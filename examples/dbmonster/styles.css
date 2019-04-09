@@ -22,5 +22,5 @@ table {border-collapse:collapse;border-spacing:0;}
 
 .popover-content {padding:9px 14px;}
 
-.Query {position:relative;}
-.Query:hover .popover {display:block;left:-100%;width:100%;}
+.query {position:relative;}
+.query:hover .popover {display:block;left:-100%;width:100%;}

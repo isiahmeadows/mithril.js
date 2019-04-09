@@ -15,7 +15,7 @@ class AppComponent {
 	update() {
 		requestAnimationFrame(() => { this.update() })
 
-		this.databases = ENV.generateData().toArray()
+		this.databases = ENV.getDatabases()
 
 		if (renderStage === 0) {
 			renderStage = 1
@@ -46,7 +46,7 @@ AppComponent.annotations = [new ng.core.Component({
 					</td>
 					<td
 						*ngFor='let q of db.lastSample.topFiveQueries'
-						[class]='"Query " + q.elapsedClassName'
+						[class]='q.elapsedClassName'
 					>
 						{{q.formatElapsed}}
 						<div class='popover left'>

@@ -56,7 +56,7 @@ export default function component(init) {
 				child.tag === "#text"
 			) return child
 			const isComponent = typeof child.tag === "function"
-			const bound = {}
+			const bound = Object.create(null)
 			for (const key of Object.keys(child.attrs)) {
 				bound[key] = bindKey(key, child.attrs[key], isComponent)
 			}

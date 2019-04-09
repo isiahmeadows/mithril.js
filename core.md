@@ -127,27 +127,32 @@ The primary hyperscript API is still exposed as usual via `mithril/m` and `Mithr
 - Hole: `null`/`undefined`/`true`/`false`
 - Element: `m("div", ...)`
 	- `xmlns` sets the raw namespace to construct this with. For the DOM renderer, this by default just follows HTML's rules regarding namespace inference. Note that this sets the implicit namespace to use for child nodes, too.
-	- DOM attributes other than event handlers *may* be set to cells rather than raw values. This enables updates without actually performing a full diff, which is significantly faster. (We'll trash benchmarks that way, but it also just makes more sense in this model.)
+	- DOM attributes other than event handlers *may* be set to cells rather than raw values. This enables updates without actually performing a full diff, which is significantly faster. (We'll blow benchmarks out of the water that way, but it also just makes more sense in this model.) Note that this doesn't carry over to components.
 	- This follows mostly the same hyperscript API as usual.
-- Fragment: `m(":fragment", ...)`, `[...]`
-- Keyed: `m(":keyed", ...)`
+- Fragment: `m("#fragment", ...)`, `[...]`
+- Keyed: `m("#keyed", ...)`
 - Text: `"..."`
-- Trust: `m(":html", ...)`
+- Trust: `m("#html", ...)`
+- Catch: `m("#catch", {onerror}, ...)`
+	- `onerror(e)` is called with every exception in that subtree that propagates to Mithril's renderer from user code.
+	- This exists mainly for error reporting.
+	- You can propagate an error upward by rethrowing it.
+	- When an error propagates past a subtree, that subtree is synchronously removed with inner `done` callbacks invoked. (Errors in those are added to the error list, and the list will be eventually rethrown in a property of a synthetic error.)
 - Control: `controlBody`
 - Component: `m(Component, ...)`
 
-If you're a JSX user needing to reference these names, you should just alias them locally, like `const Fragment = ":fragment"`. But in addition, you should set the following Babel JSX plugin options when using `@babel/preset-react`:
+If you're a JSX user needing to reference these names, you should just alias them locally, like `const Fragment = "#fragment"`. But in addition, you should set the following Babel JSX plugin options when using `@babel/preset-react`:
 
 - `pragma: "m"`
-- `pragmaFrag: "':fragment'"`
+- `pragmaFrag: "'#fragment'"`
 
-Or if you're using the `@jsx` and `@jsxFrag` special comments, you should use `/* @jsx m @jsxFrag ":fragment" */`.
+Or if you're using the `@jsx` and `@jsxFrag` special comments, you should use `/* @jsx m @jsxFrag "#fragment" */`.
 
 ### Attributes
 
 Attributes are the bread and butter of element manipulation. These are how things actually get reacted to, other than children. For DOM vnodes, this is how you update values, classes, and the like. For components, this is how you pass data and callbacks to them.
 
-There are three special vnode attributes:
+There are three special name vnode attributes:
 
 - `key` - This tracks vnode identity and serves two functions:
 	- In `"#keyed"` children: linking an instance to a particular identity. This is how keyed fragments work today. Note that in this case, they're treated as object properties.
@@ -156,35 +161,28 @@ There are three special vnode attributes:
 - `children` - This is the attribute's list of children.
 	- Children are always normalized to an array, even if just an empty array and even if it's for a component vnode. Note that the selector and attributes still take precedence over any children parameters.
 
-Attributes other than `key`, `children`, and event handlers (like `onclick` or a component's `onupdate`) *may* be set to cells rather than raw values. This simplifies a lot of attribute binding for components and DOM elements. Also, by side effect, it reduces a lot of our diff calculation overhead, but this isn't why I chose to allow this.
-
-- For components, this emits a new set of attributes for that component.
-- This gives us much of the benefits of a system like Glimmer's pre-compiled VM architecture without the tooling overhead.
+On DOM elements, attributes other than event handlers, `key`, `is`, `children`, and `ref` *may* be set to cells rather than raw values. This simplifies a lot of attribute binding for DOM elements. Also, by side effect, it sidesteps a lot of our diff calculation overhead, but this isn't why I chose to allow this. It gives us much of the benefits of a system like Glimmer's pre-compiled VM architecture without the tooling overhead.
 
 Note that the hyperscript API always normalizes attributes to an object, even if it's an empty one. The renderer expects and assumes this.
 
 ### Refs
 
-TODO: make this more sensible prose
-
 - Request element/ref access: `ref: (elem) => ...`
 	- For element vnodes, `ref` is called with the backing DOM node. It's internally ignored on all other vnode types.
-	- For trusted vnodes, `ref` is called with an array containing the newly added DOM nodes.
-	- For fragments, `ref` is called with the first DOM node + the total number of DOM nodes in the fragment.
-	- For components, `ref:` is ignored and it's also not censored from the attributes. If there really *is* any interesting value for a ref, you should just call it directly from the attributes itself.
-
-TODO: make this more sensible prose
+	- For trusted vnodes and fragments, `ref` is called with an array containing the newly added DOM nodes.
+	- For components, `ref:` is ignored and it's also not censored from the attributes. If there really *is* any interesting value for a ref, you should call it directly in the component itself.
 
 Notes:
 
 - Refs are somewhat different from React's:
-	- Refs are designed to be control mechanisms, not simply exposure mechanisms. They work more like a single-use token you can pass around and asynchronously query. Likewise, these are *not* saved in subsequent renders.
+	- Refs are always invoked on every update that reaches them, as they're not simply exposure mechanisms but also control mechanisms.
 	- [React cares about ref identity](https://reactjs.org/docs/refs-and-the-dom.html#caveats-with-callback-refs), but this complicates the model a lot, especially when it's designed only for exposure.
-	- You can see refs in action in [the TodoMVC example](https://github.com/isiahmeadows/mithril.js/blob/v3-design/examples/todomvc/view.mjs)
-- Technically, I could just provide `vnode.dom` instead of `ref`, but there's three main reasons why I'm not:
-	2. It's generally poor practice to try to mutate the DOM outside of event handlers (which provide it via `ev.target.value`) or a batched request. Forcing batching also keeps performance up and running.
-	3. It makes it impossible to access an uninitialized element, simplifying types and avoiding potential for bugs.
-	4. It complicates access for simpler cases.
+	- You can see refs in action in [the TodoMVC example](https://github.com/isiahmeadows/mithril.js/blob/v3-design/examples/todomvc/view.mjs).
+- Technically, I could just provide `vnode.dom` + an `oncreate`/`onupdate` equivalent instead of `ref`, but there's four three reasons why I'm not:
+	1. It's generally poor practice to try to mutate the DOM outside of event handlers (which provide it via `ev.target.value`) or a batched request. Forcing batching also keeps performance up and running.
+	2. It makes it impossible to access an uninitialized element, simplifying types and avoiding potential for bugs.
+	3. It complicates access for simpler cases.
+	4. 1 hook is better than 2. I'd need a hook for `oncreate`/`onupdate` anyways, so it's much simpler to do it this way.
 
 ### Selectors
 
@@ -200,6 +198,7 @@ There's three reasons I mandate this:
 - It avoids the question of what to do with `m("")` - if you follow the rules logically, it's equivalent to `m("div")`, but intuitively, for many, it's equivalent to `null`.
 	- Relevant GitHub issue: [#723](https://github.com/MithrilJS/mithril.js/issues/723)
 	- Relevant Gitter discussion: [11 Dec 2015](https://gitter.im/mithriljs/mithril.js/archives/2015/12/11), [12 Dec 2015](https://gitter.im/mithriljs/mithril.js/archives/2015/12/12)
+- It's less implicit information you have to keep in mind and infer. If it says `div`, you know at a glance it's a `<div>` that it renders to. 99% of development isn't writing, but reading, and that "at a glance" information is incredibly valuable to have. I find myself, as a Mithril maintainer, taking twice as long to process `m(".widget")` than `m("button.confirm")` or even `m("div.widget")`. Even though it's still pretty quick for me, I have to stop and mentally reparse after reading the tokens (the implied `div` in `div.widget` rather than just being decorated `widget`) as my brain reads the word before realizing that's the class name and not the tag name.
 
 ## Why keep vnodes JSON-compatible?
 
@@ -325,17 +324,17 @@ The solution to async removal without framework support is through an intent sys
 
 This is mostly the existing renderer API, but with some modifications. It's exposed via `mithril/dom`.
 
-- `render(root, vnode)` - Render a tree to a root using an optional previous internal representation. This is exposed in the core bundle via `Mithril.render`.
+- `render(root, attrs?, ...children)` - Render attributes + a tree to a root. This is exposed in the core bundle via `Mithril.render`.
 	- If `root` is currently being redrawn, an error is thrown.
 	- This is synchronous - it only makes sense to do it this way.
 	- This assigns an expando `._ir` to the root if one doesn't exist already.
 
 - `render(root)` - Clear a root.
 
-- `hydrate(root, vnode)` - Renders a root vnode. This is exposed in the full bundle via `Mithril.hydrate`, but is *not* exposed in the core bundle. (It's tree-shaken out.)
+- `hydrate(root, attrs?, ...children)` - Hydrates attributes + a tree to a root. This is exposed in the full bundle via `Mithril.hydrate`, but is *not* exposed in the core bundle. (It's tree-shaken out.)
 	- This assigns an expando `._ir` to the root.
 
-- `abortable((signal, render, context) => ...)` - Invokes a callback with an abort signal (polyfilled with something that works with `request` if necessary) that's called on `done` and ignores the return value (useful if it's a simple async arrow function). This is useful with `fetch` and `mithril/request` for cleaning up requests, and it's a pretty simple utility.
+- `abortable((signal, render, context) => ...)` - Invokes a callback with an abort signal (ponyfilled with something that works with `mithril/request` if necessary) that's called on `done` and ignores the return value (useful if it's a simple async arrow function). This is useful with `fetch` and `mithril/request` for cleaning up requests, and it's a pretty simple utility.
 
 Notes:
 
@@ -350,6 +349,15 @@ Notes:
 	- An error is thrown if any differences exist between the existing DOM tree the incoming vnode tree.
 	- If an error is thrown at any point, all successfully added removal hooks are called immediately before throwing the caught error. If any of these throw, their errors replace the initially caught error and are rethrown instead.
 	- This shares a lot of code with `render`, hence why they're in the same module.
+
+- For `abortable`:
+	- This only exists here instead of `mithril/component` because it relies on certain DOM checks, and I'd rather keep everything in core with explicit DOM dependencies constrained to `mithril/dom` for architectural reasons, including easier usage with Node.
+
+### Why allow attributes to be specified inline?
+
+It makes it much easier in several circumstances to just sprinkle in a little bit of Mithril onto a page, since you could just render some attributes. It also makes a few things like portals a little easier to come by.
+
+And from a code standpoint, it's not hard - it's as easy as just moving the internal entry point from a retained unkeyed fragment to a retained unkeyed element.
 
 ## Sugared components
 

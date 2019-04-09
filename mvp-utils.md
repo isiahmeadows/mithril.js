@@ -26,88 +26,229 @@ This is exposed under `mithril/router` and in the full bundle via `Mithril.Route
 		- When the prefix starts with `?`, routing is based on the URL's query + hash.
 		- When the prefix starts with anything else, routing is based on the full URL path, query, and hash.
 		- The default prefix is `"#!"`.
-		- When no DOM exists, the default history throws an error from every method.
-	- `Router.global.set(href | setOpts).then(...)` - Set the current route.
-		- `href`/`opts.href` - The target URL to move to. Specifying a string is equivalent to passing this without parameters.
+	- `Router.global.set(href, opts).then(...)` - Set the current route.
+		- `href` - The target URL to move to. Specifying a string is equivalent to passing this without parameters.
 		- `opts.replace` - Whether to replace the current history entry or append a new one.
-		- `opts.state` - The state to associate with the history entry
-		- `opts.title` - The title of the history entry
+		- `opts.state` - The state to associate with the history entry.
+		- `opts.title` - The title of the history entry. Currently, out of all major browsers, this only affects the UI in Firefox, but it exists in case people want to use it.
 		- This is intentionally unwieldy. Prefer `Router.Link` where possible.
 		- The returned promise awaits the route's rendering and all applicable redirects before it returns.
-	- `Router.global.pop().then(...)` - Go back to the previous route.
-		- The returned promise awaits the route's rendering and all applicable redirects before it returns.
-	- When you pass a custom router, you need to implement the following methods:
-		- `router.set({href, replace?, ...opts})` - Set the current history entry to `href` with router-specific `opts`, replacing it if `replace: true`.
-		- `router.pop()` - Pop the most recent history entry.
-		- `router.href` - Get the current entry's URL.
-		- `router.state` - Get the current entry's state.
-		- `router.resolve(url)` - Resolve a URL into one that could be used for external navigation. (optional, required only for `Router.Link`)
-	- There are three special methods you shouldn't call, but exist to satisfy the above interface. You generally shouldn't call these unless you really need to
-		- `Router.global.href` - Return the current URL relative to the prefix.
-		- `Router.global.state` - Return the current history state
-		- `Router.global.subscribe(() => ...)` - Invoke a callback on each update
+	- `Router.global.go(n).then(...)` - Move `n` history entries forward if positive, backward if negative.
+		- The returned promise awaits the next route's rendering and all applicable redirects before it returns.
+	- `Router.global.back()` - Go back to the previous history entry.
+		- Sugar for `Router.global.go(-1)` and returns the resulting promise.
+	- `Router.global.forward()` - Go back to the next history entry.
+		- Sugar for `Router.global.go(1)` and returns the resulting promise.
+	- When no DOM exists, the default history throws an error from every method.
 
 - `Router.match({...routes, default, current?, router = Router.global})` - Dispatch based on a route.
-	- `current = href | {href, state}` forces a current route, ignoring the history altogether. Passing a string is equivalent to passing `{path: current, state: null}`. Don't use this unless you're rendering server-side.
-	- `default:` is the fallback route if no route is detected, if no routes match, or if the current route's `href` is literally `""`.
+	- `current = href | {href, state}` forces a current route with optional associated state, ignoring the history altogether. Passing a string is equivalent to passing `{path: current, state: null}`. Don't use this unless you're rendering to a string or similar.
+	- `default:` is the fallback route if no route is detected, if no routes match, or if the current route's `href` is literally `""`. (required)
+	- `router:` - The global router instance to use.
 	- `"/route/:param": (params, match) => ...` - Define a route
 		- `params` contains both query params and template params.
 		- `match` is a child matcher, which carries the same prototype of `Router.match` minus `router` support. Note that 1. a child `current:` overrides the parent `current:` and 2. the raw relative prefix itself is not directly accessible. This need not be directly returned.
 		- Invoke `match({href, ...opts})` or `match("/path")` to replace the current route to a particular sibling path. The first form is detected via the presence of an `href` parameter.
-		- Invoke `match("next")` to skip to the next matching path
+		- Invoke `match("next")` to return the result from the next matching path. This can be done anywhere, including in child views or even passed as a value elsewhere.
 		- This can return either `match`/`Route.match` to skip or a value. The value need not be a vnode, but it can be.
 		- This is exact by default, but the prefix carried by the context specifically *excludes* any final parameter, either `:param` or `:param...`.
 	- When there is no active history (as in, when running without a global DOM and without an explicit `history:`), `current` is required.
 	- If you want a 404 route, define a final route of `"/:path...": () => ...`.
 	- Note: this returns a cell. So this *can* be used independently of Mithril's view.
 
-- `m(Router.Link, {router = Router.global, ...opts}, elem)` - Create a link using the router's parent's implicit prefix
+- `m(Router.Link, {router = Router.global, alert?, ...opts}, elem)` - Create a link using the router's parent's implicit prefix
 	- `children: [elem]` - An element to hook into with `onclick` + `href` (required)
 	- `elem.attrs.href` - The target to route to.
 	- `router:` - The global router instance to use.
-	- All other component options, like `replace: true`, are passed straight to `router.push(opts)`
+	- `alert: string` - A string to `window.confirm` with, in case you want to block navigation. If `null`/`undefined`, no alert is attempted.
+	- All other component attributes, like `replace: true`, are passed straight to `router.set(href, opts)` as router options
+
+- `m(Router.Back, {router = Router.global, n = -1, alert?}, elem)` - Create a link using the router's parent's implicit prefix
+	- `children: [elem]` - An element to hook into with `onclick` (required)
+	- `router:` - The global router instance to use.
+	- `n:` - The numeric offset to go back to, used for `router.go(n)`. Pass `n: -1` to go back to the previous history entry or `n: 1` to go back to the history entry you last went back from.
+	- `alert: string` - A string to `window.confirm` with, in case you want to block navigation. If `null`/`undefined`, no alert is attempted.
+
+If it helps to see what the shape of the API itself looks like, a full, relatively precise TS definition of the above would look like this:
+
+```ts
+export const global: {
+	// Main API
+	prefix: string;
+	set(href: string, options: {
+		state?: object;
+		replace?: boolean;
+		title?: string;
+	}): Promise<void>;
+	go(n: string): Promise<void>;
+
+	// Extra to implement the `Router` interface. Little need exists to invoke
+	// these methods in normal code.
+	confirm(message: string): boolean;
+	subscribe(callback: () => any): () => any;
+	resolve(url: string): string;
+	at(n: number): {href: string, state: string};
+};
+
+// Not a real type - the method itself just returns `undefined`
+// type Redirect = unique undefined
+const redirect: unique symbol;
+interface Redirect { [redirect]: never }
+
+type MaybeRouterOpt = {
+	router?: Router | void | null | undefined;
+};
+
+type RouterOpt<O extends MaybeRouterOpt> =
+	O extends {router: Router} ? O["router"] : typeof global;
+
+// Can't do this because TypeScript checks for recursive *bindings* (with
+// interfaces and properties not normally recursed), not recursive *types*.
+// type MatchResult<Result> = Result | Redirect | Cell<MatchResult<Result>>;
+type MatchResult<Result> = Result | Redirect | (
+    (send: CellSend<MatchResult<Result>>) => void | CellDone
+);
+
+interface MatchOpts<R extends Router, Result> {
+	current?: RouterHistory<R>["href"] | RouterHistory<R>;
+	default: string;
+	[route: string]: (params: object, match: {
+		(options: MatchOpts<R, Result>): Cell<Result>;
+		(next: "next"): MatchResult<Result>;
+		(href: string, options?: SetOptions<R>["options"]): Redirect;
+	}) => MatchResult<Result>;
+}
+
+export function match<O extends MaybeRouterOpt, Result>(
+	options: O & MatchOpts<RouterOpt<O>, Result>
+): Cell<Result>;
+
+export function Link<A extends MaybeRouterOpt>(
+	attrs: Cell<
+		SetOptions<RouterOpt<A>> &
+		A &
+		{alert?: string, children: [ElementVnode<string, {href: string}>]}
+	>
+): (
+	typeof attrs extends Cell<{children: [ElementVnode<infer T, infer A>]}> ?
+	Cell<ElementVnode<T, {
+		[K in keyof Exclude<keyof A, "href">]: A[K];
+		href: string;
+		onclick(event: Event): false;
+	}>> :
+	never
+);
+
+export function Back(
+	attrs: Cell<MaybeRouterOpt & {
+		alert?: string;
+		children: [ElementVnode<string, any>];
+		n?: number;
+	}>
+): (
+	typeof attrs extends Cell<{children: [ElementVnode<infer T, infer A>]}> ?
+	Cell<ElementVnode<T, {
+		[K in keyof Exclude<keyof A, "href">]: A[K];
+		href: string;
+		onclick(event: Event): false;
+	}>> :
+	never
+);
+```
+
+### Custom routers
+
+Custom routers implement the following interface:
+
+```ts
+type SetOptions<R extends Router> =
+	R["set"] extends ((href: string, options?: infer O) => any) ? O : never;
+
+type RouterHistory<R extends Router> =
+	R["at"] extends ((n: number) => infer R) ? R : never;
+
+// So I can use a `this` type in a child `this` context.
+type _SetOptions<R extends Router> = {state?: RouterHistory<R>["state"]};
+interface Router {
+	// Required by `Router.match` and `Router.link`
+	// Set the current history entry to `href` with router-specific `opts`.
+	set(
+		href: RouterHistory<this>["href"],
+		options?: _SetOptions<this>
+	): any;
+
+	// Required by `Router.match`
+	// Register a callback to be called on each update and return a function to
+	// remove the previously registered callback. Duplicates must be tolerated,
+	// since `Router.match` may choose to reuse subscription callbacks, as could
+	// other users.
+	subscribe(callback: () => any): () => any;
+
+	// Required for `Router.Link`
+	// Resolve a URL into one that could be used for external navigation.
+	resolve(url: string): string;
+
+	// Required for `Router.Back`
+	// Move `n` history entries forward if positive, backward if negative.
+	go(n: number): any;
+
+	// Required for `Router.Link` and `Router.Back` when `alert` is non-`null`,
+	// non-`undefined`.
+	// Confirm navigation with a message to the user and return `true` if
+	// approved, `false` if rejected.
+	confirm(message: string): boolean | PromiseLike<boolean>;
+
+	// Required for `Router.Back` and `Router.match`
+	// Return the history entry at offset `n` relative to this on, or `null`/
+	// `undefined` if no known such URL can be determined. Note that `0` is the
+	// current history entry.
+	at(n: number): {href: string, state: string};
+}
+```
+
+The above methods are similarly implemented by the global router with URLs being relative to the prefix, but you generally shouldn't need to call these aside from `Router.global.set(...)` and `Router.global.go()`, documented earlier. (Those also helpfully return promises, where this requires no such thing.)
 
 ### Notes
 
-- Prefer `Router.Link` over explicit `router.push(...)`/`router.replace(...)`/`router.pop(...)` for URLs. Mithril handles most of the boilerplate and
-- Each of these strips the prefix as necessary, and they wrap inconsistencies in the history passed to `Router.create(...)`.
-- `Router.Link` requires `m` from `mithril/m`, but this is otherwise fully zero-dependency, so you *could* use this in both cells and the virtual DOM tree without issue.
+- Prefer `Router.Link` and `Router.Back` over explicit `router.set(...)` and `router.go(n)` for anything like back buttons and links. Mithril handles most of the boilerplate and it also covers accessibility issues as necessary.
+- Each of these wrap inconsistencies in the router passed via `router:`. Note that prefix stripping is a router feature, not a framework feature!
+- `Router.Link` and `Router.Back` create vnodes via a raw object (avoiding the direct `mithril/m` dependency), but this is otherwise fully zero-dependency, so you *could* use this in both cells and the virtual DOM tree without issue.
 - You can have multiple separate `Router.match` instances active at once. So for example, you could use one in your navigation to select which item is considered "active" *and* one in the main page to select which page body to render. As mentioned above, it returns a cell that passes through its output, so you can still use it in other contexts like your data model.
 - This is necessarily somewhat larger than the current v2 router, because of the dynamic route matching.
 
 Also, `Router.Link` should be changed to work like this, for better accessibility and compatibility:
 
 ```js
-Router.Link = attrs => Cell.map(attrs, ({
+Router.Link = (attrs) => (render) => attrs({
 	router = Router.global,
 	children: [{tag, attrs: {onclick, href, ...attrs}}],
 	...opts
-}) => ({tag, attrs: {
-	...attrs,
-	href: router.resolve(href),
-	onclick(ev) {
-		let canChangeRoute = true
+}) => {
+	render({tag, attrs: {
+		...attrs,
+		href: router.resolve(href),
+		onclick(ev) {
+			if (typeof onclick === "function") {
+				if (onclick.call(this, ev) === false) return false
+			} else if (onclick != null && typeof onclick === "object") {
+				onclick.handleEvent(ev)
+			}
 
-		if (typeof onclick === "function") {
-			canChangeRoute = onclick.call(this, ev) !== false
-		} else if (onclick != null && typeof onclick === "object") {
-			onclick.handleEvent(ev)
-		}
+			if (
+				// Skip if `onclick` or a prior listener prevented default
+				!ev.defaultPrevented &&
+				// Ignore everything but left clicks
+				(ev.button === 0 || ev.which === 0 || ev.which === 1) &&
+				// Let the browser handle `target="_blank"`, etc.
+				(!this.target || this.target === "_self") &&
+				// No modifier keys
+				!ev.ctrlKey && !ev.metaKey && !ev.shiftKey && !ev.altKey
+			) Router.push({href, ...opts})
 
-		if (
-			// Skip if `onclick` prevented default
-			canChangeRoute && !ev.defaultPrevented &&
-			// Ignore everything but left clicks
-			(ev.button === 0 || ev.which === 0 || ev.which === 1) &&
-			// Let the browser handle `target="_blank"`, etc.
-			(!this.target || this.target === "_self") &&
-			// No modifier keys
-			!ev.ctrlKey && !ev.metaKey && !ev.shiftKey && !ev.altKey
-		) Router.push({href, ...opts})
-
-		return false
-	},
-}}))
+			return false
+		},
+	}})
+})
 ```
 
 ### Why?

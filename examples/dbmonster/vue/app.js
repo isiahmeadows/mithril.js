@@ -14,7 +14,7 @@ const vm = new Vue({
 	methods: {
 		update() {
 			requestAnimationFrame(() => { this.update() })
-			this.databases = ENV.generateData().toArray()
+			this.databases = ENV.generateData()
 
 			if (renderStage === 0) {
 				renderStage = 1

@@ -18,7 +18,7 @@ If you're confused about all the various bit hacks here and they all look like s
 
 ### Why this complicated mess?
 
-Well, it comes to three things: memory usage, GC churn, and CPU performance. I'm not writing a simple theoretical toy, but a literal UI engine. I'm imagining it built closer to a game physics engine crossed with a VM, so it's near-zero overhead.
+Well, it comes to three things: memory usage, GC churn, and CPU performance. I'm not writing a simple theoretical toy, but a literal UI engine. I'm imagining it built closer to a game physics engine crossed with a VM, so it's leveraging CPU pipelines and caches where possible.
 
 Note that everything beyond the hyperscript vnode structure detailed below is purely implementation detail and is *not* required for any MVP. (It might not even happen, and I'm not going to prototype the redesign's renderer using it - I'll wait until a later point in time to try it out.)
 
@@ -33,6 +33,7 @@ The vnodes are initially just this when returned from views. `m` returns either 
 - Fragment vnodes: `{tag: "#fragment", attrs: {key?, ref?, children: [...]}}`
 - Keyed fragment vnodes: `{tag: "#keyed", attrs: {key?, ref?, children: [...]}}`
 - Trusted vnodes: `{tag: "#trust", attrs: {key?, children: ["value"]}}`
+- Catch vnodes: `{tag: "#catch", attrs: {key?, onerror, children: [...]}}`
 - DOM vnode: `{tag: "elem", attrs: {key?, ref?, children: [...], ...}}`
 - Component vnode: `{tag: Component, attrs: {key?, ref?, children: [...], ...}}`
 
@@ -47,20 +48,21 @@ Notes:
 
 The vnode children, including text strings, are resolved internally to this to allow engines to optimize for a single type map.
 
-Total: 6 fields
+Total: 8 fields
 
 - `vnode.mask` - Inline cache mask
 	- `vnode.mask & 0x000F` - Type ID
 	- `vnode.mask & 1 << 4` - Custom element (either autonomous or customized)
-	- `vnode.mask & 1 << 7` - Has `key`
+	- `vnode.mask & 1 << 5` - Has `key`
 	- `vnode.mask & 1 << 8` - Has `ref`
 	- Note: `id & 0x00FF` *must* align with `vnode.mask & 0x00FF`.
-- `vnode.tag` - Tag/custom element name/component name/control body
-- `vnode.is` - `is` name
-- `vnode.attrs` - Resolved non-special attributes
+- `vnode.tagID` - Resolved ID for tag/`is` name/custom element name/component name/control body
+- `vnode.tagName` - Raw tag/custom element name/component name/control body
+- `vnode.isName` - `is` name
+- `vnode.attrs` - Resolved non-special attributes, `oncatch` for catch vnodes
 - `vnode.children` - Children/text
-- `vnode.key` - Resolved `attrs.key`
-- `vnode.ref` - Resolved `attrs.ref`
+- `vnode.keyID` - Resolved ID for `attrs.key`
+- `vnode.ref` - Resolved `attrs.ref` for non-component object vnodes
 
 Notes:
 
@@ -88,8 +90,6 @@ Also, not everyone has the same needs as the DOM renderer.
 
 ## Mithril DOM IR structure
 
-TODO: update this
-
 The IR vnodes are arranged as arrays to minimize memory and let them be quickly read without confusing the engine with polymorphic types. Specifically:
 
 - No engine stores raw descriptors in arrays, and none of them store ICs for individual elements like they do for objects. It's always one of a few types, with both dense and holey variants:
@@ -101,112 +101,97 @@ The IR vnodes are arranged as arrays to minimize memory and let them be quickly 
 	- `idata`: an array containing basic type info + children IDs.
 	- `odata`: an array containing object type info, like tags, etc.
 	- `ndata`: an array containing the raw DOM nodes.
-	- `adata`: an array containing auxiliary, usually-missing data like `done` callbacks, `is` values, etc.
+	- `cdata`: an array containing the children IDs, with `0` representing holes.
 	- Global queues exist for each of these, used to add elements when there isn't room before or at the current read counter.
+	- A global `idMap` exists to map strings, functions, and keys to numeric indices for compressed storage. These are tracked and collected via simple reference counts. (Raw HTML contents are also stored in this map.) A free list is retained to avoid increasing the ID count without bound.
 
 Using this method, I can avoid a lot of the memory cost, and iterating values becomes a lot faster because I have one memory load instead of 2 for each read.
 
-Here's the general vnode structure, consisting of 5 integers + 5 polymorphic fields:
+Here's the general vnode structure, consisting of 8 integers + some associated data elsewhere:
 
 - `id` = The index used to read `idata`, carrying basic metadata on the type itself in an attempt to avoid the need to load data into memory for simple checks.
 	- `id & 0x000F` = Type ID
 	- `id & 1 << 4` = Custom element (either autonomous or customized)
-	- `id & 1 << 7` = Has `key`
+	- `id & 1 << 5` = Has `key`
 	- `id >>> 8` = The real index used
 	- Note: all data stored here *must* remain the same across the entire lifetime of the vnode itself, so it can only really be used for diffing types.
 	- Note: `id & 0x00FF` *must* align with `vnode.mask & 0x00FF`.
-- `idata[(id >>> 8) * 4 + 0] = status` - Status mask
-	- `mask & 1 << 0` = Has removal hook on self or descendant
-		- This flag is reset on every element after checking, and is re-toggled if it still has one added
-		- This flag is unset on parents with no subscribed children after checking
-	- `mask & 1 << 1` = Has removal hook on self
-	- `mask & 1 << 2` = Has meaningful DOM attributes
-	- `mask >>> 8` = Closest element parent ID or `-1` if this is the root node.
-- `idata[(id >>> 8) * 4 + 1] = state` - Memoized state index or `-1` if state doesn't need retained.
-- `idata[(id >>> 8) * 4 + 2] = domStart` - DOM index start
-- `idata[(id >>> 8) * 4 + 3] = domEnd` - DOM index end (as in, index after last)
-- `odata[(id >>> 8) * 4 + 0] = tag` - Element tag
-- `odata[(id >>> 8) * 4 + 1] = key` - Element key
-	- Note: if `mask & 1 << 0`, this is always set to `undefined`.
-- `odata[id * 4 + 2] = children` - Children IDs with holes represented by `-1`s or `undefined` for text nodes and raw nodes
-- `odata[id * 4 + 3] = typeData` - Type-dependent data, `undefined` unless otherwise specified
+- `idata[(id >>> 8) * 8 + 0] = tag` - Element tag ID, ignored for most control vnodes
+- `idata[(id >>> 8) * 8 + 1] = parent` - Closest element parent ID or `-1` if this is the root node.
+- `idata[(id >>> 8) * 8 + 2] = key` - Element key ID
+- `idata[(id >>> 8) * 8 + 3] = typeData` - Type-dependent data index, ignored if none exist
+	- Note that not all types use the same number of slots (most use 0 or 1, but DOM elements use 2), so you can't assume that `typeData + 1` represents the next element's index. You need to use the next ID and go through that indirection to get the its type-dependent data index. Note that all types use a static number of fields relative to that type, so it's still quickly calculable.
+- `idata[(id >>> 8) * 8 + 4] = domStart` - DOM index start
+- `idata[(id >>> 8) * 8 + 5] = domEnd` - DOM index end (as in, index after last)
+- `idata[(id >>> 8) * 8 + 6] = childrenStart` - Children ID start, ignored for text nodes and trusted nodes
+- `idata[(id >>> 8) * 8 + 7] = childrenLength` - Children length, ignored for text nodes and trusted nodes
 
 Each node is referred to by an ID pointer.
 
 - All IR nodes are indexed per-root in order of appearance, and their indices are updated on each render.
 - This is used together with `parentId` checking to avoid attempting to schedule a redraw whenever one is already scheduled for that segment.
 - After updating a segment, all subsequent children are updated.
+- When scheduling renders, they're re-ordered in terms of earliest subtree first, to reduce memory movement.
+- Ignored indices are basically uninitialized garbage. They can sometimes be modified just to avoid branching in loops, but they're otherwise just ignored and generally aren't even set when initializing.
 
 Here are the types:
 
 - Hole:
 	- Type ID: `id === 0`
-	- This does *not* have any corresponding data in `idata`, `odata`, `ndata`, or `adata`, so the index field is ignored.
+	- This does *not* have any corresponding data in `idata`, `odata`, `ndata`, or `cdata`, so the index field is ignored.
 	- Conveniently, this means holes can be created as just `id === 0`.
 
 - Control:
 	- Type ID: `(mask & 0x000F) === 0x1`
-	- `tag` = Control body
-	- `state` = `done` callback
-	- `typeData` = Control context
+	- `tag` = Resolved ID for control factory
+	- `odata[typeData + 0]` = `done` callback
 	- Note: `domStart` and `domEnd` are inferred from children.
-	- Assert: `Array.isArray(children)`
-	- Assert: `state === -1`
+	- Assert: `key === 0`.
+	- Assert: `childrenLength === 0` before first render, `childrenLength === 1` after first render.
 
 - Text:
 	- Type ID: `(mask & 0x000F) === 0x2`
-	- `typeData` = String contents
+	- `odata[typeData + 0]` = String contents
+	- Assert: `key === 0`.
 	- Assert: `domStart === domEnd - 1`
-	- Assert: `tag === undefined`
-	- Assert: `children === undefined`
-	- Assert: `state === -1`
 
 - HTML:
 	- Type ID: `(mask & 0x000F) === 0x3`
-	- `tag` = String contents
-	- Assert: `children === undefined`
-	- Assert: `typeData === undefined`
-	- Assert: `attrs === -1`
+	- `tag` = Resolved ID for string contents
 
 - Keyed:
 	- Type ID: `(mask & 0x000F) === 0x4`
-	- `children` = Fragment children
+	- `childrenStart` + `childrenLength` = Fragment children
 	- Note: `domStart` and `domEnd` are inferred from children.
-	- Assert: `tag === undefined`
-	- Assert: `Array.isArray(children)`
-	- Assert: `typeData === undefined`
-	- Assert: `attrs === -1`
 
 - Fragment:
 	- Type ID: `(mask & 0x000F) === 0x5`
-	- `children` = Fragment children
+	- `childrenStart` + `childrenLength` = Fragment children
 	- Note: `domStart` and `domEnd` are inferred from children.
-	- Assert: `tag === undefined`
-	- Assert: `Array.isArray(children)`
-	- Assert: `typeData === undefined`
-	- Assert: `attrs === -1`
 
 - Component:
 	- Type ID: `(mask & 0x000F) === 0x6`
-	- `tag` = Component reference
-	- `children` = Component instance
-	- `state` = Component attributes if any are cells, `-1` if all are constant.
-	- `typeData` = Component attribute subscriptions
+	- `tag` = Resolved ID for component reference
+	- `childrenStart` + `childrenLength` = Fragment children
 	- Note: `domStart` and `domEnd` are inferred from children.
-	- Assert: `Array.isArray(children)`
+	- Assert: `childrenLength === 1`.`
 
 - DOM:
 	- Type ID: `(mask & 0x000F) === 0x7`
-	- `tag` = Tag name
-	- `children` = Element children
-	- `state` = `is` name
-	- `typeData` = DOM event handler
-	- `typeData.attrs` = Element attributes
-	- `typeData.id` = Type ID back pointer
+	- `tag` = Resolved ID for tag name/`is` name
+	- `childrenStart` + `childrenLength` = Element children
+	- `odata[typeData + 0]` = Element attributes
+	- `odata[typeData + 1]` = DOM event handler
+	- `odata[typeData + 1].id` = Back pointer to this type ID
+	- `odata[typeData + 1]["on" + event]` = Event handler
 	- Assert: `domStart === domEnd - 1`
-	- Assert: `Array.isArray(children)`
-	- Assert: `typeData` is `undefined` when the element has no attributes other than `key` or `ref`.
-	- Assert: `state !== -1` when the element has no attributes other than `key` or `ref`
+	- Assert: `odata[typeData + 0]` is initialized to `undefined` prior to any event handlers existing.
+
+- Catch:
+	- Type ID: `(mask & 0x000F) === 0x8`
+	- `odata[typeData + 0]` = `onerror` callback
+	- `childrenStart` + `childrenLength` = Fragment children
+	- Note: `domStart` and `domEnd` are inferred from children.
 
 Notes:
 
@@ -231,42 +216,46 @@ These operations are a little arcane, but that's because it involves quite a bit
 Vnodes upon receipt are normalized to a structure that somewhat mirrors the IR. This resolves meaningless discrepancies between vnode types and is sufficient for various checks. Note that because this object doesn't get persisted at all, it's almost certainly going to stay in the GC nursery (and thus be collected at potentially zero cost).
 
 ```js
-var hasOwn = Object.prototype.hasOwnProperty
 var empty = []
 
-function create(mask, tag, is, attrs, children, key, ref) {
-	return {mask, tag, is, attrs, children, key, ref}
+function create(mask, tagID, tagName, isName, attrs, children, keyID, ref) {
+	return {mask, tagID, tagName, isName, attrs, children, keyID, ref}
 }
 
 function createSimpleObject(mask, tag, attrs, children) {
-	var key = attrs.key; if (key != null) mask |= 1 << 7
-	var ref = attrs.ref; if (ref != null) mask |= 1 << 8
-	return create(mask, tag, undefined, undefined, children, key, ref)
+	var key = attrs.key, ref = attrs.ref
+	return create(
+		mask | (key != null) << 5 | (ref != null) << 8,
+		tag, 0, undefined, undefined, undefined, children,
+		key != null ? getKeyID(key) : 0, ref,
+	)
 }
 
+var componentFilter = /^(children|is|key|ref)$/
+var domFilter = /^key$/
+
 function omit(object, regexp) {
-	var result = {}
+	var result = Object.create(null)
 	for (var name in object) {
-		if (hasOwn.call(object, name) && !regexp.test(object)) {
+		if (
+			Object.prototype.hasOwnProperty.call(object, name) &&
+			!regexp.test(name)
+		) {
 			result[name] = object[name]
 		}
 	}
 	return result
 }
 
-function normalizeDOM(tag, attrs, children) {
-	var mask = 0x7 | (tag.indexOf("-") !== -1) << 4
+function normalizeDOM(tag, attrs) {
 	var is = attrs.is, key = attrs.key, ref = attrs.ref
-	var set = (is != null) << 4 | (key != null) << 7 | (ref != null) << 8
-
-	if (children.length === 0 && set === 0) {
-		return create(mask, tag, undefined, attrs, empty, undefined, undefined)
-	}
-
 	return create(
-		mask | set,
-		tag, is, omit(attrs, /^(children|is|key|ref)$/),
-		children, key, ref
+		0x7 | (tag.indexOf("-") !== -1) << 4 |
+		(is != null) << 4 | (key != null) << 5 | (ref != null) << 8,
+		getKeyID(is != null ? is : tag),
+		tag, is, omit(attrs, domFilter),
+		children == null || children.length === 0 ? empty : children,
+		key != null ? getKeyID(key) : 0, ref,
 	)
 }
 
@@ -275,7 +264,10 @@ function normalize(vnode) {
 	if (typeof vnode === "object") {
 		if (Array.isArray(vnode)) {
 			if (vnode.length === 0) return undefined
-			return create(0x5, void 0, void 0, void 0, vnode, void 0, void 0)
+			return create(
+				0x5, 0, undefined, undefined,
+				undefined, vnode, 0, undefined
+			)
 		}
 
 		var tag = vnode.tag
@@ -284,7 +276,12 @@ function normalize(vnode) {
 		if (attrs == null) {
 			// HTML, Keyed, Fragment
 			if (tag != null) {
-				if (tag === "#html" || tag === "#keyed" || tag === "fragment") {
+				if (
+					tag === "#catch" ||
+					tag === "#html" ||
+					tag === "#keyed" ||
+					tag === "fragment"
+				) {
 					return undefined
 				}
 				if (typeof tag === "string") {
@@ -297,13 +294,14 @@ function normalize(vnode) {
 					}
 					return create(
 						0x7 | (tag.indexOf("-") !== -1) << 4,
-						tag, undefined, undefined, empty, undefined, undefined
+						getKeyID(tag), tag, undefined,
+						undefined, empty, 0, undefined,
 					)
 				}
 				if (typeof tag === "function") {
 					return create(
-						0x6, tag, undefined, undefined,
-						undefined, undefined, undefined
+						0x6, getKeyID(tag), tag, undefined,
+						undefined, undefined, 0, undefined
 					)
 				}
 			}
@@ -313,23 +311,38 @@ function normalize(vnode) {
 				throw new TypeError("Objects must be valid vnodes!")
 			}
 			if (typeof tag === "string") {
-				var children = attrs.children
-				if (children == null) children = empty
 				switch (tag) {
 					// HTML
 					case "#html":
-						tag = children.join("")
+						var children = attrs.children
+						tag = children != null ? children.join("") : ""
 						if (tag.length === 0) return undefined
 						return createSimpleObject(0x3, tag, attrs, undefined)
 
 					// Keyed, Fragment
 					case "#keyed":
 					case "#fragment":
-						if (children.length === 0) return undefined
+						var children = attrs.children
+						if (children == null || children.length === 0) {
+							return undefined
+						}
 						return createSimpleObject(
 							// 6 = "#keyed".length
 							tag.length === 6 ? 0x4 : 0x5,
 							undefined, attrs, children
+						)
+
+					case "#catch":
+						var children = attrs.children
+						if (children == null || children.length === 0) {
+							return undefined
+						}
+						var key = attrs.key, ref = attrs.ref
+						var oncatch = attrs.oncatch
+						return create(
+							0x8 | (key != null) << 5 | (ref != null) << 8,
+							tag, 0, undefined, undefined, oncatch, children,
+							key != null ? getKeyID(key) : 0, ref,
 						)
 
 					default:
@@ -345,13 +358,10 @@ function normalize(vnode) {
 			} else if (typeof tag === "function") {
 				var mask = 0x6
 				var key = attrs.key
-				if (key != null) {
-					mask |= 1 << 7
-					attrs = omit(attrs, /^key$/)
-				}
 				return create(
-					0x86, tag, undefined, attrs,
-					undefined, undefined, key
+					0x6 | (key != null) << 5, getFunctionID(tag), tag, undefined,
+					omit(attrs, componentFilter), undefined,
+					getKeyID(key), undefined
 				)
 			} else {
 				throw new TypeError("Objects must be valid vnodes!")
@@ -359,15 +369,15 @@ function normalize(vnode) {
 		}
 	} else if (typeof vnode === "function") {
 		return create(
-			0x1, vnode, undefined, undefined,
-			undefined, undefined, undefined
+			0x1, getFunctionID(vnode), vnode, undefined,
+			undefined, undefined, 0, undefined,
 		)
 	} else {
 		vnode = String(vnode)
 		if (vnode === "") return undefined
 		return create(
-			0x2, undefined, vnode, undefined,
-			undefined, undefined, undefined
+			0x2, 0, undefined, undefined,
+			undefined, vnode, 0, undefined
 		)
 	}
 }
@@ -381,29 +391,27 @@ Rules:
 2. If the internal vnode is a hole and the received vnode is not a hole, replace.
 3. If the internal vnode is not a hole and the received vnode is a hole, replace.
 4. If the internal vnode is of a different type than the received vnode, replace.
-5. If the internal vnode's tag is different than the received vnode's tag, replace.
+5. If the internal vnode's tag/`is` value is different than the received vnode's tag/`is` value, replace.
 6. If the internal vnode has a key and the received vnode doesn't, replace.
 7. If the internal vnode doesn't have a key and the received vnode does, replace.
 8. If the internal vnode's key is different than the received vnode's key, replace.
-9. If the internal vnode's `is` value is different than the received vnode's `is` value, replace.
+9. If the internal vnode is not a custom element and the received vnode is, replace.
+9. If the internal vnode is a custom element and the received vnode is not, replace.
 10. Otherwise, patch.
 
 ```js
+// This is purely integral and results in literally zero type checks.
 function shouldReplace(id, vnode) {
 	// Steps 1-3
 	if (vnode == null) return id === 0
 	// Steps 4, 6, and 7
 	if ((vnode.mask ^ id) & 0xFF) return true
-	const index = (id >>> 8) << 4
 	// Step 5
-	if (vnode.tag !== odata[index]) return true
+	if (vnode.tagID !== idata[(id >>> 8) << 2]) return true
 	// Step 8
-	if (vnode.key !== odata[index + 1]) return true
-	// Step 9
-	if ((id & 0xF) !== 0x7) return false
-	return vnode.is !== (
-		idata[index + 1] < 0 ? undefined : adata[idata[index + 1]]
-	)
+	if (vnode.keyID !== idata[(id >>> 8) << 2 | 2]) return true
+	// Step 9 and 10
+	return (id & 0x8F) === 0x87
 }
 ```
 
@@ -414,16 +422,25 @@ This searches for the next walkable subtree's IR ID and returns it, or `-1` if t
 ```js
 // Returns the new index. Takes a fair bit of pointer chasing here.
 function skipSubtree(id) {
+	const current = (id >>> 8) << 2
 	while (id >= 0) {
-		const parent = idata[(id << 2) + 1]
-		const children = odata[(parent << 2) + 2]
-		const index = children.indexOf(id) + 1
-
-		if (index !== children.length) return children[index]
-		id = parent
+		const nextId = idata[current + 1]
+		const parent = (nextId >>> 8) << 2
+		let i = idata[parent + 6]
+		for (const end = i - 1 + idata[parent + 7]; i < end; i++) {
+			if (cdata[i] === id) return cdata[i + 1]
+		}
+		id = nextId
+		current = parent
 	}
 	return id
 }
 ```
 
-Note that this doesn't itself account for updating iteration offsets.
+Note that this doesn't itself account for updating iteration offsets. It just finds the next offset to move to.
+
+## General algorithm
+
+The algorithm would be in-place, incremental, and procedural. It would use buffers to hold what can't go immediately into the arrays, so they can be eventually flushed.
+
+TODO: elaborate on this section further

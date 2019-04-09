@@ -4,11 +4,31 @@
 
 There's a lot of big decisions here that require some explanation.
 
+### Removing the implicit `div` in the hyperscript DSL
+
+This is pretty well explained [where I proposed the change itself](core.md#selectors), but I'll go at much greater detail here on why that's the case and how that played into my decision to ultimately remove it. It generally comes down to how we as humans parse and process information at a lower level, and it's in part founded by my own experience both using Mithril and helping others with various issues using Mithril.
+
+In short: Humans aren't made of silicon. They don't process things sequentially. When reading `m(".button.confirm")`, your first instinct isn't likely that it's short for `m("div.button.confirm")` unless you've been using primarily Mithril for years, and even then it's probably not *reliably* so, especially in more complex scenarios like `cond ? m(".foo") : m(".bar")` where you might need to consciously recall the rule. And `m("")` could be reasonably interpreted as both `m("div")` and `[]` by two different people. So to fix a UX issue I've seen appear repeatedly in our Gitter and other places, I suggest we require a tag name.
+
+#### Detailed explanation
+
+And for the long story. Be ready for some very scientific language diving a into a bit of linguistics, natural language processing, and how humans interpret language - there's a fair bit of science I'm pulling from.
+
+Computers parse information sequentially. Humans also parse sequentially for the most part, but we don't always parse written language in-order when inspecting individual characters and tokens - it's faster to parse them in parallel when we can. (In fact, visual dyslexia is when people parse things *too* out of order.) Usually, it speeds things up a lot, since our brains rely on the probabilities of various types of words and punctuators appearing in a certain order, but this isn't always the case: [garden path sentences](https://en.wikipedia.org/wiki/Garden-path_sentence) *do* cause errors in that your natural parallel lookahead ends up failing because of a single token detected. For instance, when you read "The old man the ship.", you initially start to read that as "(The<sub>article</sub> (old<sub>adjective</sub> (man<sub>noun</sub>)))", where parentheses delimit what you read. When you start to parse "the ship", an obvious noun that parses to "(the<sub>article</sub> (ship<sub>noun</sub>))", you realize there wasn't a verb parsed yet, so you have to reparse the entire part leading up to that, searching for a verb, then where that underscore is, you notice there's no verb. So instead if your anticipated parse tree, you have to reparse it entirely, expecting a verb at the end and potentially adjusting your parse tree further until you get one that works. The correct parse tree for that bit is "(The<sub>article</sub> (old<sub>noun</sub>)) man<sub>noun</sub>", and the correct parse tree for the whole sentence is "(The<sub>article</sub> (old<sub>noun</sub>)) man<sub>noun</sub> (the<sub>article</sub> (ship<sub>noun</sub>)).".
+
+(In case you're wondering, [this very thing has been studied at a lower level than even this](https://en.wikipedia.org/wiki/Garden-path_sentence#Brain_processing_in_computation). I'm just adapting the language to make more sense from a computational perspective, and this isn't about the neuropsychology of it, just the computational aspect of it at a higher level.)
+
+A similar issue is at play here: when you process the selector `.button.confirm`, you're used to the first real word generally denoting the type, ignoring the fact there's a punctuator before it. This plays on your brain's probabilities and eventually results in a misparse, since that's *usually* what it ends up being and it's practically always the case when the conceptual "type" isn't `div`. But when you're not as innately familiar with the rules in that edge case, you might not think to reparse and you might look at it as either an error because it looks weird (unlikely if you've seen it enough) or you might correct it to not include that `.` - it certainly doesn't work as a sigil like `@` does in various languages. (In fact, I've witnessed that very source of confusion among newer users countless times asking questions in Gitter - they expect `cond ? m(".foo") : m(".bar")` to work like `cond ? m("foo") : m("bar")` when in reality it works like `cond ? m("div.foo") : m("div.bar")` - the reason the latter doesn't work that way is a little easier to explain.) It obviously isn't the *same* as `m("button.confirm")`, but people's first reactions are to think `m(".button.confirm")` should work similarly when it *doesn't*. It really works as similarly as `m("button.confirm")` and `m("div.button.confirm")` do - they're still related, but they don't work almost the same way. If two things don't work the same way, there shouldn't be syntax sugar making them look like they do.
+
+Separately, in the special case of `m("")`, following the rules of disambiguation, it would be equivalent to `m("div")`, but a related thing is going on here that causes people to intuitively expect it should evaluate to a fragment: there's no clear data, even inferrable from context, associated with the contents of the element, so it's only natural to think it should be equivalent to just its children or, alternatively, a fragment containing them. Natural languages themselves do not typically feature information implied from rules of grammar - it's normally encoded in the words and the surrounding context it was transmitted in, not from the parsing step itself. Cases like "Adam is cooking?", which implies through its non-standard usage an expectation of falsehood, are the exception, not the norm, and even that's not standard usage. Coming from that background, it makes sense that some people, being aware of the rules, will feel that `m("")` should intuitively represent a fragment rather than an element. And unlike the scenario of garden path sentences, which look like errors but don't look like fragments and don't need reparsed as one, this *looks* like it's a fragment missing critical information, and in fact, [we *did* decide to make `m("")` itself throw due to the confusion it was causing](https://gitter.im/mithriljs/mithril.js/archives/2015/12/12).
+
+This should help explain from a scientific view *why* I proposed removing support for implicit `div` tag names from selectors altogether.
+
 ### Removing global redraws
 
 I killed this because in general, global redraws *do* frequently get in the way. You'll end up making a lot of unnecessary updates, and this *does* become a problem when you're managing mounted subtrees. It also just generally doesn't scale well, and it's already a common request to have subtree redraws.
 
-You can emulate Mithril's current API by adding a subscription mechanism that invokes sync/async redraws as necessary. The [TodoMVC example](https://github.com/isiahmeadows/mithril.js/blob/v3-design/examples/todomvc/todomvc.mjs) does this very thing, and you can still get a global redraw using this simple wrapper:
+You can emulate Mithril's current API by adding a subscription mechanism that invokes sync/async redraws as necessary. The [TodoMVC example](https://github.com/isiahmeadows/mithril.js/blob/v3-design/examples/todomvc/todomvc.mjs) does this very thing, and you can still get a global redraw using this simple wrapper if absolutely necessary:
 
 ```js
 import render from "mithril/render"
@@ -19,9 +39,9 @@ export function mount(root, func) {
 		render(root, (render, context) => {
 			subtrees.set(root, {context, func})
 			render(func())
+			return () => subtrees.delete(root)
 		})
 	} else {
-		subtrees.delete(root)
 		render(root)
 	}
 }
@@ -84,7 +104,7 @@ I was specifically looking for an abstraction that could tick several different 
 3. It has to be dependency-optional with minimal callee boilerplate.
 4. It has to be concise.
 5. It has to be readable.
-6. It has to be fast with minimal overhead.
+6. It has to be fast with minimal overhead, both in size and memory.
 7. It has to be highly composable.
 8. It has to be highly decoupled.
 9. It has to be highly encapsulated.

@@ -53,7 +53,7 @@ function join(cells, func) {
 	return all(
 		keys.map(function (key) { return cells[key] }),
 		function (values) {
-			var result = {}
+			var result = Object.create(null)
 			for (var i = 0; i < values.length; i++) result[keys[i]] = values[i]
 			return func(result)
 		}
