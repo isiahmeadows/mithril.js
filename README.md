@@ -23,9 +23,6 @@ If you have *any* feedback, questions, or concerns, please do feel free to [file
 
 ## Summary
 
-> TODO: fill in some details
-> https://github.com/MithrilJS/mithril.js/issues/2278#issuecomment-442003421
-
 My general goal is this:
 
 1. If it feels right, it should be right.

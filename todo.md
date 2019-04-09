@@ -4,11 +4,9 @@
 
 These are things I need to do at some point, but just haven't gotten to yet. Obviously, this is not exhaustive, but it should give some insight into my plans.
 
-- Make sure [the non-features page](non-features.md) is actually complete. I've got two, but I know there's a few more that I need to add, like:
-	- Ref combinators (see Git history for source)
-	- Others I'm probably forgetting
-
 - Benchmark cells vs other alternatives detailed in [the rationale](rationale.md#creating-the-cell-abstraction), especially the other stream libraries.
+
+- Move all this design documentation to a `design/` subfolder and prototype this.
 
 - Document what my inspirations were
 	- Similar inspirations to that of state reducers, like Redux and React Hooks
@@ -18,8 +16,6 @@ These are things I need to do at some point, but just haven't gotten to yet. Obv
 	- Also: actors and continuation-passing style somewhat directly
 	- Also: dataflow programming and stream processing in general
 	- Also: functional programming in general. This is truly functional and reactive, at a deeper level than even Elm. (Really, this is closer to Scheme/OCaml territory.)
-
-- Resolve that README TODO eventually.
 
 - Run a poll to see what browsers Mithril actually runs in, so I can get a better picture of how popular it really is and what the baseline actually needs to be.
 	- I would like to know actual analytics numbers/estimates per browser as well as what app/company so I can ensure responses can be accurately deduplicated.

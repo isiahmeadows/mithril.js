@@ -38,7 +38,9 @@ export const api = {
 // 	},
 // 	async thread(id, {signal} = {}) {
 // 		T.timeEnd("Setup")
-// 		return T.transformResponse(await request(p("/threads/:id", {id}), {signal}))
+// 		return T.transformResponse(
+// 			await request(p("/threads/:id", {id}), {signal})
+// 		)
 // 	},
 // 	async newThread(text, {signal} = {}) {
 // 		return request(p("/threads/create", {text}), {signal, method: "POST"})

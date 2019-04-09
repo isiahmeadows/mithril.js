@@ -334,7 +334,7 @@ This is mostly the existing renderer API, but with some modifications. It's expo
 - `hydrate(root, attrs?, ...children)` - Hydrates attributes + a tree to a root. This is exposed in the full bundle via `Mithril.hydrate`, but is *not* exposed in the core bundle. (It's tree-shaken out.)
 	- This assigns an expando `._ir` to the root.
 
-- `abortable((signal, render, context) => ...)` - Invokes a callback with an abort signal (ponyfilled with something that works with `mithril/request` if necessary) that's called on `done` and ignores the return value (useful if it's a simple async arrow function). This is useful with `fetch` and `mithril/request` for cleaning up requests, and it's a pretty simple utility.
+- `abortable((signal, render, context) => ...)` - Invokes a callback with an abort signal (ponyfilled with something that works with `mithril/request` if necessary) that's called on `done` and ignores the return value (useful if it's a simple async arrow function). This returns a cell and is useful with `fetch` and `mithril/request` for cleaning up requests, and it's a pretty simple utility.
 
 Notes:
 
