@@ -71,17 +71,62 @@ Notes:
 
 1. Animated lists aren't easy to get right. I'll leave it as an exercise for the reader to try this first. 😉
 
-## Cell optimization utility
+## Babel plugin
 
-This would come in two parts:
+Babel's existing `@babel/plugin-transform-react-jsx` would *technically* work for JSX + Mithril, but we could take this one step further with a Mithril preset + plugin combo: we could leave files entirely independent of `m`, so JSX would compile down directly to a bunch of object literals. This would also 1. adapt `m()` calls, so those can be compiled out, and 2. correctly handle JSX fragments, which can just compile to an array.
 
-1. Calls to various `mithril/cell` methods could be inlined to avoid most of the overhead in them.
-1. Cells that emit mostly-static vnode trees could be optimized to have only the dependent properties updated where possible.
+```js
+// Original hyperscript
+return [
+	m("p.head_links", [
+		m("a", {href: demoSource("mithril-redesign")}, "Source"), " | ",
+		m("a[href='http://threaditjs.com']", "ThreaditJS Home"),
+	]),
+	m("h2", [
+		m(Router.Link, m("a[href=/]", "ThreaditJS: Mithril")),
+	]),
+]
 
-### Why?
+// Original JSX
+return <>
+	<p class="head_links">
+		<a href={demoSource("mithril-redesign")}>Source</a> | {}
+		<a href="http://threaditjs.com">ThreaditJS Home</a>
+	]),
+	<h2>
+		<Router.Link><a href="/">ThreaditJS: Mithril</a></Router.Link>
+	</h2>
+</>
 
-Users of `mopt` would also appreciate this.
+// Optimized
+return [
+	{tag: "p", attrs: {class: "head_links", children: [
+		{tag: "a", attrs: {
+			href: demoSource("mithril-redesign"),
+			children: ["Source"],
+		}},
+		" | ",
+		{tag: "a", attrs: {
+			href: "http://threaditjs.com",
+			children: ["ThreaditJS Home"],
+		}},
+	]}}
+	{tag: "h2", attrs: {children: [
+		Mithril.create(Router.Link, {children: [
+			{tag: "a", attrs: {
+				href: "/",
+				children: ["ThreaditJS: Mithril"],
+			}},
+		]})
+	]}}
+]
+```
 
-1. It would sharply reduce the memory requirements of these pipelines, since some (like `map` and `filter`) require no real memory and others (like `distinct`, `scan`, and `scanMap`) require very little.
-1. The overhead of polymorphic dispatch would basically disappear, as there wouldn't be any significant call overhead to speak of.
-1. Localizing updates ahead of time would dramatically reduce the overhead in patching them.
+In addition, I could actually *use* JSX's namespace syntax to my advantage to specify certain native Mithril vnode types, since you can't use `<#foo></#foo>` in JSX:
+
+- `<m:fragment>...</m:fragment>` - This could represent unkeyed fragments.
+- `<m:keyed>...</m:keyed>` - This could represent keyed fragments.
+- `<m:html>...</m:html>` - This could represent trusted vnodes.
+- `<m:catch onerror={...}>...</m:catch>` - This could represent catch vnodes.
+
+This might cause TS problems, though, so I'd need to verify if they actually support it, and if not, get them to support it. (Short-term, I can just have people import the relevant component string names from `mithril/m`.)

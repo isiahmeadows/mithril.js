@@ -8,6 +8,8 @@ These are things I need to do at some point, but just haven't gotten to yet. Obv
 
 - Move all this design documentation to a `design/` subfolder and prototype this.
 
+- Draft a tested migration utility from v2 to this, prior to filing any sort of pull request.
+
 - Document what my inspirations were
 	- Similar inspirations to that of state reducers, like Redux and React Hooks
 	- Also: https://cycle.js.org/

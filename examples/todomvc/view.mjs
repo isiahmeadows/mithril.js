@@ -1,6 +1,6 @@
 //view
-import * as Cell from "../../../mithril/cell.mjs"
-import * as Router from "../../../mithril/router.mjs"
+import * as Cell from "../../mithril/cell.mjs"
+import * as Router from "../../mithril/router.mjs"
 import * as State from "./model.mjs"
 import {m} from "../../../mithril/core.mjs"
 

@@ -1,0 +1,11 @@
+{
+  "name": "mithril",
+  "private": true,
+  "version": "0.0.0-redesign",
+  "description": "A framework for building brilliant applications",
+  "contributors": [
+    "Leo Horie",
+    "Isiah Meadows <contact@isiahmeadows.com>"
+  ],
+  "license": "MIT"
+}

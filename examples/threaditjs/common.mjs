@@ -52,4 +52,4 @@ export const api = {
 
 // shared
 export const demoSource = (name) =>
-	`https://github.com/isiahmeadows/mithril.js/tree/v3-design/examples/threaditjs/${name}`
+	`https://github.com/isiahmeadows/mithril.js/tree/redesign/examples/threaditjs/${name}`

@@ -259,8 +259,14 @@ function normalizeDOM(tag, attrs) {
 	)
 }
 
+// Note: the primitive type determines everything about how this is handled. No
+// primitive coercion is attempted on reference types, only primitive types.
 function normalize(vnode) {
-	if (vnode == null || typeof vnode === "boolean") return undefined
+	// `true`, `false`, `null`, `undefined`, and `""` are normalized to holes,
+	// but everything else is stringified.
+	if (vnode == null || vnode === "" || typeof vnode === "boolean") {
+		return undefined
+	}
 	if (typeof vnode === "object") {
 		if (Array.isArray(vnode)) {
 			if (vnode.length === 0) return undefined
@@ -373,11 +379,24 @@ function normalize(vnode) {
 			undefined, undefined, 0, undefined,
 		)
 	} else {
-		vnode = String(vnode)
-		if (vnode === "") return undefined
+		// Note: `String(vnode)` here cannot be empty:
+		// - If Type(vnode) is Number:
+		// - If Type(vnode) is Symbol:
+		// - If Type(vnode) is Object:
+		// - The empty string, booleans, `null`, and `undefined` are all handled
+		//   first, immediately returning `undefined` before they get this far.
+		// - `String(str)` returns literally `str` by spec when it's already a
+		//   string. So if `str` isn't empty, `String(str)` can't return an
+		//   empty string.
+		// - Symbols are converted to `"Symbol(whatever)"`, so they can't be
+		//   empty.
+		// - Numbers obviously can't return empty strings as they return text
+		//   that evaluate to themselves when `eval`ed.
+		// - Objects and functions are separately handled above, right after
+		//   the empty string and other similar values.
 		return create(
 			0x2, 0, undefined, undefined,
-			undefined, vnode, 0, undefined
+			undefined, String(vnode), 0, undefined
 		)
 	}
 }

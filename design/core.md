@@ -68,7 +68,7 @@ There's a few reasons:
 - This is part 1 of our answer to React Hooks, just substantially lower in overhead. And hey, you don't actually *need* a library to use this.
 - Most streaming needs can directly translate to this.
 
-Also, there's a handful of helpers [here](https://github.com/isiahmeadows/mithril.js/tree/v3-design/helpers) based on [some of these hooks](https://usehooks.com/), in case you want to know what it could look like in practice. Some of those use [some built-in utilities](mvp-utils.md#cell-utilities).
+Also, there's a handful of helpers [here](https://github.com/isiahmeadows/mithril.js/tree/redesign/helpers) based on [some of these hooks](https://usehooks.com/), in case you want to know what it could look like in practice. Some of those use [some built-in utilities](mvp-utils.md#cell-utilities).
 
 ### What about streams?
 
@@ -120,7 +120,7 @@ I've used React Redux in a few boilerplates and seen several other React Redux p
 
 ### Hyperscript API
 
-The primary hyperscript API is still exposed as usual via `mithril/m` and `Mithril.m` in the core bundle.
+The primary hyperscript API is still exposed as usual via `mithril/m` and `Mithril.m` in the core bundle. But in addition, a `Mithril.create` exists to skip the attribute normalization, for cases where you know the attributes are valid, but you might not know the selector's type.
 
 ### Vnode types
 
@@ -141,7 +141,7 @@ The primary hyperscript API is still exposed as usual via `mithril/m` and `Mithr
 - Control: `controlBody`
 - Component: `m(Component, ...)`
 
-If you're a JSX user needing to reference these names, you should just alias them locally, like `const Fragment = "#fragment"`. But in addition, you should set the following Babel JSX plugin options when using `@babel/preset-react`:
+If you're a JSX user needing to reference these names, you should use `Fragment`, `Keyed`, `Html`, and `Catch`, exported from `mithril/m`. But in addition, you should set the following Babel JSX plugin options when using `@babel/preset-react`:
 
 - `pragma: "m"`
 - `pragmaFrag: "'#fragment'"`
@@ -177,7 +177,7 @@ Notes:
 - Refs are somewhat different from React's:
 	- Refs are always invoked on every update that reaches them, as they're not simply exposure mechanisms but also control mechanisms.
 	- [React cares about ref identity](https://reactjs.org/docs/refs-and-the-dom.html#caveats-with-callback-refs), but this complicates the model a lot, especially when it's designed only for exposure.
-	- You can see refs in action in [the TodoMVC example](https://github.com/isiahmeadows/mithril.js/blob/v3-design/examples/todomvc/view.mjs).
+	- You can see refs in action in [the TodoMVC example](https://github.com/isiahmeadows/mithril.js/blob/redesign/examples/todomvc/view.mjs).
 - Technically, I could just provide `vnode.dom` + an `oncreate`/`onupdate` equivalent instead of `ref`, but there's four three reasons why I'm not:
 	1. It's generally poor practice to try to mutate the DOM outside of event handlers (which provide it via `ev.target.value`) or a batched request. Forcing batching also keeps performance up and running.
 	2. It makes it impossible to access an uninitialized element, simplifying types and avoiding potential for bugs.
@@ -383,7 +383,7 @@ This is exposed under `mithril/component` with each exposed in the core bundle.
 
 Note that this doesn't pierce through control vnodes and component vnodes to their children - it simply rewrites the returned vnode tree internally.
 
-This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-design/src/component.mjs).
+This is implemented [here](src/component.mjs).
 
 ### Why?
 
@@ -423,6 +423,10 @@ Also, it's just generally useful when you store your model entirely separate fro
 Is this a common enough *need* (not simply *want*) to include in the core bundle? I'm leaning towards a yes, since it's *sometimes* more concise and a little more streamlined. However, that "sometimes" is really an "almost never" in practice based on my experimentation, with most use cases being either forms, model-driven components, or something similarly stateful, self-contained, and non-reactive. I've only once in the `src/` or `examples/` folders needed this, and even in many of the cases you'd expect, it's neither more concise nor necessarily more readable.
 
 It's worth noting that optimizing the vnode rewriting mechanism can get slightly arcane at times, so it's probably better that it remains in core.
+
+## Type definitions
+
+Type definitions would be moved into core, to live alongside everything else. I specifically *want* TypeScript to be supported as a first-class language, even if they don't use JSX.
 
 ## Core bundle
 

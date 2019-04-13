@@ -12,9 +12,15 @@ This is exposed under `mithril/path` and in the full bundle via `Mithril.p`.
 
 Note that the [router](#router-api) and [request](#request-api) utilities no longer do their own path interpolation - users should use this instead. Also, note that this carries the semantics in [#2361](https://github.com/MithrilJS/mithril.js/pull/2361) in that `:x` always escapes and `:x...` never escapes.
 
+Also, when appending query parameters, indices are *not* added - it's always generated as `foo[]=a&foo[]=b` for `foo: ["a", "b"]`, not `foo[0]=a&foo[1]=b` as what's currently done. This plays better with most servers, since more accept the first form than the second and the vast majority that accept the second also accept the first.
+
 ### Why?
 
 It's much easier and more predictable for both the library and users if path templates are resolved separately from APIs that accept paths. Also, users might want to use it with third-party apps.
+
+### What about `m.buildQueryString` and `m.parseQueryString`?
+
+Those would still be available via `mithril/querystring`, but not from the core or full bundle.
 
 ## Router API
 
@@ -269,7 +275,6 @@ This is exposed under `mithril/request` and in the full bundle as `Mithril.reque
 - The `request({url, ...opts})` variant is removed - only the `request(url, opts?)` variant remains. (Picked this one for consistency with routing and `fetch`.)
 - Abort signals can be provided via a `signal:` parameter for compatibility with `fetch`. Note that anything with an `onabort` property can work for this, not just an abort controller.
 	- This replaces `xhr.abort()` in the `config:` callback. Don't call that directly - pass `controller.signal` and invoke `controller.abort()` on the corresponding controller instead, or just use `abortable` from [`mithril/dom`](core.md#dom-renderer-api).
-	- Note: for convenience
 
 Beyond that, the API is probably fine as-is after [#2335](https://github.com/MithrilJS/mithril.js/pull/2335) and [#2361](https://github.com/MithrilJS/mithril.js/pull/2361) are merged.
 
@@ -311,9 +316,22 @@ Basically `mithril-node-render`, moved into core. Optionally, I might also expos
 1. It makes our SSR support much more discoverable.
 1. It's a much simpler upgrading story.
 
-## Streams
+## Vnode renderer
 
-This will be maintained initially under `mithril-stream` for a short time (with `mithril/stream` throwing an error telling people to migrate), but it's deprecated in favor of cells, which offer a lot more functionality out of the box and are just all around easier to define, easier to use. They're smaller when compressed, too, so that's even more reason to switch to cells.
+This is exposed under `mithril/render-vnode`.
+
+- `renderVnode(vnode, {retainEventHandlers = false})` - This renders a vnode with potential components and similar to a resolved vnode tree without those components.
+	- Fragments are always normalized to objects
+	- Numbers and similar are normalized to strings
+	- Booleans and `null` are normalized to `undefined`
+	- Components are replaced with their contents
+	- Control vnodes are replaced with their synchronously rendered tree as applicable
+	- DOM event handlers are replaced with a single shared global function unless `retainEventHandlers` is truthy
+	- Everything else is as you would expect
+
+### Why?
+
+It's a very common need for testing purposes. It also carries a similar benefit `mithril/render-html` does for figuring out what needs exposed for renderers.
 
 ## Cell utilities
 
@@ -375,7 +393,7 @@ This is exposed under `mithril/cell` and in the full bundle via `Mithril.Cell`.
 	- An error is thrown if either parameter is *not* an object.
 	- This is particularly useful with `Cell.distinct` - you can just do `Cell.distinct(attrs, Cell.shallowEqual)` and have automatically diffed attributes for the most common case. This is about the only reason it's in the core `mithril/cell` module, and not completely out of core.
 
-This is implemented [here](https://github.com/isiahmeadows/mithril.js/blob/v3-design/src/cell.mjs), with an optimized implementation [here](https://github.com/isiahmeadows/mithril.js/blob/v3-design/src/optimized/cell.mjs). This is actually *smaller* than streams, despite providing better, more powerful functionality.
+This is implemented [here](src/cell.mjs), with an optimized implementation [here](src/optimized/cell.mjs). This is actually *smaller* than streams, despite providing better, more powerful functionality.
 
 Notes:
 
@@ -391,6 +409,6 @@ A few reasons:
 - This is what would be our answer to React Hooks, just substantially lower in overhead.
 - Most streaming utilities can directly translate to this.
 
-Also, there's a handful of helpers [here](https://github.com/isiahmeadows/mithril.js/tree/v3-design/helpers) based on [some of these hooks](https://usehooks.com/), in case you want to know what it could look like in practice.
+Also, there's a handful of helpers [here](https://github.com/isiahmeadows/mithril.js/tree/redesign/helpers) based on [some of these hooks](https://usehooks.com/), in case you want to know what it could look like in practice.
 
-This utility is slightly smaller than Mithril's existing streams utility when minified and gzipped. Also, the names compress a bit better when bundled with other things, especially if you use Rollup, and it ends up comparable in source size *to* code using hooks exclusively, if not sometimes substantially smaller.
+This utility is about the same size than Mithril's existing streams utility when minified and gzipped. Also, the names compress a bit better when bundled with other things, especially if you use Rollup, and it ends up comparable in source size *to* code using hooks exclusively, if not sometimes substantially smaller.

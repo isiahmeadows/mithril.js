@@ -28,7 +28,7 @@ This should help explain from a scientific view *why* I proposed removing suppor
 
 I killed this because in general, global redraws *do* frequently get in the way. You'll end up making a lot of unnecessary updates, and this *does* become a problem when you're managing mounted subtrees. It also just generally doesn't scale well, and it's already a common request to have subtree redraws.
 
-You can emulate Mithril's current API by adding a subscription mechanism that invokes sync/async redraws as necessary. The [TodoMVC example](https://github.com/isiahmeadows/mithril.js/blob/v3-design/examples/todomvc/todomvc.mjs) does this very thing, and you can still get a global redraw using this simple wrapper if absolutely necessary:
+You can emulate Mithril's current API by adding a subscription mechanism that invokes sync/async redraws as necessary. The [TodoMVC example](https://github.com/isiahmeadows/mithril.js/blob/redesign/examples/todomvc/todomvc.mjs) does this very thing, and you can still get a global redraw using this simple wrapper if absolutely necessary:
 
 ```js
 import render from "mithril/render"

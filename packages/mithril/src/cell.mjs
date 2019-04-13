@@ -1,9 +1,3 @@
-// A global, ES5 equivalent of `src/cell.mjs`, for show and to test for file
-// size.
-(function () {
-// eslint-disable-next-line strict
-"use strict"
-
 var sentinel = {}
 
 function id(x) { return x }
@@ -38,15 +32,19 @@ function wrapDones(dones) {
 function all(cells, func) {
 	if (func == null) func = id
 	return function (send) {
-		var values = [], dones = []
-		for (var i = 0; i < cells.length; i++) values[i] = sentinel
-		for (var i = 0; i < cells.length; i++) {
-			dones[i] = (0, cells[i])(function (value) {
+		function bind(i) {
+			return function (value) {
 				values[i] = value
 				if (values.indexOf(sentinel) < 0) {
 					return send(func(values.slice()))
 				}
-			})
+			}
+		}
+
+		var values = [], dones = []
+		for (var i = 0; i < cells.length; i++) values[i] = sentinel
+		for (i = 0; i < cells.length; i++) {
+			dones[i] = (0, cells[i])(bind(i))
 		}
 
 		return wrapDones(dones)
@@ -96,40 +94,36 @@ function filter(cell, func) {
 	}
 }
 
-function transformFold(cell, initial, consume, wrapDone) {
+function scan(cell, initial, func) {
 	return function (send) {
 		var acc = initial
-		var done = cell(function (value) {
-			var result = consume(send, acc, value)
-			acc = result.a
-			return result.r
+		return cell(function (value) {
+			return send(acc = func(acc, value))
 		})
-		return wrapDone ? wrapDone(send, acc, done) : done
 	}
 }
 
-function scan(cell, initial, func) {
-	return transformFold(cell, initial, function (send, acc, value) {
-		return {r: send(value = func(acc, value)), a: value}
-	})
-}
-
 function scanMap(cell, initial, func) {
-	return transformFold(cell, initial, function (send, acc, value) {
-		var pair = func(acc, value)
-		return {r: send(pair[1]), a: pair[0]}
-	})
+	return function (send) {
+		var acc = initial
+		return cell(function (value) {
+			var pair = func(acc, value)
+			acc = pair[0]
+			return send(pair[1])
+		})
+	}
 }
 
 function reduce(cell, initial, func) {
-	return transformFold(cell, initial,
-		function (send, acc, value) { return {a: func(acc, value)} },
-		function (send, acc, done) {
-			return function () {
-				try { send(acc) } finally { if (done != null) done() }
-			}
+	return function (send) {
+		var acc = initial
+		var done = cell(function (value) {
+			acc = func(acc, value)
+		})
+		return function () {
+			try { send(acc) } finally { if (done != null) done() }
 		}
-	)
+	}
 }
 
 function distinctSimple(cell) {
@@ -143,14 +137,16 @@ function distinctSimple(cell) {
 
 function distinct(cell, compare) {
 	if (compare == null) return distinctSimple(cell)
-	return transformFold(cell, sentinel, function (send, acc, value) {
-		return {
-			r: acc === sentinel || compare(acc, value)
+	return function (send) {
+		var acc = sentinel
+		return cell(function (value) {
+			var prev = acc
+			acc = value
+			return prev === sentinel || compare(prev, value)
 				? send(value)
-				: undefined,
-			a: value,
-		}
-	})
+				: undefined
+		})
+	}
 }
 
 function of() {
@@ -221,32 +217,14 @@ function shallowEqual(a, b, compare) {
 	} else {
 		var keys = Object.keys(a)
 		if (keys.length !== Object.keys(b).length) return false
-		for (var i = 0; i < keys.length; i++) {
+		for (i = 0; i < keys.length; i++) {
 			if (!compare(a[keys[i]], b[keys[i]])) return false
 		}
 		return true
 	}
 }
 
-var Cell = {
-	all: all,
-	chain: chain,
-	distinct: distinct,
-	filter: filter,
-	join: join,
-	map: map,
-	merge: merge,
-	NEVER: NEVER,
-	of: of,
-	onDone: onDone,
-	reduce: reduce,
-	run: run,
-	scan: scan,
-	scanMap: scanMap,
-	shallowEqual: shallowEqual,
-	tap: tap,
+export {
+	all, chain, distinct, filter, join, map, merge, NEVER, of, onDone, reduce,
+	run, scan, scanMap, shallowEqual, tap,
 }
-
-if (typeof module !== "undefined" && module.exports) module.exports = Cell
-else window.Cell = Cell
-})()

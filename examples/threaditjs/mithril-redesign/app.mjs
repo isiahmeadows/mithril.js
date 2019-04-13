@@ -1,5 +1,5 @@
 import * as Cell from "mithril/cell"
-import * as Router from "mithril/route"
+import * as Router from "mithril/router"
 import {abortable, m, pure, render} from "mithril"
 import {api, demoSource} from "../threaditjs-common/common.mjs"
 
