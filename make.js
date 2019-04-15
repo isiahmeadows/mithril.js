@@ -34,10 +34,10 @@ target["test"] = function () {
 }
 
 target["test:mithril"] = function () {
-	// Why can't esm and Mocha play well...?
 	exec(
-		"node --require esm --require ./scripts/test-setup.js " +
-		`${p("node_modules/.bin/_mocha")} --recursive --sort --extension mjs`,
+		`${p("node_modules/.bin/_mocha")}\
+		  --require esm --require scripts/test-setup.js\
+			--color test/`,
 		{cwd: p("packages/mithril")}
 	)
 }
