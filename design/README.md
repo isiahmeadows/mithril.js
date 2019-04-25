@@ -12,8 +12,8 @@ If you have *any* feedback, questions, or concerns, please do feel free to [file
 
 ## Table of contents
 
-- [Core changes](core.md)
-- [Utilities added to `mithril/*`, part of the MVP](mvp-utils.md)
+- [Core changes](core/README.md)
+- [Utilities added to `mithril/*`, part of the MVP](mvp-utils/README.md)
 - [Utilities added to `mithril/*`, not part of the MVP](future-utils.md)
 - [Rationale](rationale.md)
 - [App comparison](examples/threaditjs/README.md)
@@ -113,7 +113,7 @@ function TextInput({value, onChange}) {
 
 // Option 2: Fully uncontrolled component.
 function TextInput() {
-	const [value, setValue] = useState('');
+	const [value, setValue] = useState('')
 	return (
 		<input
 			value={value}
@@ -128,19 +128,15 @@ function TextInput() {
 // Direct equivalent in this redesign
 // Option 1: Fully controlled component.
 function TextInput(attrs) {
-	return Cell.map(attrs, ({value, onChange}) =>
-		m("input", {value, onChange})
+	return Stream.map(attrs, ({value, onchange}) =>
+		m("input", {value, onchange})
 	)
 }
 
 // Option 2: Fully uncontrolled component.
 function TextInput() {
-	return (render) => {
-		const update = (value) => render(m("input", {
-			value, onchange: (e) => update(e.target.value)
-		}))
-		update("")
-	}
+	const [value, setValue] = Stream.store("")
+	return m("input", {value, onchange: (e) => setValue(e.target.value)})
 }
 
 // We can reset its internal state later by changing the key:

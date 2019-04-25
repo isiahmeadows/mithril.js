@@ -24,17 +24,17 @@ Note that everything beyond the hyperscript vnode structure detailed below is pu
 
 ## Hyperscript vnode structure
 
-The vnodes are initially just this when returned from views. `m` returns either a DOM vnode, component vnode, trusted vnode, fragment vnode, or keyed fragment vnode.
+The vnodes are initially just this when returned from views. `m` returns either a Element vnode, component vnode, fragment vnode, or keyed fragment vnode.
 
 - Holes: `true`, `false`, `null`, and `undefined`
 - Text: `"string"`, `0`, `1.2`, and similar
-- Control: `(render, context) => done?`, `Cell.map(cell, func)`, and similar
+- Dynamic: `(o) => done`, `Stream.map(stream, func)`, and similar
 - Fragment arrays: `[...]`
 - Fragment vnodes: `{tag: "#fragment", attrs: {key?, ref?, children: [...]}}`
 - Keyed fragment vnodes: `{tag: "#keyed", attrs: {key?, ref?, children: [...]}}`
-- Trusted vnodes: `{tag: "#trust", attrs: {key?, children: ["value"]}}`
 - Catch vnodes: `{tag: "#catch", attrs: {key?, onerror, children: [...]}}`
-- DOM vnode: `{tag: "elem", attrs: {key?, ref?, children: [...], ...}}`
+- Lazy vnodes: `{tag: "#lazy", attrs: {key?, onerror, children: [...]}}`
+- Element vnode: `{tag: "elem", attrs: {key?, ref?, children: [...], ...}}`
 - Component vnode: `{tag: Component, attrs: {key?, ref?, children: [...], ...}}`
 
 Notes:
@@ -68,7 +68,7 @@ Notes:
 
 - An error is thrown if `vnode.attrs.children.length > 2 ** 16`
 - Holes are represented by `null`s
-- For DOM and component vnodes, attributes are retained with `is` (for customized built-in elements), `key`, `children`, and `ref` removed.
+- For element and component vnodes, attributes are retained with `is` (for customized built-in elements), `key`, `children`, and `ref` removed.
 - For component vnodes, attributes are retained with only `key` removed. `children` is ignored.
 - Fragments do *not* store their attributes - those are only used to read the `key` and `children`. Pass component instances around instead - even if they aren't used, they can still be useful for verifying types.
 - This step is only incrementally performed. Children are lazily normalized.
@@ -90,6 +90,8 @@ Also, not everyone has the same needs as the DOM renderer.
 
 ## Mithril DOM IR structure
 
+**TODO:** update this.
+
 The IR vnodes are arranged as arrays to minimize memory and let them be quickly read without confusing the engine with polymorphic types. Specifically:
 
 - No engine stores raw descriptors in arrays, and none of them store ICs for individual elements like they do for objects. It's always one of a few types, with both dense and holey variants:
@@ -103,7 +105,7 @@ The IR vnodes are arranged as arrays to minimize memory and let them be quickly 
 	- `ndata`: an array containing the raw DOM nodes.
 	- `cdata`: an array containing the children IDs, with `0` representing holes.
 	- Global queues exist for each of these, used to add elements when there isn't room before or at the current read counter.
-	- A global `idMap` exists to map strings, functions, and keys to numeric indices for compressed storage. These are tracked and collected via simple reference counts. (Raw HTML contents are also stored in this map.) A free list is retained to avoid increasing the ID count without bound.
+	- A global `idMap` exists to map strings, functions, and keys to numeric indices for compressed storage. These are tracked and collected via simple reference counts. A free list is retained to avoid increasing the ID count without bound.
 
 Using this method, I can avoid a lot of the memory cost, and iterating values becomes a lot faster because I have one memory load instead of 2 for each read.
 
@@ -116,15 +118,22 @@ Here's the general vnode structure, consisting of 8 integers + some associated d
 	- `id >>> 8` = The real index used
 	- Note: all data stored here *must* remain the same across the entire lifetime of the vnode itself, so it can only really be used for diffing types.
 	- Note: `id & 0x00FF` *must* align with `vnode.mask & 0x00FF`.
-- `idata[(id >>> 8) * 8 + 0] = tag` - Element tag ID, ignored for most control vnodes
-- `idata[(id >>> 8) * 8 + 1] = parent` - Closest element parent ID or `-1` if this is the root node.
-- `idata[(id >>> 8) * 8 + 2] = key` - Element key ID
-- `idata[(id >>> 8) * 8 + 3] = typeData` - Type-dependent data index, ignored if none exist
+- `idata[(id >>> 8) * 8 + 0] = mask` - Status mask
+	- `mask & 0xF` - The removal state of the node. (This speeds up removal.)
+		- `(mask & 0xF) === 0x0` - No removal callbacks need called.
+		- `(mask & 0xF) === 0x1` - Control vnode `done` callback exists.
+		- `(mask & 0xF) === 0x2` - Component vnode subscription array is non-empty.
+		- `(mask & 0xF) === 0x3` - Element vnode receiver needs closed.
+		- `(mask & 0xF) === 0x4` - Catch vnode stream needs closed.
+	- `mask >>> 8` - Type-dependent data index, ignored if none exist
+- `idata[(id >>> 8) * 8 + 1] = tag` - Element tag ID, ignored for most control vnodes
+- `idata[(id >>> 8) * 8 + 2] = parent` - Closest element parent ID or `-1` if this is the root node.
+- `idata[(id >>> 8) * 8 + 3] = key` - Element key ID
 	- Note that not all types use the same number of slots (most use 0 or 1, but DOM elements use 2), so you can't assume that `typeData + 1` represents the next element's index. You need to use the next ID and go through that indirection to get the its type-dependent data index. Note that all types use a static number of fields relative to that type, so it's still quickly calculable.
 - `idata[(id >>> 8) * 8 + 4] = domStart` - DOM index start
 - `idata[(id >>> 8) * 8 + 5] = domEnd` - DOM index end (as in, index after last)
-- `idata[(id >>> 8) * 8 + 6] = childrenStart` - Children ID start, ignored for text nodes and trusted nodes
-- `idata[(id >>> 8) * 8 + 7] = childrenLength` - Children length, ignored for text nodes and trusted nodes
+- `idata[(id >>> 8) * 8 + 6] = childrenStart` - Children ID start, ignored for text nodes
+- `idata[(id >>> 8) * 8 + 7] = childrenLength` - Children length, ignored for text nodes
 
 Each node is referred to by an ID pointer.
 
@@ -155,10 +164,6 @@ Here are the types:
 	- Assert: `key === 0`.
 	- Assert: `domStart === domEnd - 1`
 
-- HTML:
-	- Type ID: `(mask & 0x000F) === 0x3`
-	- `tag` = Resolved ID for string contents
-
 - Keyed:
 	- Type ID: `(mask & 0x000F) === 0x4`
 	- `childrenStart` + `childrenLength` = Fragment children
@@ -173,23 +178,29 @@ Here are the types:
 	- Type ID: `(mask & 0x000F) === 0x6`
 	- `tag` = Resolved ID for component reference
 	- `childrenStart` + `childrenLength` = Fragment children
+	- `odata[typeData + 0]` = Interleaved attribute subscription tokens + subscriptions
 	- Note: `domStart` and `domEnd` are inferred from children.
 	- Assert: `childrenLength === 1`.`
 
-- DOM:
+- Element:
 	- Type ID: `(mask & 0x000F) === 0x7`
 	- `tag` = Resolved ID for tag name/`is` name
 	- `childrenStart` + `childrenLength` = Element children
 	- `odata[typeData + 0]` = Element attributes
-	- `odata[typeData + 1]` = DOM event handler
-	- `odata[typeData + 1].id` = Back pointer to this type ID
-	- `odata[typeData + 1]["on" + event]` = Event handler
+	- `odata[typeData + 1]` = Event receiver
+	- `odata[typeData + 2]` = Flattened array of event handlers with options, carrying enough info to unregister it, or `undefined` if no events are being observed.
+	- `odata[typeData + 2][i].mask` = Event options mask
+		- `odata[typeData + 2][i].mask & 1 << 0` - Capture
+		- `odata[typeData + 2][i].mask & 1 << 1` - Once
+		- `odata[typeData + 2][i].mask & 1 << 2` - Passive
+		- `odata[typeData + 2][i].mask >>> 8` = Set to `typeData`.
+	- `odata[typeData + 2][i].name` = Event name
 	- Assert: `domStart === domEnd - 1`
-	- Assert: `odata[typeData + 0]` is initialized to `undefined` prior to any event handlers existing.
+	- Assert: `odata[typeData + 1]` and `odata[typeData + 2]` are initialized to `undefined` prior to any event handlers existing.
 
 - Catch:
 	- Type ID: `(mask & 0x000F) === 0x8`
-	- `odata[typeData + 0]` = `onerror` callback
+	- `odata[typeData + 0]` = Error observer
 	- `childrenStart` + `childrenLength` = Fragment children
 	- Note: `domStart` and `domEnd` are inferred from children.
 
@@ -280,11 +291,10 @@ function normalize(vnode) {
 		var attrs = vnode.attrs
 
 		if (attrs == null) {
-			// HTML, Keyed, Fragment
+			// Keyed, Fragment
 			if (tag != null) {
 				if (
 					tag === "#catch" ||
-					tag === "#html" ||
 					tag === "#keyed" ||
 					tag === "fragment"
 				) {
@@ -318,13 +328,6 @@ function normalize(vnode) {
 			}
 			if (typeof tag === "string") {
 				switch (tag) {
-					// HTML
-					case "#html":
-						var children = attrs.children
-						tag = children != null ? children.join("") : ""
-						if (tag.length === 0) return undefined
-						return createSimpleObject(0x3, tag, attrs, undefined)
-
 					// Keyed, Fragment
 					case "#keyed":
 					case "#fragment":
@@ -344,10 +347,9 @@ function normalize(vnode) {
 							return undefined
 						}
 						var key = attrs.key, ref = attrs.ref
-						var oncatch = attrs.oncatch
 						return create(
 							0x8 | (key != null) << 5 | (ref != null) << 8,
-							tag, 0, undefined, undefined, oncatch, children,
+							tag, 0, undefined, undefined, undefined, children,
 							key != null ? getKeyID(key) : 0, ref,
 						)
 
@@ -426,9 +428,9 @@ function shouldReplace(id, vnode) {
 	// Steps 4, 6, and 7
 	if ((vnode.mask ^ id) & 0xFF) return true
 	// Step 5
-	if (vnode.tagID !== idata[(id >>> 8) << 2]) return true
+	if (vnode.tagID !== idata[id >>> 6 & ~0x3 | 1]) return true
 	// Step 8
-	if (vnode.keyID !== idata[(id >>> 8) << 2 | 2]) return true
+	if (vnode.keyID !== idata[id >>> 6 | 3]) return true
 	// Step 9 and 10
 	return (id & 0x8F) === 0x87
 }
@@ -443,11 +445,11 @@ This searches for the next walkable subtree's IR ID and returns it, or `-1` if t
 function skipSubtree(id) {
 	const current = (id >>> 8) << 2
 	while (id >= 0) {
-		const nextId = idata[current + 1]
+		const nextId = idata[current + 2]
 		const parent = (nextId >>> 8) << 2
 		let i = idata[parent + 6]
 		for (const end = i - 1 + idata[parent + 7]; i < end; i++) {
-			if (cdata[i] === id) return cdata[i + 1]
+			if (cdata[i] === id) return cdata[i + 2]
 		}
 		id = nextId
 		current = parent

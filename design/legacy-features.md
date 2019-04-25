@@ -2,13 +2,13 @@
 
 # Legacy features
 
-There's a variety of v1-v2 features that will be considered legacy. I will continue to support some of them, purely for the purpose of legacy support, but they won't all be in the same place they once were.
+There's a variety of v1/v2 features that will be considered legacy. I will continue to support some of them, purely for the purpose of legacy support, but they won't all be in the same place they once were.
 
-## Mithril streams
+## Mithril v1/v2 streams
 
-This will be maintained and exposed under `mithril-stream`, evolved separately from Mithril itself. It's not going to be deprecated or removed as there is a use case for a small streams library, but cells offer a lot more functionality out of the box and are just all around easier to define, easier to use. They're smaller when compressed, too, so that's even more reason to switch to cells. It's also why I include cells in core and not streams.
+This will be maintained and exposed under `mithril-stream`, evolved separately from Mithril itself. It's deprecated in favor of the new streams, as they offer more functionality with less overhead and they are just all around easier to define, easier to use. They're smaller when compressed, too, so that's even more reason to switch to the new streams. It's also why I include the new streams in core and not the old streams.
 
-The API will generally remain the same and it will still remain within the main Mithril repo, but it will be versioned and released independently.
+The API will generally remain the same and it will still remain within the main Mithril repo, but it is still deprecated.
 
 ## ospec
 

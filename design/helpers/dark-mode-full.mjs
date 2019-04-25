@@ -1,12 +1,12 @@
 // `prefersDarkMode` from `./dark-mode.mjs` with all dependencies included. As
 // an exception, `watchMedia` is specialized to just return whether it matches.
-import {all} from "mithril/cell"
+import {all} from "mithril/stream"
 
 function localStorage(key) {
-	return (send) => {
+	return (o) => {
 		function sendValue() {
 			const item = window.localStorage.getItem(key)
-			send([item ? JSON.parse(item) : undefined, (value) => {
+			o.next([item ? JSON.parse(item) : undefined, (value) => {
 				window.localStorage.setItem(key, JSON.stringify(value))
 				sendValue()
 			}])
@@ -18,9 +18,9 @@ function localStorage(key) {
 }
 
 function watchMedia(query) {
-	return (send) => {
+	return (o) => {
 		const mql = window.matchMedia(query)
-		const handler = () => send(mql.matches)
+		const handler = () => o.next(mql.matches)
 		mql.addListener(handler)
 		handler()
 		return () => mql.removeListener(handler)

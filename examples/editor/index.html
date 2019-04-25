@@ -28,13 +28,13 @@ const state = {
 //view
 const Editor = Mithril.component(() => () => [
 	m("textarea.input", {
-		oninput(e) { state.update(e.target.value) },
-		value: state.text
+		on: [(e) => { state.update(e.target.value) }, "input"],
+		value: state.text,
 	}),
 	m("div.preview", trust(marked(state.text))),
 ])
 
-Mithril.render(document.getElementById("editor"), m(Editor))
+Mithril.render("#editor", m(Editor))
 		</script>
 	</body>
 </html>

@@ -1,10 +1,10 @@
 // Translated from https://usehooks.com/useLocalStorage/, but doesn't assume the
-// cell has full control over the storage.
+// stream has full control over the storage.
 export default function localStorage(key) {
-	return (send) => {
+	return (o) => {
 		function sendValue() {
 			const item = window.localStorage.getItem(key)
-			send([item ? JSON.parse(item) : undefined, (value) => {
+			o.next([item ? JSON.parse(item) : undefined, (value) => {
 				window.localStorage.setItem(key, JSON.stringify(value))
 				sendValue()
 			}])

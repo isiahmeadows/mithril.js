@@ -1,7 +1,7 @@
 (function () {
 "use strict"
 
-const {m, Cell} = Mithril
+const {m, Stream} = Mithril
 
 perfMonitor.startFPSMonitor()
 perfMonitor.startMemMonitor()
@@ -10,7 +10,7 @@ perfMonitor.initProfiler("render")
 function DBMon(attrs) {
 	return m("div", [
 		m("table.table.table-striped.latest-data", [
-			m("tbody", Cell.map(attrs, ({data}) =>
+			m("tbody", Stream.map(attrs, ({data}) =>
 				m("#keyed", data.map(({dbname, lastSample}) =>
 					m("tr", {key: dbname}, [
 						m("td.dbname", dbname),

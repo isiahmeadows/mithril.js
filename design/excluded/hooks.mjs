@@ -1,10 +1,12 @@
+import createStream from "mithril/stream"
+
 let currentState, currentIndex
 
 export const IGNORE = new Error("Hooks.IGNORE")
 
-function run(state, paramCell) {
+function run(state, paramStream) {
 	const prevState = currentState, prevIndex = currentIndex
-	let ignore = false, result
+	let ignore = false, result, subscription
 	currentState = state; currentIndex = 0
 	state.scheduled = undefined
 	try {
@@ -16,13 +18,14 @@ function run(state, paramCell) {
 		state.ready = true
 		currentState = prevState; currentIndex = prevIndex
 	}
-	if (paramCell != null) {
-		paramCell((param) => {
+	if (paramStream != null) {
+		subscription = paramStream.subscribe((param) => {
 			state.param = param
 			run(state)
 		})
 	}
 	if (!ignore) (0, state.send)(result)
+	return subscription
 }
 
 const p = Promise.resolve()
@@ -37,11 +40,7 @@ function getScheduled(state) {
 		}
 		if (scheduled.updateView) run(state)
 	}
-	if (state.context != null) {
-		state.context.scheduleLayout(callback)
-	} else {
-		p.then(callback)
-	}
+	p.then(callback)
 	return scheduled
 }
 
@@ -57,21 +56,24 @@ function depsAreSame(prev, deps) {
 	return true
 }
 
-function initHooks(paramCell, body) {
-	if (body == null) { body = paramCell; paramCell = undefined }
-	return (send, context) => {
-		if (context != null && typeof context !== "object") context = undefined
+function initHooks(paramStream, body) {
+	if (body == null) { body = paramStream; paramStream = undefined }
+	return createStream((observer) => {
 		const state = {
 			param: undefined, slots: [], ready: false, scheduled: undefined,
-			body, send, context,
+			observer, body,
 		}
-		run(state, paramCell)
+		const subscription = run(state, paramStream)
 		return () => {
-			for (const {done} of state.slots) {
-				if (typeof done === "function") done()
+			try {
+				for (const {done} of state.slots) {
+					if (typeof done === "function") done()
+				}
+			} finally {
+				subscription.unsubscribe()
 			}
 		}
-	}
+	})
 }
 
 export function withHooks(body) {
@@ -157,7 +159,7 @@ export function useMemoInit(deps, init) {
 	return slot.current
 }
 
-export function useCellFactory(factory) {
+export function useStreamFactory(factory) {
 	const state = currentState
 	const index = currentIndex++
 	const slot = state.ready
@@ -166,32 +168,49 @@ export function useCellFactory(factory) {
 			done: undefined,
 			current: undefined,
 			factory: undefined,
-			sends: undefined,
+			observers: undefined,
 			sync: undefined,
 		}
 	if (slot.factory !== factory) {
 		slot.factory = factory
-		slot.sends = []
+		slot.observers = []
 		slot.sync = true
+		const prev = slot.done
+		slot.done = slot
+		if (prev != null) prev()
 		try {
-			slot.done = factory((send) => {
-				slot.sends.push(send)
-			})((value) => {
-				slot.current = value
-				if (!slot.sync) getScheduled(state).updateView = true
+			const sub = factory(createStream((o) => {
+				slot.observers.push(o)
+				return () => {
+					slot.done = undefined
+					slot.observers.splice(slot.observers.indexOf(o), 1)
+				}
+			})).subscribe({
+				next: (value) => {
+					slot.current = value
+					if (!slot.sync) getScheduled(state).updateView = true
+				},
+				error: (value) => {
+					slot.done = undefined
+					console.error(value)
+				},
+				complete: () => {
+					slot.done = undefined
+				},
 			})
+			if (slot.done === slot) slot.done = () => sub.unsubscribe()
 		} finally {
 			slot.sync = false
 		}
 	}
 	return [slot.current, (value) => {
-		for (let i = 0; i < slot.sends.length; i++) {
-			(0, slot.sends[i])(value)
+		for (let i = 0; i < slot.observers.length; i++) {
+			slot.observers[i].next(value)
 		}
 	}]
 }
 
-export function useCell(cell) {
+export function useStream(stream) {
 	const state = currentState
 	const index = currentIndex++
 	const slot = state.ready
@@ -199,17 +218,30 @@ export function useCell(cell) {
 		: state.slots[index] = {
 			done: undefined,
 			current: undefined,
-			cell: undefined,
+			stream: undefined,
 			sync: undefined,
 		}
-	if (slot.cell !== cell) {
-		slot.cell = cell
+	if (slot.stream !== stream) {
+		slot.stream = stream
 		slot.sync = true
+		const prev = slot.done
+		slot.done = slot
+		if (prev != null) prev()
 		try {
-			slot.done = cell((value) => {
-				slot.current = value
-				if (!slot.sync) getScheduled(state).updateView = true
+			const sub = stream.subscribe({
+				next: (value) => {
+					slot.current = value
+					if (!slot.sync) getScheduled(state).updateView = true
+				},
+				error: (value) => {
+					slot.done = undefined
+					console.error(value)
+				},
+				complete: () => {
+					slot.done = undefined
+				},
 			})
+			if (slot.done === slot) slot.done = () => sub.unsubscribe()
 		} finally {
 			slot.sync = false
 		}
@@ -219,8 +251,4 @@ export function useCell(cell) {
 
 export function useContext() {
 	return currentState.context
-}
-
-export function useRenderInfo(key) {
-	return currentState.context.renderInfo[key]
 }

@@ -33,22 +33,25 @@ const backgroundPosition = (i, step) =>
 	// X% Y%
 	`${i % step * (step + 1)}% ${Math.floor(i / step) * (step + 1)}%`
 
-Mithril.render(document.getElementById("root"),
-	m("div.container", (render) => {
-		let state = 0
-		setInterval(() => { state = (state + 1) & 3; update() }, 1000)
-		update()
+Mithril.render("#root", {class: "container"}, (o) => {
+	let state = 0
+	setInterval(() => { state = (state + 1) & 3; update() }, 1000)
+	update()
 
-		function update() {
-			const show = (state & 2) === 0
-			const remove = state === 3
-			render(remove ? undefined : range(100).map((i) => m("div.slice", {
+	function update() {
+		const show = (state & 2) === 0
+		const remove = state === 3
+
+		if (remove) {
+			o.next()
+		} else {
+			o.next(range(100).map((i) => m("div.slice", {
 				class: show ? undefined : "exit",
 				style: {backgroundPosition: backgroundPosition(i, 10)},
 			})))
 		}
-	})
-)
+	}
+})
 		</script>
 	</body>
 </html>

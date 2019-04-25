@@ -101,10 +101,118 @@ function create(selector, attrs) {
 
 var Fragment = "#fragment"
 var Keyed = "#keyed"
-var Html = "#html"
 var Catch = "#catch"
+
+function withScope(receiver, scope) {
+	return function (event) {
+		return receiver({type: event.type, scope: scope, value: event})
+	}
+}
+
+var sentinel = {}
+function createStream(init) {
+	return function (hooks) {
+		if (hooks == null) hooks = {}
+		var done = sentinel
+		var maybeDone = init({
+			next: function (value) {
+				var prev = hooks
+				if (prev != null && prev.next != null) prev.next(value)
+			},
+			error: function (value) {
+				var prev = hooks
+				hooks = done = undefined
+				if (prev != null && prev.error != null) prev.error(value)
+			},
+			complete: function () {
+				var prev = hooks
+				hooks = done = undefined
+				if (prev != null && prev.complete != null) prev.complete()
+			},
+		})
+		if (sentinel !== done) done = maybeDone
+
+		return function () {
+			var prev = done
+			done = undefined
+			if (typeof prev === "function") prev()
+		}
+	}
+}
+
+function component(init) {
+	return function (attrs, emit) {
+		return function (o) {
+			var view, currentAttrs
+			var innerContext = {
+				context: undefined,
+				done: undefined,
+				redraw: function () {
+					render(currentAttrs)
+				},
+			}
+
+			function render(next) {
+				var prev = currentAttrs
+				currentAttrs = next
+				o.next({tag: "#lazy", children: [function (context) {
+					innerContext.context = context
+					return wrapRedraw(view(next, prev))
+				}]})
+			}
+
+			function wrapRedraw(child) {
+				if (child == null || typeof child !== "object") return child
+				if (Array.isArray(child)) return child.map(wrapRedraw)
+				if (child.tag == null || child.tag === "#lazy") return child
+				var isComponent = typeof child.tag === "function"
+				var bound = Object.create(null)
+				assign(bound, child.attrs)
+				if (Array.isArray(bound.on)) {
+					var result = bound.on = bound.on.slice()
+					var receiver = result[0]
+					result[0] = function (ev) {
+						var result = receiver(ev)
+						if (
+							result !== false ||
+							isComponent || !ev.defaultPrevented
+						) render(currentAttrs)
+						return result
+					}
+				}
+				bound.children = bound.children.map(wrapRedraw)
+				return {tag: child.tag, attrs: bound}
+			}
+
+			attrs({next: function (next) {
+				if (view == null) view = init(next, innerContext, emit)
+				render(next)
+			}})
+
+			return function () {
+				if (innerContext.done != null) innerContext.done()
+			}
+		}
+	}
+}
+
+function pure(view) {
+	return function (attrs) {
+		return function (o) {
+			var current
+			return attrs({next: function (next) {
+				var prev = current
+				current = next
+				var result = view(next, prev)
+				if (result !== prev) o.next(result)
+			}})
+		}
+	}
+}
 
 export {
 	m, m as default, create,
-	Fragment, Keyed, Html, Catch,
+	withScope, createStream,
+	component, pure,
+	Fragment, Keyed, Catch,
 }

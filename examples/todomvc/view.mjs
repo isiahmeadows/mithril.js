@@ -1,8 +1,8 @@
-//view
-import * as Cell from "../../mithril/cell.mjs"
+// view
+import {map} from "../../mithril/stream.mjs"
 import * as Router from "../../mithril/router.mjs"
 import * as State from "./model.mjs"
-import {m} from "../../../mithril/core.mjs"
+import {m} from "../../../mithril/m.mjs"
 
 function Header() {
 	return m("header.header", [
@@ -78,7 +78,7 @@ function Todos(attrs) {
 			},
 		}),
 		m("label[for=toggle-all]", "Mark all as complete"),
-		m("ul#todo-list", m("#keyed", Cell.map(attrs, ({showing}) =>
+		m("ul#todo-list", m("#keyed", map(attrs, ({showing}) =>
 			State.getTodosByStatus({showing}).map((todo) =>
 				m(Todo, {key: todo.id, todo})
 			)
@@ -94,7 +94,7 @@ function Footer(attrs) {
 			m("strong", remaining),
 			remaining === 1 ? " item left" : " items left",
 		]),
-		m("ul#filters", Cell.map(attrs, ({showing}) => {
+		m("ul#filters", map(attrs, ({showing}) => {
 			function filter(href, label, children) {
 				return m("li", m(Router.Link, m("a", {
 					href, children,
@@ -117,7 +117,7 @@ function Footer(attrs) {
 export default function View(attrs) {
 	return [
 		m(Header),
-		State.state.todos.length ? Cell.map(attrs, ({showing}) => [
+		State.state.todos.length ? map(attrs, ({showing}) => [
 			m(Todos, {showing}),
 			m(Footer, {showing}),
 		]) : null

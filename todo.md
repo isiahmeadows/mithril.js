@@ -4,7 +4,9 @@
 
 These are things I need to do at some point, but just haven't gotten to yet. Obviously, this is not exhaustive, but it should give some insight into my plans.
 
-- Benchmark cells vs other alternatives detailed in [the rationale](rationale.md#creating-the-cell-abstraction), especially the other stream libraries.
+- Update the vnode/IR structure to reflect current internal tag names.
+
+- Benchmark streams vs other alternatives detailed in [the rationale](rationale.md#creating-the-cell-abstraction), especially the other stream libraries.
 
 - Move all this design documentation to a `design/` subfolder and prototype this.
 

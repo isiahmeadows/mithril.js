@@ -4,11 +4,17 @@
 
 There's a lot of big decisions here that require some explanation.
 
+### ES3 syntactic compatibility
+
+I don't plan to actively test against ES3 engines unless I'm alerted that there's a enough of a user base *still* using IE8 that I need to ignore Microsoft's dropping of support, but I will attempt to keep at least syntactic compatibility so users stuck on severely outdated systems can at least cope with this through sufficient polyfills. Pressure by the OS developer (99% of the time it's Microsoft) and lack of support by them should generally be sufficient.
+
+This is per request by a few people developing for projects on relatively ancient operating systems. (There's still a few enterprises and government organizations working on migrating away from IE to modern web technologies. These are the places I feel sorry for those cursed with that kind of job, but I respect and understand their situation.)
+
 ### Removing the implicit `div` in the hyperscript DSL
 
-This is pretty well explained [where I proposed the change itself](core.md#selectors), but I'll go at much greater detail here on why that's the case and how that played into my decision to ultimately remove it. It generally comes down to how we as humans parse and process information at a lower level, and it's in part founded by my own experience both using Mithril and helping others with various issues using Mithril.
+This is pretty well explained [where I proposed the change itself](core/vnodes.md#selectors), but I'll go at much greater detail here on why that's the case and how that played into my decision to ultimately remove it. It generally comes down to how we as humans parse and process information at a lower level, and it's in part founded by my own experience both using Mithril and helping others with various issues using Mithril.
 
-In short: Humans aren't made of silicon. They don't process things sequentially. When reading `m(".button.confirm")`, your first instinct isn't likely that it's short for `m("div.button.confirm")` unless you've been using primarily Mithril for years, and even then it's probably not *reliably* so, especially in more complex scenarios like `cond ? m(".foo") : m(".bar")` where you might need to consciously recall the rule. And `m("")` could be reasonably interpreted as both `m("div")` and `[]` by two different people. So to fix a UX issue I've seen appear repeatedly in our Gitter and other places, I suggest we require a tag name.
+In short: Humans aren't made of silicon. They don't process things sequentially. When reading `m(".button.confirm")`, your first instinct isn't likely that it's short for `m("div.button.confirm")` unless you've been using primarily Mithril for years, and even then it's probably not *reliably* so. This is especially true in more complex scenarios like `cond ? m(".foo") : m(".bar")` where you might need to consciously recall the rule. And `m("")` could be reasonably interpreted as both `m("div")` and `[]` by two different people. So to fix a UX issue I've seen appear repeatedly in our Gitter and other places, I suggest we require a tag name.
 
 #### Detailed explanation
 
@@ -23,6 +29,17 @@ A similar issue is at play here: when you process the selector `.button.confirm`
 Separately, in the special case of `m("")`, following the rules of disambiguation, it would be equivalent to `m("div")`, but a related thing is going on here that causes people to intuitively expect it should evaluate to a fragment: there's no clear data, even inferrable from context, associated with the contents of the element, so it's only natural to think it should be equivalent to just its children or, alternatively, a fragment containing them. Natural languages themselves do not typically feature information implied from rules of grammar - it's normally encoded in the words and the surrounding context it was transmitted in, not from the parsing step itself. Cases like "Adam is cooking?", which implies through its non-standard usage an expectation of falsehood, are the exception, not the norm, and even that's not standard usage. Coming from that background, it makes sense that some people, being aware of the rules, will feel that `m("")` should intuitively represent a fragment rather than an element. And unlike the scenario of garden path sentences, which look like errors but don't look like fragments and don't need reparsed as one, this *looks* like it's a fragment missing critical information, and in fact, [we *did* decide to make `m("")` itself throw due to the confusion it was causing](https://gitter.im/mithriljs/mithril.js/archives/2015/12/12).
 
 This should help explain from a scientific view *why* I proposed removing support for implicit `div` tag names from selectors altogether.
+
+### Changing `onevent` to a centralized event receiver system
+
+In the "Why change the event receiver model?" section of [the event documentation](core/vnodes.md#events), I explain it at length.
+
+### Removing trusted vnodes
+
+Few reasons:
+
+1. We're one of few frameworks that provide that facility anywhere beyond `innerHTML`, and most everyone else who does that I'm aware of provide it only because their entire view layer is template-driven (like Ember).
+2. `.innerHTML` addresses nearly every use case I've ever heard of, and it's worth noting there hasn't been any significant demand for even React to implement it. For the few that actually need the ability to insert HTML/XML adjacent to a particular element, they can just use the native [`Element.insertAdjacentHTML`](https://developer.mozilla.org/en-US/docs/Web/API/Element/insertAdjacentHTML), which deceptively works for both.
 
 ### Removing global redraws
 
@@ -65,11 +82,11 @@ export function redrawSync() {
 
 Rather than Mithril choosing when trees are generated, components choose that and Mithril simply chooses when to commit the tree. Here's the main consequences of this:
 
-- Autoredraw by default is gone. [You can still wrap a component to provide this functionality local to a component](core.md#closure-components), but it's not there by default.
-- There is no `view` method. When necessary, you can create your own complicated system, but a simple `Cell.map(attrs, (attrs) => view)` is sufficient for most cases.
-- Instead of receiving attributes directly, you receive a cell that emits updated attributes to its subscribers.
+- Autoredraw by default is gone. [You can still wrap a component to provide this functionality local to a component](core/components.md#sugared-components), but it's not there by default.
+- There is no `view` method. When necessary, you can create your own complicated system, but a simple [`pure((attrs, prev) => view)`](core/components.md#sugared-components) is sufficient for most cases.
+- Instead of receiving attributes directly, you receive a stream of received attributes.
 
-The general concept behind this is that if you want to update the tree, update the tree. If you don't, just don't. Either way, you're not asking for permission - you're just doing what you want to. The key difference here is that you're not *reacting to new attributes and state by generating a view*, but just *reacting to new attributes and state* and acting appropriately. Sometimes, that "acting appropriately" is firing a request, and other times, it's rendering a view. Sometimes, the new attributes match the old attributes and so you can react by just doing nothing.
+The general concept behind this is that if you want to update the tree, update the tree. If you don't, just don't. Either way, you're not asking for permission - you're just doing what you want to do. The key difference here is that you're not *reacting to new attributes and state by generating a view*, but just *reacting to new attributes and state* and acting appropriately. Sometimes, that "acting appropriately" is firing a request, and other times, it's rendering a view. Sometimes, the new attributes match the old attributes and so you can react by just doing nothing.
 
 The main reason why I first made redraws explicit was performance, but the real wins came from making rendering active rather than reactive and giving components all the control over that. It let me shed a few more hooks in the process, so rendering optimizations come out and decompose much more naturally.
 
@@ -93,49 +110,50 @@ The vnode children have been moved into the attributes.
 
 This is one of the few things React did *correctly* from the start. It's *much* easier to proxy attributes through when children are packaged like any other attribute. It's also much easier to pass them around sensibly - you don't need to specially package them.
 
-### Creating the cell abstraction
-
-This is pretty well explained in the [section documenting cells](core.md#cells), specifically in the ["Why?"](core.md#why) and ["What about streams?"](core.md#what-about-streams) subsections. But I'll clarify here, too.
+### Creating the stream abstraction
 
 I was specifically looking for an abstraction that could tick several different boxes simultaneously. If any of these were not met, it was an immediate deal breaker, and I would not add support for it in core.
 
 1. It has to be [simple](https://www.infoq.com/presentations/Simple-Made-Easy).
 2. It has to be easy.
-3. It has to be dependency-optional with minimal callee boilerplate.
+3. It has to have as few dependencies as possible, both implicit and explicit.
 4. It has to be concise.
 5. It has to be readable.
 6. It has to be fast with minimal overhead, both in size and memory.
-7. It has to be highly composable.
-8. It has to be highly decoupled.
-9. It has to be highly encapsulated.
-10. It has to be highly optimizable.
-11. Code using it [has to be easily modified](https://joreteg.com/blog/architecting-uis-for-change).
-12. It has to be explicit.
-13. It has to be approachable.
-14. It has to be reactive.
-15. It has to be push-based.
-16. It has to support maintainable concurrency with minimal effort.
-17. It has to support simple stateful computation.
-18. It has to support simple stateless computation.
-19. It has to integrate well with the outside world.
-20. And finally, it should help [make impossible states impossible](https://www.youtube.com/watch?v=IcgmSRJHu_8) and impossible operations unrepresentable.
+7. It has to support error handling.
+8. It has to be highly composable.
+9. It has to be highly decoupled.
+10. It has to be highly encapsulated.
+11. It has to be highly optimizable.
+12. Code using it [has to be easily modified](https://joreteg.com/blog/architecting-uis-for-change).
+13. It has to be explicit.
+14. It has to be approachable.
+15. It has to be reactive.
+16. It has to be push-based.
+17. It has to support maintainable concurrency with minimal effort.
+18. It has to support simple stateful computation.
+19. It has to support simple stateless computation.
+20. It has to integrate well with the outside world.
+21. And finally, it should help [make impossible states impossible](https://www.youtube.com/watch?v=IcgmSRJHu_8) and impossible operations unrepresentable.
 
 And on top of these, anything that lets me reduce the existing level of Mithril magic, including removing autoredraw, is only a plus.
 
-And of course, this basically left me with nothing that currently existed. So I had to create a new abstraction for it, and eventually narrowed it down to a concept I've called "cells". This provides each of these, and [the various `mithril/cell` stuff](mvp-utils.md#cell-utilities) helps make it much more approachable.
+And of course, this basically left me with almost nothing that currently existed. So I had to create a new abstraction for it, and eventually narrowed it down to a concept I've called streams, but they're a lower-level, simplified variation of traditional streams. This provides each of these, and [the various `mithril/stream` stuff](mvp-utils/stream.md) helps make it much more approachable.
 
 Here's some of the existing ways I could've gone about this, and why I didn't.
 
-#### Streams and observables
+#### Traditional streams and observables
 
-They're not dependency-optional, and even if I went to just accept anything that has a `Symbol.observable` method returning an object with a `.subscribe` method, it *still* wouldn't be dependency-optional for the user, even if the framework can be agnostic to the library used.
+They generally require heavy dependencies to even operate, and even if I went to just accept anything that has a `Symbol.observable` method returning an object with a `.subscribe` method, it *still* would be a bit unwieldy to use.
 
 They also have *some* overhead, and if you want to remove the performance and runtime memory overhead of it, you basically have to trade it for a lot of overhead in the form of bytes being sent over the wire:
 
-- [RxJS 6](https://rxjs.dev): heavily optimized with 100+ operators: 44.5 KB min+gzip
-- [Most core](https://github.com/mostjs/core): heavily optimized with a lot of "core" features but few operators: 14.9 KB min+gzip
-- [xstream](https://staltz.github.io/xstream/): much smaller and slimmer with only ["hot"](https://medium.com/@benlesh/hot-vs-cold-observables-f8094ed53339) streams, designed for [Cycle.js](https://cycle.js.org/) (a virtual DOM framework driven by reactive streams rather than traditional components): 4.1 KB min+gzip
-- [Mithril streams](https://mithril.js.org/archive/v1.1.6/stream.html): very small, but so barebones people are constantly reinventing critical functionality it lacks: 1.0 KB
+- [RxJS 6](https://rxjs.dev): heavily optimized with 100+ operators: 44.5 kB min+gzip
+- [Most core](https://github.com/mostjs/core): heavily optimized with a lot of "core" features but few operators: 14.9 kB min+gzip
+- [xstream](https://staltz.github.io/xstream/): much smaller and slimmer with only ["hot"](https://medium.com/@benlesh/hot-vs-cold-observables-f8094ed53339) streams, designed for [Cycle.js](https://cycle.js.org/) (a virtual DOM framework driven by reactive streams rather than traditional components): 4.1 kB min+gzip
+- [Mithril streams](https://mithril.js.org/archive/v1.1.6/stream.html): very small, but so barebones people are constantly reinventing critical functionality it lacks: 1.0 kB
+
+(This is also why I took a simplified representation of streams rather than the heavy traditional representation.)
 
 #### Async iterators
 
@@ -190,12 +208,12 @@ function through(op, onEnd) {
 }
 ```
 
-Compare this to cells:
+Compare this to streams:
 
 ```js
 // It's literally just the identity function
-function through(cell) {
-	return cell
+function through(stream) {
+	return stream
 }
 ```
 
@@ -227,7 +245,7 @@ However, it still has various cons, substantial enough for me to look elsewhere:
 
 Hooks are like the hot new thing right now, since [React added them](https://reactjs.org/docs/hooks-reference.html). They're based roughly on [algebraic effects and cell-oriented reactive programming](https://reactjs.org/docs/hooks-faq.html#what-is-the-prior-art-for-hooks), and function as a DSL. They do carry several pros:
 
-- They do have reasonably low overhead, especially in memory and performance. Memory-wise, they're slightly more costly than cells, but they're more static than cells and have far fewer polymorphic calls, saving some CPU cycles.
+- They do have reasonably low overhead, especially in memory and performance. Memory-wise, they're slightly less costly than streams, but they're more static than streams and have far fewer polymorphic calls, saving some CPU cycles.
 - They are *very* approachable, especially if explained as an embedded DSL (which is what it really is) rather than some JS library. They're also fairly readable and somewhat easy to follow.
 - Hooks *are* relatively concise, and pure computations are as simple as not using hooks.
 - Hooks naturally encapsulate their data in a decoupled fashion similarly to how closures do.
@@ -241,7 +259,7 @@ Hooks are like the hot new thing right now, since [React added them](https://rea
 But there are some clear cons, too, many of which are deal-breaking:
 
 - This absolutely requires a library to function. Otherwise, redraws aren't going to happen.
-- This is neither push-based nor pull-based, but value-based. It requires a driving library to make it happen, and even something as simple as porting it to a cell [is far from simple under the hood, even if you simplify the hook operators to a core subset](excluded/hooks.mjs). (Or to put it another way, it's far from simple and it's reactive only for changing attributes.)
+- This is neither push-based nor pull-based, but value-based. It requires a driving library to make it happen, and even something as simple as porting it to a stream [is far from simple under the hood, even if you simplify the hook operators to a core subset](excluded/hooks.mjs). (Or to put it another way, it's far from simple and it's reactive only for changing attributes.)
 - For similar reasons, "subscription" doesn't exist in the general sense. The only way you get "subscription" is by using a return value.
 - When one hook updates its state, *all* hooks are updated. This is a problem: hooks aren't correctly decoupled like they should be.
 - As a DSL, there's a *lot* of implicit behavior going on, and I'm not just talking about the global nature of the hooks themselves. I'm talking about other things, too, like dependency diffing with `useEffect` and `useMemo`.
@@ -388,7 +406,7 @@ And pure components are simpler, almost maximally simple:
 ```js
 function ThreadNode({node}) {
 	return m("div.comment", [
-		m("p", m("#html", node.text)),
+		m("p", {innerHTML: node.text}),
 		m("div.reply", m(Reply, {node})),
 		m("div.children", m("#keyed", node.children.map((child) =>
 			m(ThreadNode, {key: child.id, node: child})
@@ -404,6 +422,44 @@ But there are several cons, enough that it just wasn't cutting it.
 - It doesn't split apart very well, as every state reducer relies on its caller to just sustain the state correctly. This coupling through an implicit dependency made it far too complicated to compose, and composition would almost always require a dependency to even work reasonably. (It composes well with external classes and the such, though, just not with other state reducers.) It also meant I couldn't reuse it as a general state container.
 - It's push-based in invoking updates, but it doesn't offer the most natural way to just not update the tree.
 - If you need to detect the difference between external and internal updates, this is way more difficult than it should be. You basically have to tag updated states like `{type: "init", state: ...}` for initialization, `{type: "update", state: ...}` for external updates, and `{type: "patch", state: ...}` for internal updates. That does eventually get annoying, especially when most other variants *don't* require this.
+
+#### Cells
+
+Another idea I tried to do was use a concept I called "cells". It's a further reduced form of streams that lacked the ability to close themselves, but this functionality is unnecessary in the context of UI views. It covered nearly all the checkboxes, and code often looked like this:
+
+```js
+function ThreadNode(attrs) {
+	return (render) => attrs(({node}) => {
+		render(m("div.comment", [
+			m("p", {innerHTML: node.text}),
+			m("div.reply", m(Reply, {node})),
+			m("div.children", m("#keyed", node.children.map((child) =>
+				m(ThreadNode, {key: child.id, node: child})
+			)))
+		]))
+	})
+}
+
+// Or with a cell utility library
+function ThreadNode(attrs) {
+	return Cell.map(attrs, ({node}) => m("div.comment", [
+		m("p", {innerHTML: node.text}),
+		m("div.reply", m(Reply, {node})),
+		m("div.children", m("#keyed", node.children.map((child) =>
+			m(ThreadNode, {key: child.id, node: child})
+		)))
+	]))
+}
+```
+
+This came very close to the ideal, and it compressed *very* well, but it came with a few major glitches.
+
+1. There was no way to signal or propagate errors during computation. This turned what looked like simple code into a beast of messy hacks with a lot of boilerplate, so it really just turned out to be easy, not simple.
+2. Because there was no way for a stream to notify descendants of its closure or completion, it was far too limited to just the view. This of course *is* a problem, just one I didn't recognize immediately when drafting this proposal.
+3. It was easy to extend to new cell types, but that extensibility was as easy as mixins to use. Mixins are obviously not *simple* to extend (just easy), and that also obviously doesn't scale as well. So I decided to rip that out entirely and change control vnodes to a simpler abstraction that also turned out to fit a little better and more composably. (It turned out splitting the functionality into 2 new vnode types simplified it a *lot*.)
+4. Parameters weren't normalized, so any serious logic requiring multiple `done`s ended up getting verbose and boilerplatey in a hurry. It just got flat out nasty at times.
+
+So because of these growing pains, I found I couldn't stick with this abstraction.
 
 #### Others
 

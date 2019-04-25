@@ -1,5 +1,5 @@
 // Translated from https://usehooks.com/useDarkMode/
-import {all, of} from "mithril/cell"
+import {all, of} from "mithril/stream"
 import localStorage from "./local-storage.mjs"
 import watchMedia from "./media.mjs"
 

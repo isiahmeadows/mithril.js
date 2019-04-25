@@ -4,22 +4,18 @@
 
 These are all various utilities that are, unless otherwise listed, kept out of the core bundle, but they are not considered part of the proposal's MVP.
 
-## Advanced cell operators
+## Advanced stream operators
 
-This is exposed under `mithril/cell-utils`, and contains several various more advanced cell operators. Some of these also have runtime dependencies, so that adds to the boilerplate (and is why they aren't in `mithril/cell`).
+This is exposed under `mithril/stream-extras`, and contains several various more advanced stream operators. Some of these also have runtime dependencies, so that adds to the boilerplate (and is why they aren't in `mithril/stream`).
 
-- `newCell = CellUtils.debounce(cell, ms)` - Emit the latest value only if it's been at least `ms` milliseconds since the last value has been received from `stream`.
-- `newCell = CellUtils.throttle(cell, ms)` - Emit the latest value only if it's been at least `ms` milliseconds since the last value has been sent from the returned cell.
-- `newCell = CellUtils.cycle(ms, [...values])` - Cycle through `values`, emitting a value every `ms` milliseconds.
-- `newCell = CellUtils.on(target, event)` - Emit events on each notification by `target`. For browser event emitters, this uses `addEventListener` and `removeEventListener`. For Node event emitters, this uses `addListener` and `removeListener`.
-- `newCell = CellUtils.toCell(value)` - Converts `value` to a cell if it's either an observable, a promise, an observable-like object (including Mithril streams with the redesign), a thenable, or just about anything else that could be considered async emitting from a single channel.
+- `newStream = StreamExtras.debounce(stream, ms)` - Emit the latest value only if it's been at least `ms` milliseconds since the last value has been received from `stream`.
+- `newStream = StreamExtras.throttle(stream, ms)` - Emit the latest value only if it's been at least `ms` milliseconds since the last value has been sent from the returned stream.
+- `newStream = StreamExtras.cycle(ms, [...values])` - Cycle through `values`, emitting a value every `ms` milliseconds.
+- `newStream = StreamExtras.on(target, event)` - Emit events on each notification by `target`. For browser event emitters, this uses `addEventListener` and `removeEventListener`. For Node event emitters, this uses `addListener` and `removeListener`.
+- `newStream = StreamExtras.toStream(value)` - Converts `value` to a stream if it's either an observable, a promise, an observable-like object (including Mithril streams with the redesign), a thenable, or just about anything else that could be considered async emitting from a single channel.
 	- Note that only some things can be ended - notably promises and thenables can't.
-- `[send, result] = Cell.subject((cell) => result)` - Convert a cell factory into a reactive subject.
-	- This is useful for unnesting `send` callbacks for use in certain reactive loops. In particular, it's useful to do `[dispatch, values] = Cell.subject(attrs => Cell.scanMap(attrs, initialState, (state, next) => [nextState, value]))`
-	- Be careful to call `done` in your `done` callback, or at the very least, return `done`!
-	- Not sure this belongs in the MVP - it's a pretty advanced use case.
 
-This can eventually include others, too, and is meant to be the catch-all kitchen sink of cell operators as long as they're reasonably useful and not too niche. It's not the main module because you generally don't need these (for example, `on` - event handlers are usually good enough, and attributes), but it's there in case you need at least some of them.
+This can eventually include others, too, and is meant to be the catch-all kitchen sink of stream operators as long as they're reasonably useful and not too niche. It's not the main module because you generally don't need these (for example, `on` - event handlers are usually good enough, and attributes), but it's there in case you need at least some of them.
 
 ## List diff
 
@@ -49,14 +45,16 @@ This is *not* part of the MVP, but exists as part of the necessary standard libr
 
 This is exposed under `mithril/transition-list` and depends on `mithril/list-diff` (for `TransitionKeyed` only) and `mithril/transition` (for both).
 
-- `m(TransitionKeyed, {in, out}, children)` - Define a keyed list of transitioned elements
+- `m(TransitionKeyed, {in, out, event}, children)` - Define a keyed list of transitioned elements
 	- `in:` - Zero or more space-separated classes to toggle while transitioning inward.
 	- `out:` - Zero or more space-separated classes to toggle while transitioning outward.
+	- `event:` - The event name to listen for. By default, this watches for `"transitionend"`.
 	- `children:` - An array of zero or more keyed elements.
 
-- `m(TransitionFragment, {in, out}, children)` - Define an unkeyed list of transitioned elements
+- `m(TransitionFragment, {in, out, event}, children)` - Define an unkeyed list of transitioned elements
 	- `in:` - Zero or more space-separated classes to toggle while transitioning inward.
 	- `out:` - Zero or more space-separated classes to toggle while transitioning outward.
+	- `event:` - The event name to listen for. By default, this watches for `"transitionend"`.
 	- `children:` - A function taking a value and index and returning a keyed element.
 
 Notes:
@@ -126,7 +124,7 @@ In addition, I could actually *use* JSX's namespace syntax to my advantage to sp
 
 - `<m:fragment>...</m:fragment>` - This could represent unkeyed fragments.
 - `<m:keyed>...</m:keyed>` - This could represent keyed fragments.
-- `<m:html>...</m:html>` - This could represent trusted vnodes.
-- `<m:catch onerror={...}>...</m:catch>` - This could represent catch vnodes.
+- `<m:lazy>{(context) => ...}</m:lazy>` - This could represent lazy vnodes.
+- `<m:catch>{(errors) => ...}</m:catch>` - This could represent catch vnodes.
 
 This might cause TS problems, though, so I'd need to verify if they actually support it, and if not, get them to support it. (Short-term, I can just have people import the relevant component string names from `mithril/m`.)

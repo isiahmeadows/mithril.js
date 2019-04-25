@@ -1,4 +1,4 @@
-//model
+// model
 const state = {
 	todos: JSON.parse(localStorage["todos-mithril"] || "[]"),
 	editing: null,
