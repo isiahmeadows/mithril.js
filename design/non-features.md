@@ -10,29 +10,27 @@ Read [here](rationale.md#hooks) for an explanation of why. TL;DR: they're a step
 
 ## Async loading
 
-I initially considered adding an [async loading utility](excluded/async.mjs), but it ended up being simpler to just do it all manually when redraws are exclusively component-initiated. Also, it's not like that utility is as trivial to write as it would seem at first glance, and if cancellation is unnecessary.
+I initially considered adding an [async loading utility](excluded/async.mjs), but it ended up being simpler to just do it all manually when redraws are exclusively component-initiated. Also, it's not like that utility is as trivial to write as it would seem at first glance, especially if cancellation comes into the picture. Instead, I provided a smaller, more general utility called [`Mithril.abortable`](core/dom.md), exported from `mithril/dom`, and that makes it much easier to be explicit about when things happen, without the cost of conciseness.
 
 ```js
 // ES6
-// 12 lines: just using `Mithril.abortable` from `mithril/dom`
-const vnode = Mithril.abortable((signal, render) => {
-	render(m("h2", "Loading"))
+// 11 lines: just using `Mithril.abortable` from `mithril/dom`
+const vnode = Mithril.abortable((signal, o) => {
+	o.next(m("h2", "Loading"))
 	api.thread(id, {signal}).then(({root: node}) => {
-		document.title =
-			`ThreaditJS: Mithril | ${T.trimTitle(node.text)}`
-		render(m(ThreadNode, {node}))
+		document.title = `ThreaditJS: Mithril | ${T.trimTitle(node.text)}`
+		o.next(m(ThreadNode, {node}))
 	}, (e) => {
-		render(e.status === 404
+		o.next(e.status === 404
 			? m("h2", "Not found! Don't try refreshing!")
 			: m("h2", "Error! Try refreshing."))
 	})
 })
 
-// 12 lines: using that `Async` component referenced above
+// 11 lines: using that `Async` component referenced above
 const vnode = m(Async, {
 	init: () => api.thread(id).then(({root: node}) => {
-		document.title =
-			`ThreaditJS: Mithril | ${T.trimTitle(node.text)}`
+		document.title = `ThreaditJS: Mithril | ${T.trimTitle(node.text)}`
 		return node
 	}),
 	loading: () => m("h2", "Loading"),
@@ -44,14 +42,14 @@ const vnode = m(Async, {
 
 // ES5
 // 12 lines: just using `Mithril.abortable` from `mithril/dom`
-var vnode = Mithril.abortable(function (signal, render) {
-	render(m("h2", "Loading"))
+var vnode = Mithril.abortable(function (signal, o) {
+	o.next(m("h2", "Loading"))
 	api.thread(id, {signal: signal}).then(function (response) {
 		document.title =
-			`ThreaditJS: Mithril | ${T.trimTitle(response.root.text)}`
-		render(m(ThreadNode, {node: response.root}))
+			"ThreaditJS: Mithril | " + T.trimTitle(response.root.text)
+		o.next(m(ThreadNode, {node: response.root}))
 	}, function (e) {
-		render(e.status === 404
+		o.next(e.status === 404
 			? m("h2", "Not found! Don't try refreshing!")
 			: m("h2", "Error! Try refreshing."))
 	})
@@ -62,7 +60,7 @@ var vnode = m(Async, {
 	init: function () {
 		return api.thread(id).then(function (response) {
 			document.title =
-				`ThreaditJS: Mithril | ${T.trimTitle(response.root.text)}`
+				"ThreaditJS: Mithril | " + T.trimTitle(response.root.text)
 			return response.root
 		})
 	},
@@ -78,6 +76,25 @@ var vnode = m(Async, {
 		return m(ThreadNode, {node})
 	},
 })
+
+// 16 lines: trying to compress the above snippet at the cost of some
+// readability
+var vnode = m(Async, {
+	init: function () {
+		return api.thread(id).then(function (response) {
+			document.title =
+				"ThreaditJS: Mithril | " + T.trimTitle(response.root.text)
+			return response.root
+		})
+	},
+	loading: function () { return m("h2", "Loading") },
+	error: function (e) {
+		return e.status === 404
+			? m("h2", "Not found! Don't try refreshing!")
+			: m("h2", "Error! Try refreshing.")
+	},
+	ready: function (node) { return m(ThreadNode, {node}) },
+})
 ```
 
 ## Ref combinators
@@ -88,14 +105,15 @@ They sound nice in theory, for similar reasons `m.prop` sounds nice in theory. I
 
 	```js
 	let minActive, maxActive, bias
-	return m("form", {onsubmit() {
+	function receiver(_, capture) {
+		capture()
 		request("/api/example", {method: "POST", data: {
 			minActive: minActive.value,
 			maxActive: maxActive.value,
 			bias: bias.value,
 		}})
-		return false
-	}}, [
+	}
+	return m("form", {on: [receiver, "submit"]}, [
 		m("input[type=number]", {value: 0, ref: elem => minActive = elem}),
 		m("input[type=number]", {value: 100, ref: elem => maxActive = elem}),
 		m("input[type=range]", {value: 50, ref: elem => bias = elem}),
@@ -107,14 +125,15 @@ They sound nice in theory, for similar reasons `m.prop` sounds nice in theory. I
 	```js
 	let current
 	const refs = Ref.join(elems => current = elems)
-	return m("form", {onsubmit() {
+	function receiver(_, capture) {
+		capture()
 		request("/api/example", {method: "POST", data: {
 			minActive: current.minActive.value,
 			maxActive: current.maxActive.value,
 			bias: current.bias.value,
 		}})
-		return false
-	}}, [
+	}
+	return m("form", {on: [receiver, "submit"]}, [
 		m("input[type=number]", {value: 0, ref: refs("minActive")}),
 		m("input[type=number]", {value: 100, ref: refs("maxActive")}),
 		m("input[type=range]", {value: 50, ref: refs("bias")}),

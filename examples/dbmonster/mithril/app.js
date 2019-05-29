@@ -11,8 +11,8 @@ function DBMon(attrs) {
 	return m("div", [
 		m("table.table.table-striped.latest-data", [
 			m("tbody", Stream.map(attrs, ({data}) =>
-				m("#keyed", data.map(({dbname, lastSample}) =>
-					m("tr", {key: dbname}, [
+				m("#keyed", {of: data, by: "dbname"}, ({dbname, lastSample}) =>
+					m("tr", [
 						m("td.dbname", dbname),
 						m("td.query-count", [
 							m("span", {class: lastSample.countClassName}, [

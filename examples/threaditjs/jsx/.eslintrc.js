@@ -4,4 +4,5 @@ module.exports = {
 			"jsx": true,
 		},
 	},
+	extends: ["plugin:react/recommended"]
 };

@@ -36,28 +36,6 @@ interface StreamObserver<T, E = Error> {
 
 This is purely a convention commonly used throughout the API. This is heavily inspired by React Hooks, but aims to keep the runtime overhead to a minimum. It also is not present in the core bundle because 99% of uses can generally just be written as a design pattern. And of course, there's a heavy FP inspiration here, but a pragmatic, impure one.
 
-### Sugar API
-
-Since it's so integral to the API, a `createStream` method is exported from `mithril/m` and exposed as `Mithril.createStream`. This implements a very simple, stripped-down observable API that's literally 29 significant lines of source code:
-
-- `stream = createStream(init)` - Create a stream.
-	- `init` accepts an `observer` and can return either a callback function or an object with an `unsubscribe` method (like a `sub`).
-- `sub = stream({next?, error?, complete?})` - Subscribe to the stream.
-- `sub()` - Close the subscription.
-- `observer.next(value)` - Send a value.
-- `observer.error(value)` - Close the underlying subscription and send an error.
-- `observer.complete()` - Close the underlying subscription and send a completion.
-
-This implements most of the core functionality of [the proposed ES observables](https://github.com/tc39/proposal-observable), but it lacks the following:
-
-- `sub.closed` and `observer.closed` - you can track those easily enough yourself. The first just involves a subscription-side variable and the second just involves a single initializer-side variable.
-- The use of shared prototypes - everything's inside a closure instead.
-- `Symbol.observable` - it doesn't attempt to polyfill anything on its own.
-
-It also deviates from that by exposing them as functions instead of objects.
-
-This module, when bundled standalone, is a little under 600 bytes of pure ES3 mod a `"use strict"` declaration, and that's including all of Rollup's wrapper junk.
-
 ### Why?
 
 There's a few reasons:
@@ -71,3 +49,23 @@ Also, there's a handful of helpers [here](https://github.com/isiahmeadows/mithri
 ### What about v2 streams?
 
 Mithril v2's streams require an explicit library. This skips all the overhead of connecting streams and just requires a flexible convention to maintain. Plus, this allows targets to not be terminable without an error, something component attributes leverage to force you to always be ready to receive updates.
+
+### Why not just use the proposed ES observables?
+
+Well, a few reasons:
+
+1. That proposal is at stage 1, and it's been stagnant for well over a year. I *won't* depend on a proposal that's not stable, and that's one such example.
+2. This is stripped down much further, to where it's much simpler to learn. The core ES proposal still includes a lot of frills, while this just takes the essence of the API with not much else.
+3. I wanted streams to be a type that I can quickly and easily tell apart from any other virtual DOM node, ideally without even having to check any object members. Functions suit this nicely, and they make for a convenient initialization mechanism, too.
+
+The `Stream.create(init)` utility from [my proposed `mithril/stream`](../mvp-utils/stream.md) sugars over all the inconsistencies in the span of literally 29 lines of code. It alone implements most of the core functionality of [the proposed ES observables](https://github.com/tc39/proposal-observable), but it doesn't implement equivalents for most of the frills:
+
+- `sub.closed` and `observer.closed` - You can track those easily enough yourself through an extra variable.
+	- For `sub.closed`, you can define a variable you set whenever `error` or `complete` is called, before you do anything else.
+	- For `observer.closed`, you can define a variable in the stream callback itself that you set before you call `observer.error(value)` or `observable.complete()`.
+- `Symbol.observable` - I'd rather not include any polyfills here.
+- `Observable.of(...values)` - It's not that many lines of code for you to just do `function (o) { for (const value of values) o.next(value); o.complete() }`, and in my experience, it's plainly not a common need to return an observable that just emits a bunch of values immediately in sequence upon subscription.
+- `Observable.from(value)` - For iterables, it's a similar story to above. For observables and observable-likes (with `Symbol.observable`), it's a similar story to why I dropped that, but in addition, how often are you mixing observables and streams from different libraries anyways? Worst case scenario, it's just a simple `function (o) { var sub = obs.subscribe(o); return () => { sub.unsubscribe() } }` for most observables.
+- `observable.subscribe(next, error?, complete?)` sugar - [By the way the reactions to this issue of mine went](https://github.com/tc39/proposal-observable/issues/194), it's not even certain this will remain in the spec.
+
+It also deviates from the proposal by exposing them as functions instead of objects.

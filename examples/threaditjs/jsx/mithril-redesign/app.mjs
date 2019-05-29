@@ -1,12 +1,14 @@
-import {abortable, m, pure, render, Keyed, Fragment} from "mithril"
+/* eslint-disable-next-line no-unused-vars */
+import {Fragment, Keyed, abortable, m, pure, render} from "mithril"
+import {Link, match} from "mithril/router"
 import {api, demoSource} from "../threaditjs-common/common.mjs"
-import {map, store} from "mithril/stream"
-import {match, Link} from "mithril/router"
+import {distinct, map, store} from "mithril/stream"
+import Control from "mithril/control"
 
 // shared
 function Header() {
 	return <>
-		<p class="head_links">
+		<p className="head_links">
 			<a href={demoSource("mithril-redesign")}>Source</a> | {""}
 			<a href="http://threaditjs.com">ThreaditJS Home</a>
 		</p>
@@ -18,7 +20,7 @@ function Header() {
 
 const Layout = pure(({load, children}) => <>
 	<Header />
-	<div class="main">
+	<div className="main">
 		{abortable((signal, o) => {
 			o.next(<h2>Loading</h2>)
 			return load(signal).then(
@@ -39,7 +41,7 @@ const ThreadPreview = pure(({thread: {id, text, comment_count}}) => <>
 			<a href={`/thread/${id}`} innerHTML={T.trimTitle(text)} />
 		</Link>
 	</p>
-	<p class="comment_count">{comment_count} comment(s)</p>
+	<p className="comment_count">{comment_count} comment(s)</p>
 	<hr />
 </>)
 
@@ -60,14 +62,8 @@ function Home() {
 				dispatch({type: "set", threads: response.data})
 				return <>
 					{map(threads, (list) => (
-						<Keyed>
-							{/* eslint-disable-next-line camelcase */}
-							{list.map((thread) => (
-								<ThreadPreview
-									key={thread.id}
-									thread={thread}
-								/>
-							))}
+						<Keyed of={list} by="id">
+							{(thread) => <ThreadPreview thread={thread} />}
 						</Keyed>
 					))}
 					<NewThread on={[onSave, "save"]} />
@@ -79,12 +75,11 @@ function Home() {
 
 function NewThread(attrs, emit) {
 	let textarea
-	function onSubmit() {
-		api.newThread(textarea.value).then(({data: thread}) => {
-			emit({type: "save", thread})
-			textarea.value = ""
-		})
-		return false
+	async function onSubmit(_, capture) {
+		capture()
+		const {data: thread} = await api.newThread(textarea.value)
+		emit({type: "save", thread})
+		textarea.value = ""
 	}
 
 	return (
@@ -100,28 +95,28 @@ function Thread(attrs) {
 	T.time("Thread render")
 	return (
 		<Fragment ref={() => T.timeEnd("Thread render")}>
-			{map(attrs, ({id}) => (
-				<Layout key={id} load={(signal) => api.thread(id, {signal})}>
-					{({root: node}) => {
-						const title = T.trimTitle(node.text)
-						document.title = `ThreaditJS: Mithril | ${title}`
-						return <ThreadNode node={node}/>
-					}}
-				</Layout>
+			{map(distinct(attrs, "id"), ({id}) => (
+				<Control key={id}>
+					<Layout load={(signal) => api.thread(id, {signal})}>
+						{({root: node}) => {
+							const title = T.trimTitle(node.text)
+							document.title = `ThreaditJS: Mithril | ${title}`
+							return <ThreadNode node={node}/>
+						}}
+					</Layout>
+				</Control>
 			))}
 		</Fragment>
 	)
 }
 
 const ThreadNode = pure(({node}) => (
-	<div class="comment">
+	<div className="comment">
 		<p innerHTML={node.text} />
-		<div class="reply"><Reply node={node} /></div>
-		<div class="children">
-			<Keyed>
-				{node.children.map((child) => (
-					<ThreadNode key={child.id} node={child} />
-				))}
+		<div className="reply"><Reply node={node} /></div>
+		<div className="children">
+			<Keyed of={node.children} by="id">
+				{(child) => <ThreadNode node={child} />}
 			</Keyed>
 		</div>
 	</div>
@@ -133,18 +128,17 @@ function Reply(attrs) {
 	let textarea, node
 	attrs({next: (curr) => node = curr.node})
 
-	function receiver(ev) {
+	async function receiver(ev, capture) {
 		if (ev.type === "click") {
+			capture()
 			setReplying(true)
-			return false
 		} else if (ev.type === "submit") {
-			api.newComment(textarea.value, node.id).then((response) => {
-				node.children.push(response.data)
-				setReplying(false)
-			})
-			return false
+			capture()
+			const response = await api.newComment(textarea.value, node.id)
+			node.children.push(response.data)
+			setReplying(false)
 		} else {
-			setPreview(textarea.value)
+			setPreview(T.previewComment(textarea.value))
 		}
 	}
 
@@ -157,10 +151,7 @@ function Reply(attrs) {
 						on={[receiver, "input"]}
 					/>
 					<input type="submit" value="Reply!" />
-					<div
-						class="preview"
-						innerHTML={map(comment, T.previewComment)}
-					/>
+					<div className="preview" innerHTML={distinct(comment)} />
 				</form>
 			)
 		} else {
@@ -175,5 +166,5 @@ function Reply(attrs) {
 render("#app", match({
 	default: "/",
 	"/": () => <Home />,
-	"/thread/:id": ({id}) => <Thread, id={id} />,
+	"/thread/:id": ({id}) => <Thread id={id} />,
 }))

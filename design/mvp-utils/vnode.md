@@ -4,7 +4,7 @@
 
 This is exposed under `mithril/render-vnode`.
 
-- `renderVnode(vnode, {retainEventHandlers = false})` - This renders a vnode with potential components and similar to a resolved vnode tree without those components.
+- `renderVnode(vnode, {retainEventHandlers = false} = {})` - This renders a vnode with potential components and similar to a resolved vnode tree without those components.
 	- Fragments are always normalized to objects
 	- Numbers and similar are normalized to strings
 	- Booleans and `null` are normalized to `undefined`

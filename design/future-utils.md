@@ -11,7 +11,15 @@ This is exposed under `mithril/stream-extras`, and contains several various more
 - `newStream = StreamExtras.debounce(stream, ms)` - Emit the latest value only if it's been at least `ms` milliseconds since the last value has been received from `stream`.
 - `newStream = StreamExtras.throttle(stream, ms)` - Emit the latest value only if it's been at least `ms` milliseconds since the last value has been sent from the returned stream.
 - `newStream = StreamExtras.cycle(ms, [...values])` - Cycle through `values`, emitting a value every `ms` milliseconds.
-- `newStream = StreamExtras.on(target, event)` - Emit events on each notification by `target`. For browser event emitters, this uses `addEventListener` and `removeEventListener`. For Node event emitters, this uses `addListener` and `removeListener`.
+- `newStream = StreamExtras.zip([...streams])` - Zip an array of streams into a stream of arrays, buffering values as necessary.
+	- Note: this does *not* drop values.
+- `newStream = StreamExtras.fromPromise((onClose) => thenable)` - Create a stream from a thenable thunk.
+	- `onClose(callback)` sets the callback to be called on stream unsubscription when it's still pending.
+- `newStream = StreamExtras.of(...values)` - Create a stream that emits zero or more valeus.
+- `newStream = StreamExtras.from(object)` - Create a stream that wraps an iterable or an object with a `.subscribe` method.
+- `newStream = StreamExtras.from((onClose) => thenable)` - Create a stream from a thenable thunk.
+	- `onClose(callback)` sets the callback to be called on stream unsubscription when it's still pending.
+- `newStream = StreamExtras.range(start = 0, end, step = 1)` - Create a stream that emits a range of values.
 - `newStream = StreamExtras.toStream(value)` - Converts `value` to a stream if it's either an observable, a promise, an observable-like object (including Mithril streams with the redesign), a thenable, or just about anything else that could be considered async emitting from a single channel.
 	- Note that only some things can be ended - notably promises and thenables can't.
 
@@ -69,56 +77,118 @@ Notes:
 
 1. Animated lists aren't easy to get right. I'll leave it as an exercise for the reader to try this first. 😉
 
-## Babel plugin
+## Selector binding
+
+This is exposed under `mithril/select` and depends on `mithril/render`.
+
+- `select(root, selectors)` - Bind selectors from an element to a vnode tree
+	- `root` - The root element to watch selectors on
+	- `selectors` - A key/value map where keys are selector strings and values objects plugged straight into `render(elem, value)` unmodified as the second parameter
+
+This uses `MutationObserver` with an appropriate mutation events fallback for IE (and falling back gracefully to doing nothing) to ensure that selectors do get rendered to when new elements are added matching them and have their trees removed when selectors no longer match an element.
+
+*TODO: Look at how mutation observer polyfills work to figure out how to fall back correctly to mutation events.*
+
+### Why?
+
+This exists to ease integration into pages that are a heterogenous mix of Mithril and traditional static HTML and/or legacy content. The `MutationObserver` part is to be smart about it so you don't have to even manually render when elements matching the desired selectors are added - even if that selector doesn't get there until well after the page loads, the call still works.
+
+It's also very declarative, and very CSS-like in how it binds views to selectors. It more or less "just works".
+
+```js
+select(root, {
+	".mithril-date-picker": m(DatePicker),
+	".widget .input": {placeholder: "Type away..."},
+	"#app-one": m(One),
+	"#app-two": m(Two),
+	"#app-three": m(Three),
+	// etc.
+})
+```
+
+## Optimizing Babel plugin
 
 Babel's existing `@babel/plugin-transform-react-jsx` would *technically* work for JSX + Mithril, but we could take this one step further with a Mithril preset + plugin combo: we could leave files entirely independent of `m`, so JSX would compile down directly to a bunch of object literals. This would also 1. adapt `m()` calls, so those can be compiled out, and 2. correctly handle JSX fragments, which can just compile to an array.
 
-```js
-// Original hyperscript
-return [
-	m("p.head_links", [
-		m("a", {href: demoSource("mithril-redesign")}, "Source"), " | ",
-		m("a[href='http://threaditjs.com']", "ThreaditJS Home"),
-	]),
-	m("h2", [
-		m(Router.Link, m("a[href=/]", "ThreaditJS: Mithril")),
-	]),
-]
+- Hyperscript
 
-// Original JSX
-return <>
-	<p class="head_links">
-		<a href={demoSource("mithril-redesign")}>Source</a> | {}
-		<a href="http://threaditjs.com">ThreaditJS Home</a>
-	]),
-	<h2>
-		<Router.Link><a href="/">ThreaditJS: Mithril</a></Router.Link>
-	</h2>
-</>
+	```js
+	// Original
+	return [
+		m("p.head_links", [
+			m("a", {href: demoSource("mithril-redesign")}, "Source"), " | ",
+			m("a[href='http://threaditjs.com']", "ThreaditJS Home"),
+		]),
+		m("h2", [
+			m(Router.Link, m("a[href=/]", "ThreaditJS: Mithril")),
+		]),
+	]
+	```
 
-// Optimized
-return [
-	{tag: "p", attrs: {class: "head_links", children: [
-		{tag: "a", attrs: {
-			href: demoSource("mithril-redesign"),
-			children: ["Source"],
-		}},
-		" | ",
-		{tag: "a", attrs: {
-			href: "http://threaditjs.com",
-			children: ["ThreaditJS Home"],
-		}},
-	]}}
-	{tag: "h2", attrs: {children: [
-		Mithril.create(Router.Link, {children: [
+	```js
+	// Optimized
+	return [
+		{tag: "p", attrs: {class: "head_links", children: [
 			{tag: "a", attrs: {
-				href: "/",
-				children: ["ThreaditJS: Mithril"],
+				href: demoSource("mithril-redesign"),
+				children: ["Source"],
 			}},
-		]})
-	]}}
-]
-```
+			" | ",
+			{tag: "a", attrs: {
+				href: "http://threaditjs.com",
+				children: ["ThreaditJS Home"],
+			}},
+		]}}
+		{tag: "h2", attrs: {children: [
+			m(Router.Link, {children: [
+				{tag: "a", attrs: {
+					href: "/",
+					children: ["ThreaditJS: Mithril"],
+				}},
+			]})
+		]}}
+	]
+	```
+
+- JSX:
+
+	```js
+	// Original
+	return <>
+		<p class="head_links">
+			<a href={demoSource("mithril-redesign")}>Source</a> | {}
+			<a href="http://threaditjs.com">ThreaditJS Home</a>
+		</p>
+		<h2>
+			<Router.Link><a href="/">ThreaditJS: Mithril</a></Router.Link>
+		</h2>
+	</>
+	```
+
+	```js
+	// Optimized
+	return [
+		{tag: "p", attrs: {class: "head_links", children: [
+			{tag: "a", attrs: {
+				href: demoSource("mithril-redesign"),
+				children: ["Source"],
+			}},
+			" | ",
+			{tag: "a", attrs: {
+				href: "http://threaditjs.com",
+				children: ["ThreaditJS Home"],
+			}},
+		]}}
+		{tag: "h2", attrs: {children: [
+			Mithril.jsx(Router.Link, {children: [
+				{tag: "a", attrs: {
+					href: "/",
+					children: ["ThreaditJS: Mithril"],
+				}},
+			]})
+		]}}
+	]
+	```
 
 In addition, I could actually *use* JSX's namespace syntax to my advantage to specify certain native Mithril vnode types, since you can't use `<#foo></#foo>` in JSX:
 

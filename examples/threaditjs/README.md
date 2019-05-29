@@ -32,7 +32,7 @@ These only include the `/app.mjs`/`/app.js` source files in each variant, and it
 
 | Library                    | SLoC | Total |
 |:-------------------------- |:----:|:-----:|
-| Mithril redesign           | 160  |  179  |
+| Mithril redesign           | 150  |  169  |
 | Mithril v1/v2              | 166  |  188  |
 | React                      | 210  |  239  |
 | React + experimental Hooks | 163  |  185  |
@@ -47,11 +47,11 @@ If you look at those SLoC numbers, one certainly sticks out to me: how *small* t
 	- ~14% smaller than React + hooks.
 
 - JSX:
-	- ~4% smaller than Mithril v1/v2.
-	- ~24% smaller than React.
-	- ~2% smaller than React + hooks.
+	- ~10% smaller than Mithril v1/v2.
+	- ~29% smaller than React.
+	- ~8% smaller than React + hooks.
 
-*If you'd like to verify these numbers, just do 1 - (size of redesign's SLoC) / (size of other's SLoC).*
+*If you'd like to verify these numbers, just do 1 - (size of redesign's SLoC) / (size of other's SLoC). These figures are all rounded to the nearest percent.*
 
 Being 2/3 the size of vanilla React for functionally identical code is impressive in of itself (imagine React Redux), but being substantially smaller than even Mithril v2, which itself strips nearly all the React boilerplate away, is itself pretty impressive.
 
@@ -117,7 +117,7 @@ Here's what the diffs for each of those in the vanilla version:
 	+})
 	```
 
-	Here's that diff with the old expressions realigned to show what's really different, since the diff does a poor job of showing what precisely changed:
+	Here's that diff with the old expressions realigned to show what's really different, since the diff does a poor job of showing what precisely changed (very little changed beyond indentation):
 
 	```diff
 	-const async  =      ({load, loaded}) =>

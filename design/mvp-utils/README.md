@@ -11,3 +11,4 @@ These are all various utilities that are, unless otherwise listed, kept out of t
 - [HTML renderer](html.md)
 - [Vnode renderer](vnode.md)
 - [Stream utilities](stream.md)
+- [Control API](control.md)

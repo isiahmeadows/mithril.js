@@ -4,7 +4,7 @@
 
 ### Hyperscript API
 
-The primary hyperscript API is still exposed as usual via `mithril/m` and `Mithril.m` in the core bundle. But in addition, a `Mithril.create` exists to skip the attribute normalization, for cases where you know the attributes are valid, but you might not know the selector's type.
+The primary hyperscript API is still exposed as usual via `mithril/m` and `Mithril.m` in the core bundle.
 
 ### Vnode types
 
@@ -14,15 +14,18 @@ The primary hyperscript API is still exposed as usual via `mithril/m` and `Mithr
 	- Event handlers can be specified via `on: [receiver, ...events]`, where each event is defined via `"name"` or `["name", opts]`.
 	- Attributes on element vnodes other than magic attributes *may* be set to streams rather than raw values. This includes `on:`, but not child event listeners within it. This enables updates without actually performing a full diff, which is significantly faster. (We'll blow benchmarks out of the water that way, but it also just makes more sense in this model.) Note that this doesn't carry over to components.
 	- This follows mostly the same hyperscript API as usual.
-- Fragment: `m("#fragment", ...)`, `[...]`
-- Lazy: `m("#lazy", (context) => children)`
-	- This wraps a lazily generated child.
-- Keyed: `m("#keyed", ...)`
-	- Children can only be either an immediate array with all elements having `key` attributes or a single child array containing a stream that emits one.
-	- Children are not flattened, so `m("#keyed", [[m(Foo, {key: bar})]])` is not valid.
+- Fragment: `[...]`, `m("#fragment", (context) => children)`
+	- The second form generates its child during the child's render time.
+- Keyed: `m("#keyed", {of: coll, by: (x, i) => key}, (x, i) => child)`
+	- This enables easy keyed fragment rendering
+	- Children are generated via a child function, as if via an implicit `map`.
+	- The reason for doing it this way is because it's a bit lower in memory overhead while having mostly negligible impact in performance.
+	- This also removes the need for a magic `key` attribute, one less thing to special-case for. It also makes it impossible to have a child without a corresponding key, something I've seen come up a few times.
+	- For ease of use and since it's such a common use case, you can pass `by: "key"` as sugar for `by: (x) => x.key`. (It's also optimized for internally.)
 - Dynamic: `stream`
 	- Any function is considered a dynamic vnode.
 - Text: `"..."`
+	- Any primitive non-reference type not representing a hole is considered a text node, including numbers.
 - Catch: `m("#catch", (errors) => child)`
 	- `errors` is a stream that asynchronously emits every exception from the returned subtree that propagates to Mithril's renderer from user code. This includes errors in streams as well as errors returned from event handlers within it.
 	- This exists mainly for error reporting, but can be used in other ways.
@@ -31,7 +34,16 @@ The primary hyperscript API is still exposed as usual via `mithril/m` and `Mithr
 - Component: `m(Component, ...)`
 	- `on:` can be set to a stream to update the observed event list. This is for consistency with element vnodes, but other attributes are not similarly normalized. (Components can leverage that for various optimizations.)
 
-If you're a JSX user needing to reference these names, you should use `Fragment`, `Keyed`, `Html`, and `Catch`, exported from `mithril/m`. But in addition, you should set the following Babel JSX plugin options when using `@babel/preset-react`:
+### JSX
+
+JSX support uses a different function, `Mithril.jsx(tag, attrs, ...children)`. It's resolved slightly differently, and is specialized for JSX specifically.
+
+When using JSX, you should use `@babel/plugin-react-jsx` and enable the following options:
+
+- `pragma: "Mithril.jsx"`
+- `pragmaFrag: "'#'"`
+
+For lazy fragments and other vnodes that aren't either components or element tag names, you should use `Fragment`, `Keyed`, and `Catch`, exported from `mithril/m`. But in addition, you should set the following Babel JSX plugin options when using `@babel/preset-react`:
 
 - `pragma: "m"`
 - `pragmaFrag: "'#fragment'"`
@@ -44,11 +56,11 @@ Attributes are the bread and butter of element manipulation. These are how thing
 
 There are six special attributes:
 
-- `key` - This tracks vnode identity and serves two functions:
-	- In `"#keyed"` children: linking an instance to a particular identity. This is how keyed fragments work today. Note that in this case, they're treated as object properties.
-	- In other cases: linking an instance to a particular state. This is how single-item keyed fragments work, and it's diffed as part of the vnode's logical type.
+- `tag` - This is used to tell vnodes apart from attributes objects.
+	- Since `children` causes a value to be assumed to be attributes independent of the existence of this property, you can pass this as a literal property by also including a `children: []` object.
 - `ref` - This allows accessing the underlying DOM instance or provided component ref of a particular component or vnode.
 - `children` - This is the attribute's list of children.
+	- If this attribute exists, the object is assumed to be an attributes object regardless of whether `tag` exists.
 	- Children are always normalized to an array, even if just an empty array and even if it's for a component vnode. Note that the selector and attributes still take precedence over any children parameters.
 	- For component vnodes, they're only special in that they're guaranteed to exist as an array.
 - `xmlns`, special for element vnodes only and unique to the `mithril/render` renderer, sets the raw namespace to construct this with. For the DOM renderer, this by default just follows HTML's rules regarding namespace inference. Note that this sets the implicit namespace to use for child nodes, too.
@@ -67,7 +79,9 @@ They are specified via `on:` attributes, where each event is defined via `"name"
 
 There are a few rules about how `receiver` and `opts` are interpreted:
 
-- If `receiver` is a function, it's called on each received event as `receiver(event)`. If listening to a DOM element, this receiver may return `false` to invoke `ev.preventDefault()` and `ev.stopPropagation()`, as is the case today.
+- If `receiver` is a function, it's called on each received event as `receiver(event, capture)`. The return value is entirely ignored, so you can freely make them `async` when convenient.
+	- Execute `capture()` for DOM events to invoke `ev.preventDefault(); ev.stopPropagation()`
+	- Execute `capture()` for component events to have the parent `emit` calls return `true` to denote them as "prevented".
 	- Components can also receive a boolean return value when invoking event handlers, `false` if it's considered prevented or `true` otherwise.
 - No other types of `receiver` are supported. Since components can't be classes, `handler.handleEvent(ev)` support is no longer broadly useful and so I plan to drop it.
 - For element vnodes, `opts` can be any value `addEventListener` and `removeEventListener` accept, including `{passive: true}`, `{capture: true}`, and `true`. If not present, it defaults to just `false`.
@@ -78,7 +92,10 @@ A utility method in `mithril/m` exists, `withScope(receiver, scope)`, to help sc
 Components emit events through a second parameter `emit` that wraps all the nasty boilerplate transparently.
 
 - `emit("event")` - Whether a particular event type is being listened for.
-- `emit({type: "event", ...value})` - Emit an event. This returns `true` if the receiver exists and returned `false`, `false` otherwise.
+- `emit({type: "event", ...value}, capture = noop)` - Emit an event. This returns `undefined`, and you can observe capture by passing `capture`.
+	- This is intentionally aligned with the event receiver prototype, so you can easily delegate events by passing this as an event receiver. It's perfectly legal to pass `on: [emit, ...events]` as an element or component attribute.
+
+Components also receive the raw `on` attribute itself. This is mostly pragmatic: I can just pass the raw attributes from `vnode.attrs` directly to the component, something that's a bit faster than trying to copy everything without `on`, and it opens the door for more advanced event handling use cases in case the `emit` API isn't sufficient.
 
 #### Why change the event receiver model?
 
@@ -92,10 +109,21 @@ As an added bonus, I can avoid all the polymorphism when it comes to event diffi
 
 ### Refs
 
-- Request element/ref access: `ref: (elem) => ...`
-	- For element vnodes, `ref` is called with the backing DOM node. It's internally ignored on all other vnode types.
-	- For fragments, `ref` is called with an array containing the newly added DOM nodes.
-	- For components, `ref:` is ignored and it's also not censored from the attributes. If there really *is* any interesting value for a ref, you should call it directly in the component itself.
+Refs are requested by simple `ref` attributes: `ref: (elem) => ...`.
+
+- For element vnodes, `ref` callbacks are scheduled to be run after all render tasks complete for this frame. They are invoked with the backing DOM node.
+- For unkeyed fragments, `ref` callbacks are scheduled to be run after all render tasks complete for this frame, They are invoked with the array of DOM nodes encapsulated by that fragment and all child fragments and components recursively, but not recursively through child elements.
+- For all other element types, including components, `ref` attributes carry no special semantics and `ref` callbacks are *not* scheduled. If you want to provide a `ref` for a component, invoke it directly in the component body itself.
+	- Intentionally, keyed fragments are left out. It's not that hard to wrap it in an unkeyed fragment which has to track the unit anyways.
+
+Intentionally, I organized it to where refs are for only vnodes that encapsulate single units.
+
+- Elements encapsulate only themselves, so it makes perfect sense for a ref to return that.
+- Unkeyed fragments encapsulate single subtrees, so it makes sense for a ref to return the list of active nodes.
+- Keyed fragments encapsulate multiple subtrees with an associated list of keys, so although the obvious choice is to have it return the list of child nodes like with unkeyed fragments, it's unclear whether the keys should be included or not. (Both ways are intuitive.)
+- Catch fragments encapsulate a single subtree but also the errors generated within it. Like with keyed fragments, the obvious choice with catch fragments is to have it return the list of child nodes, but it's not clear whether errors should be included in the ref somehow or not.
+- Holes, text, and dynamic vnodes obviously don't have the attributes to add a ref.
+- Components lack attributes directly, but I leave it up to the component to determine whether something has a ref to send or not.
 
 Notes:
 
@@ -125,6 +153,8 @@ There's three reasons I mandate this:
 	- Relevant Gitter discussion: [11 Dec 2015](https://gitter.im/mithriljs/mithril.js/archives/2015/12/11), [12 Dec 2015](https://gitter.im/mithriljs/mithril.js/archives/2015/12/12)
 - It's less implicit information you have to keep in mind and infer. If it says `div`, you know at a glance it's a `<div>` that it renders to. 99% of development isn't writing, but reading, and that "at a glance" information is incredibly valuable to have. I find myself, as a Mithril maintainer, taking twice as long to process `m(".widget")` than `m("button.confirm")` or even `m("div.widget")`. Even though it's still pretty quick for me, I have to stop and mentally reparse after reading the tokens (the implied `div` in `div.widget` rather than just being decorated `widget`) as my brain reads the word before realizing that's the class name and not the tag name.
 
+One other obscure bit: you can currently include spaces on either side of the `=` in `[key=value]`, but this is going away due to lack of use. (This aligns better with the CSS spec and is otherwise just all around useless.)
+
 ### Why keep vnodes JSON-compatible?
 
 This is in large part due to disagreement with [React's decision to block it](https://overreacted.io/why-do-react-elements-have-typeof-property/) somewhat. They make security claims, but I'm not convinced they're serious in any remotely sane set-up:
@@ -148,6 +178,8 @@ In case you're curious, yes, this effectively works as an explicit one-way bindi
 - This simplifies a few things.
 - This makes certain auto-binding patterns easier to specify.
 - This can provide some prop-like magic behavior without actually being a significant maintenance or boilerplate problem.
+
+Note: after emitting a dynamic vnode, if it emits again while its children are being rendered, it schedules a new render with the new children in the next frame. This can occur if a `create` callback in `m("#fragment", {create})` causes the dynamic vnode containing it to return a new vnode, causing an update of this very vnode.
 
 ### Rendering
 

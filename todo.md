@@ -4,9 +4,31 @@
 
 These are things I need to do at some point, but just haven't gotten to yet. Obviously, this is not exhaustive, but it should give some insight into my plans.
 
+- Ensure the minified source bundle is generated with Terser option `inline: 0`.
+	- This can be dropped pending https://github.com/terser-js/terser/issues/350
+
 - Update the vnode/IR structure to reflect current internal tag names.
 
+- Update vnode structure docs to include I plan to use something similar to Inferno for the keyed diff
+	- https://github.com/infernojs/inferno/blob/master/packages/inferno/src/DOM/patching.ts
+	- Use `result` directly from the LIS algorithm and just return the length to iterate. That way I can keep it fully amortized zero-allocation.
+	- Look into Inferno's idea of copying to an integer array - Keys are normalized to integers already, so I can take advantage of the fact engines have optimized representations of sparse integer arrays.
+		- I could do this during the type-checking part.
+	- Iteratively patch the largest chunks at the beginning and end that match an iterative diff.
+		- The beginning is patched before the middle, but the middle is patched before the end.
+		- This converts an `O(n log n)` problem to an `O(n)` problem for the 99% cases of no change and of a single addition/replacement/removal.
+
+- Add component for carousels/slides/page transitions
+	- Will require keeping both pages live during the transition
+	- Will require "page"/"slide" containers to be actual elements (avoids the need to procedurally splice IRs in and out of other IRs)
+	- Will have to wrap the router to retain the previous route, so it can properly emit that.
+	- Very much so *not* going into the full bundle
+	- By option, keeps previously visited components live on a detached fragment
+	- Will require ???
+	- What primitives are required for this?
+
 - Benchmark streams vs other alternatives detailed in [the rationale](rationale.md#creating-the-cell-abstraction), especially the other stream libraries.
+	- This will likely be among the fastest, but it might not be *the* fastest.
 
 - Move all this design documentation to a `design/` subfolder and prototype this.
 

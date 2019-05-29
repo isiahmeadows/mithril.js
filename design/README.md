@@ -108,7 +108,12 @@ In that article, it offers two ways to fix it, both of which are equally simple.
 // React
 // Option 1: Fully controlled component.
 function TextInput({value, onChange}) {
-	return <input value={value} onChange={onChange} />
+	return (
+		<input
+			value={value}
+			onChange={(e) => onChange(e.target.value)}
+		/>
+	)
 }
 
 // Option 2: Fully uncontrolled component.
@@ -122,25 +127,30 @@ function TextInput() {
 	)
 }
 
-// We can reset its internal state later by changing the key:
-<TextInput key={formId} />
+// We can reset its internal state later by putting it in a fragment as the only
+// element in it and changing the key:
+<><TextInput key={formId} /></>
 
 // Direct equivalent in this redesign
 // Option 1: Fully controlled component.
-function TextInput(attrs) {
-	return Stream.map(attrs, ({value, onchange}) =>
-		m("input", {value, onchange})
+function TextInput(attrs, emit) {
+	function receiver(ev, capture) {
+		emit({type: ev.type, value: ev.target.value}, capture)
+	}
+	return Stream.map(attrs, ({value}) =>
+		m("input", {value, on: [receiver, "change"]})
 	)
 }
 
 // Option 2: Fully uncontrolled component.
 function TextInput() {
 	const [value, setValue] = Stream.store("")
-	return m("input", {value, onchange: (e) => setValue(e.target.value)})
+	function receiver(ev) { setValue(ev.target.value) }
+	return m("input", {value, on: [receiver, "change"]})
 }
 
-// We can reset its internal state later by changing the key:
-m(TextInput, {key: formId})
+// We can reset its internal state later by using a Control:
+m(Control, {key: formId}, m(TextInput))
 ```
 
 If you have to focus on avoiding a gotcha in Mithril rather than writing logic, Mithril is clearly getting in your way of actually doing things, and this is what the redesign is aiming to avoid.
@@ -165,11 +175,13 @@ But the focus here is to simplify it for the user, to push it for them. And we s
 
 No framework is an island unto itself, and most frameworks fail to take this into account, React included. Staying in the framework should be easy, but talking to the outside world should be equally easy, even if you want to go head-first into everything Mithril in your own component. This integration includes both integrating a jQuery component into a Mithril app and integrating a Mithril component into an Angular app. Even if it's not simple, it should still be possible and very practical.
 
-A good framework doesn't just stop at making the simple easy, but it should also make the complex possible. Common complex things like async data loading, transitions, and rendering to string should be things users *don't* have to write. They also shouldn't have to search for them - it should already be there for them. Complex data flow within components should be something users can do without much thought. Even if it's complex, it shouldn't be *hard*, especially hard to do *right*.
+A good framework doesn't just stop at making the simple easy, but it should also make the complex possible. Common complex things like async data loading, transitions, and rendering to string should be things users *don't* have to write. They also shouldn't have to search for them - it should already be there for them. Complex data flow within components should be something users can do without much thought. Event handling should have zero trouble scaling even in the most complicated of cases - 2 events should be just as easy to track as 20. But even if it's complex, it shouldn't be *hard*, especially hard to do *right*. To add to all this, it should come with the right state primitives to make simple, yet powerful state manipulation with reasonably low effort. (This doesn't mean that it all has to be included *in* the core bundle. They can still be separate modules, just shipped with the npm package *with* the core bundle.)
 
-And in addition, it should come with the right state primitives to make simple, yet powerful state manipulation with reasonably low effort.
+And finally, the framework's job, as [Rich Harris explained fairly well](https://youtu.be/qqt6YxAZoOc), is not to organize code, but to organize your mind. They shouldn't have to have a major impact in your code size, and if anything, it should *reduce* how much overhead exists between your code and the user. Although this does still remain "just JavaScript", it does so without introducing nearly as much runtime overhead or mental overhead in the process:
 
-(This doesn't mean that it should all be included *in* the core bundle. They can still be separate modules, just shipped with the npm package *with* the core bundle.)
+- Unlike literally every other tree reconciliation-based framework I've ever seen (and I've seen a lot more than I care to admit - have you heard of [Turbine](https://github.com/funkia/turbine), [Anvil](https://github.com/zserge/anvil), or [Miso](https://haskell-miso.org/)?), this makes trees static by default. This is useful for dramatically increasing performance and dramatically reducing retained memory. However, streams provide very simple, easy abstractions to use to make parts of them dynamic, and those themselves are fairly light. (This is among other numerous optimizations, of course.)
+- This tries to streamline and simplify the mental model as much as possible, even sometimes at the cost of implementation complexity. There is this saying in UX and design circles that goes "Don't make me think!" (and a book with [exactly that title](https://en.wikipedia.org/wiki/Don't_Make_Me_Think)), and my goal with this redesign is to work with the developer's first instinct of what's correct and not make them sweat the little details of their components like data.
+- One of the overarching goals of this redesign is to get out of your way and let you actually *do* what you want to do. Most frameworks are concerned about *what* the current state is and *what* data is being shown, including React, Angular, and even Svelte. They're concerned about state, not functionality. Users care about functionality, and I want Mithril's goal here to be to enable you to *do* what is needed. (And yes, if/once this redesign becomes Mithril I plan to replace our current tagline of "A JavaScript Framework for Building Brilliant Applications" with something about "doing".)
 
 ### Keeping it fast
 

@@ -1,14 +1,10 @@
-// setup
 import * as Router from "../../mithril/router.mjs"
 import {m, render} from "../../mithril.mjs"
-import View from "./view.mjs"
+import View from "./components/view.mjs"
 import {subscribe} from "./model.mjs"
 
 function ViewProxy({showing}) {
-	return (o) => {
-		subscribe(() => o.next(m(View, {showing})))
-		o.next(m(View, {showing}))
-	}
+	return (o) => subscribe((state) => o.next(m(View, {state, showing})))
 }
 
 render("#todoapp", Router.match({

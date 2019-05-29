@@ -1,7 +1,8 @@
+import {Link, match} from "mithril/router"
 import {abortable, m, pure, render} from "mithril"
 import {api, demoSource} from "../threaditjs-common/common.mjs"
-import {map, distinct, store} from "mithril/stream"
-import {match, Link} from "mithril/router"
+import {distinct, map, store} from "mithril/stream"
+import Control from "mithril/control"
 
 // shared
 function Header() {
@@ -53,9 +54,9 @@ function Home() {
 		document.title = "ThreaditJS: Mithril | Home"
 		dispatch({type: "set", threads: response.data})
 		return [
-			m("#keyed", map(threads, (list) => list.map((thread) =>
-				m(ThreadPreview, {key: thread.id, thread})
-			))),
+			map(threads, (list) => m("#keyed", {of: list, by: "id"}, (thread) =>
+				m(ThreadPreview, {thread})
+			)),
 			m(NewThread, {on: [onSave, "save"]}),
 		]
 	})
@@ -63,12 +64,11 @@ function Home() {
 
 function NewThread(attrs, emit) {
 	let textarea
-	function onSubmit() {
-		api.newThread(textarea.value).then(({data: thread}) => {
-			emit({type: "save", thread})
-			textarea.value = ""
-		})
-		return false
+	async function onSubmit(_, capture) {
+		capture()
+		const {data: thread} = api.newThread(textarea.value)
+		emit({type: "save", thread}, capture)
+		textarea.value = ""
 	}
 
 	return m("form", {on: [onSubmit, "submit"]}, [
@@ -80,24 +80,25 @@ function NewThread(attrs, emit) {
 // thread
 function Thread(attrs) {
 	T.time("Thread render")
-	return m("#fragment", {ref: () => T.timeEnd("Thread render")}, [
-		map(distinct(attrs, (a, b) => a.id === b.id), ({id}) => m(Layout, {
-			key: id,
-			load: (signal) => api.thread(id, {signal}),
-		}, (response) => {
-			const title = T.trimTitle(response.root.text)
-			document.title = `ThreaditJS: Mithril | ${title}`
-			return m(ThreadNode, {node: response.root})
-		})),
-	])
+	return m("#fragment", {ref: () => T.timeEnd("Thread render")}, () =>
+		map(distinct(attrs, "id"), ({id}) =>
+			m(Control, {key: id}, m(Layout, {
+				load: (signal) => api.thread(id, {signal}),
+			}, (response) => {
+				const title = T.trimTitle(response.root.text)
+				document.title = `ThreaditJS: Mithril | ${title}`
+				return m(ThreadNode, {node: response.root})
+			}))
+		),
+	)
 }
 
 const ThreadNode = pure(({node}) => m("div.comment", [
 	m("p", {innerHTML: node.text}),
 	m("div.reply", m(Reply, {node})),
-	m("div.children", m("#keyed", node.children.map((child) =>
-		m(ThreadNode, {key: child.id, node: child})
-	)))
+	m("div.children", m("#keyed", {of: node.children, by: "id"}, (child) =>
+		m(ThreadNode, {node: child})
+	))
 ]))
 
 function Reply(attrs) {
@@ -106,18 +107,17 @@ function Reply(attrs) {
 	let textarea, node
 	attrs({next: (curr) => node = curr.node})
 
-	function receiver(ev) {
+	async function receiver(ev, capture) {
 		if (ev.type === "click") {
+			capture()
 			setReplying(true)
-			return false
 		} else if (ev.type === "submit") {
-			api.newComment(textarea.value, node.id).then((response) => {
-				node.children.push(response.data)
-				setReplying(false)
-			})
-			return false
+			capture()
+			const response = await api.newComment(textarea.value, node.id)
+			node.children.push(response.data)
+			setReplying(false)
 		} else {
-			setPreview(textarea.value)
+			setPreview(T.previewComment(textarea.value))
 		}
 	}
 
@@ -129,7 +129,7 @@ function Reply(attrs) {
 					on: [receiver, "input"]
 				}),
 				m("input[type=submit][value='Reply!']"),
-				m("div.preview", {innerHTML: map(comment, T.previewComment)}),
+				m("div.preview", {innerHTML: distinct(comment)}),
 			])
 			: m("a", {on: [receiver, "click"]}, "Reply!")
 	)

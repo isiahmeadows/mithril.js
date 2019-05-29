@@ -408,9 +408,9 @@ function ThreadNode({node}) {
 	return m("div.comment", [
 		m("p", {innerHTML: node.text}),
 		m("div.reply", m(Reply, {node})),
-		m("div.children", m("#keyed", node.children.map((child) =>
-			m(ThreadNode, {key: child.id, node: child})
-		)))
+		m("div.children", m("#keyed", {of: node.children, by: "id"},
+			(child) => m(ThreadNode, {node: child})
+		)),
 	])
 }
 ```
@@ -433,9 +433,9 @@ function ThreadNode(attrs) {
 		render(m("div.comment", [
 			m("p", {innerHTML: node.text}),
 			m("div.reply", m(Reply, {node})),
-			m("div.children", m("#keyed", node.children.map((child) =>
-				m(ThreadNode, {key: child.id, node: child})
-			)))
+			m("div.children", m("#keyed", {of: node.children, by: "id"},
+				(child) => m(ThreadNode, {node: child})
+			))
 		]))
 	})
 }
@@ -445,9 +445,9 @@ function ThreadNode(attrs) {
 	return Cell.map(attrs, ({node}) => m("div.comment", [
 		m("p", {innerHTML: node.text}),
 		m("div.reply", m(Reply, {node})),
-		m("div.children", m("#keyed", node.children.map((child) =>
-			m(ThreadNode, {key: child.id, node: child})
-		)))
+		m("div.children", m("#keyed", {of: node.children, by: "id"},
+			(child) => m(ThreadNode, {node: child})
+		))
 	]))
 }
 ```

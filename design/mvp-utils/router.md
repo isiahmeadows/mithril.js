@@ -4,8 +4,8 @@
 
 This is exposed under `mithril/router` and in the full bundle via `Mithril.Router`. The default export is a global router instance. It depends on the internal path parsing utilities and a native `Promise`, but that's it.
 
-- `Router.initialize(router)` - Set the global router.
-	- There is no default to keep it DOM-independent, so you will usually want to call either `Router.initialize(Router.dom({prefix?}))` or `Router.initialize(Router.memory)`
+- `Router.init(router, opts)` - Set the global router, optionally with an options parameter.
+	- To keep it DOM-independent, there is no default, so you will usually want to call either `Router.init(Router.dom, prefix?)` or `Router.init(Router.memory)`
 
 - `Router.set(href, opts).then(...)` - Set the current route.
 	- The parameters are directly passed to the current router.
@@ -77,7 +77,14 @@ export interface CurrentRouterOpts {}
 //
 // I've actually verified this works. The error message will be somewhat
 // misleading if you forget, but it will still be correctly rejected.
-export function initialize(router: Router<RouterOpts>): void;
+export function init<T>(
+	router: (value: T) => Router<RouterOpts>,
+	options: T
+): void;
+
+export function init(
+	router: (value?: undefined) => Router<RouterOpts>
+): void;
 
 export function set(
 	href: CurrentRouterOpts["entry"]["href"],
@@ -181,18 +188,17 @@ interface Router<O extends RouterOpts> {
 
 Two built-in routers exist:
 
-- `dom(opts)` - Create a DOM router. This is exposed from `mithril/dom` and in the full bundle via `Mithril.dom`.
-	- `opts.prefix` - The global prefix to use.
-		- When the prefix starts with `#`, routing is based on the URL's hash.
-		- When the prefix starts with `?`, routing is based on the URL's query + hash.
-		- When the prefix starts with anything else, routing is based on the full URL path, query, and hash.
-		- The default prefix is `"#!"`.
-	- Usually used via `Router.initialize(Router.dom(opts))`
+- `Router.init(Router.dom, prefix?)` - Set the router to the DOM router.
+	- `prefix` - The global prefix to use. Defaults to `document.baseURI + "#!"`
+	- This requires HTML5 history support, but will need to include a fallback to `onhashchange` for hash changes to work around [this IE/old Edge bug](https://developer.microsoft.com/en-us/microsoft-edge/platform/issues/3740423/#comment-9).
+		- Need to ask someone involved with https://github.com/browserstate/history.js if this bug has a workaround in their library, because I'd likely have to adopt a similar fix/workaround.
+		- Might be easiest to just watch for both and ignore duplicate requests if they were received by the other listener.
 	- Extra `set` options:
 		- `opts.title` - The title of the history entry. Currently, out of all major browsers, this only affects the UI in Firefox, but it exists in case people want to use it.
 
-- `memory` - Get the in-memory router. This is exposed from `mithril/router` and in the full bundle via `Mithril.Router.memory`.
-	- Usually used via `Router.initialize(Router.memory)`
+- `Router.init(Router.memory, initialPath = "/")` - Set the router to the in-memory router.
+	- `initialPath` - The initial global path to start with.
+	- Useful for testing and why it's here.
 
 Here's the TS definitions for those:
 
@@ -210,7 +216,7 @@ declare module "mithril/dom" {
 		};
 	};
 
-	export function dom(opts: {prefix?: string}): Router<DOMRouterOpts>;
+	export function dom(prefix?: string): Router<DOMRouterOpts>;
 }
 
 declare module "mithril/router" {
@@ -225,7 +231,7 @@ declare module "mithril/router" {
 		};
 	};
 
-	export const memory: Router<MemoryRouterOpts>;
+	export function memory(initialPath?: string): Router<MemoryRouterOpts>;
 }
 ```
 
@@ -240,14 +246,14 @@ declare module "mithril/router" {
 Also, `Router.Link` and `Router.Go` should work like this, for better accessibility and compatibility:
 
 ```js
-function view(o, tag, attrs, onclick, href, set) {
-	o.next({tag, attrs: {...attrs, href, onclick(ev) {
+function view(makeNext) {
+	let current, memoSet
+	// This is called after all applicable event listeners could've been
+	// added, including by Mithril. Much easier this way to sidestep the
+	// framework
+	function handler(ev) {
 		if (
-			(
-				typeof onclick !== "function" ||
-				onclick.call(this, ev) !== false
-			) &&
-			// Skip if `onclick` or a prior listener prevented default
+			// Skip if a prior listener prevented default
 			!ev.defaultPrevented &&
 			// Ignore everything but left clicks
 			(ev.button === 0 || ev.which === 0 || ev.which === 1) &&
@@ -255,31 +261,46 @@ function view(o, tag, attrs, onclick, href, set) {
 			(!this.target || this.target === "_self") &&
 			// No modifier keys
 			!ev.ctrlKey && !ev.metaKey && !ev.shiftKey && !ev.altKey
-		) set()
-
-		return false
-	}}})
+		) {
+			ev.preventDefault()
+			ev.stopPropagation()
+			memoSet()
+		}
+	}
+	return (attrs) => (o) => attrs({
+		next: makeNext(({tag, attrs}, href, set) => {
+			memoSet = set
+			o.next({tag, attrs: {...attrs, href, ref(elem) {
+				attrs.ref(elem)
+				var prev = current
+				current = elem
+				if (prev !== elem) {
+					if (prev != null) {
+						prev.removeEventListener("click", handler, false)
+					}
+					elem.addEventListener("click", handler, false)
+				}
+			}}})
+		}),
+		complete: () => {
+			var prev = current
+			current = undefined
+			if (prev != null) prev.removeEventListener("click", handler, false)
+		},
+	})
 }
 
-Router.Link = (attrs) => (o) => attrs({
-	children: [{tag, attrs: {onclick, href, ...attrs}}],
-	...opts
-}) => {
-	view(o, tag, attrs, onclick, Router.resolve(href),
-		() => Router.push(href, opts)
-	)
+Router.Link = view((next) => ({children: [child], ...opts}) => {
+	const href = child.attrs.href
+	next(child, Router.resolve(href), () => Router.push(href, opts))
 })
 
-Router.Go = (attrs) => (o) => attrs({
-	n, children: [{tag, attrs: {onclick, ...attrs}}],
-}) => {
+Router.Go = view((next) => ({n, children: [child]}) => {
 	if (n === "back" || n == null) n = -1
 	else if (n === "forward") n = 1
 	const result = Router.at(n)
-	view(o, tag, attrs, onclick,
-		result != null ? Router.resolve(result.href) : undefined,
-		() => Router.push(href, opts)
-	)
+	const href = result != null ? Router.resolve(result.href) : undefined
+	next(child, href, () => Router.go(n))
 })
 ```
 
@@ -287,7 +308,7 @@ Router.Go = (attrs) => (o) => attrs({
 
 Well, the need for routing is obvious, but there are a few key differences from the existing system I'd like to explain.
 
-- Routing is partially dynamic. Because you can invoke `match` at any point, you can load routes asynchronously and just invoke `match` lazily after the child is loaded. This is useful for async routes and lazy loading of common child layouts in larger apps.
+- Routing is partially dynamic. Because you can invoke `match` at any point, you can load routes asynchronously and just invoke `match` lazily after the child is loaded. This is *very* useful for async routes and lazy loading of common child layouts in larger apps.
 - Routing returns a valid vnode. This means you can define a layout and on `render(dom, m(Layout, {...}))`, you can define in your children a simple route. On route change, your layout ends up preserved and *not* redrawn, while your page *is*.
 - Routing returns a valid stream that doesn't itself to be mounted to the DOM, and it supports multiple entry points. This means you can use it not only in your views, but also in your model when certain state is route-dependent.
 - Each of the various route setting methods return promises. That way, you get notified when the route change completes.

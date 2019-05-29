@@ -30,12 +30,11 @@ The vnodes are initially just this when returned from views. `m` returns either 
 - Text: `"string"`, `0`, `1.2`, and similar
 - Dynamic: `(o) => done`, `Stream.map(stream, func)`, and similar
 - Fragment arrays: `[...]`
-- Fragment vnodes: `{tag: "#fragment", attrs: {key?, ref?, children: [...]}}`
-- Keyed fragment vnodes: `{tag: "#keyed", attrs: {key?, ref?, children: [...]}}`
-- Catch vnodes: `{tag: "#catch", attrs: {key?, onerror, children: [...]}}`
-- Lazy vnodes: `{tag: "#lazy", attrs: {key?, onerror, children: [...]}}`
-- Element vnode: `{tag: "elem", attrs: {key?, ref?, children: [...], ...}}`
-- Component vnode: `{tag: Component, attrs: {key?, ref?, children: [...], ...}}`
+- Fragment vnodes: `{tag: "#fragment", attrs: {ref?, children: [makeChild]}}`
+- Keyed fragment vnodes: `{tag: "#keyed", attrs: {of?, by?, children: [makeChild]}}`
+- Catch vnodes: `{tag: "#catch", attrs: {children: [makeChild]}}`
+- Element vnode: `{tag: "elem", attrs: {ref?, children: [...], ...}}`
+- Component vnode: `{tag: Component, attrs: {...}}`
 
 Notes:
 
@@ -44,49 +43,18 @@ Notes:
 - The children are *always* an array, even if it's empty.
 - This is *not* normalized. It's just returned directly.
 
-## Resolved vnode structure
-
-The vnode children, including text strings, are resolved internally to this to allow engines to optimize for a single type map.
-
-Total: 8 fields
-
-- `vnode.mask` - Inline cache mask
-	- `vnode.mask & 0x000F` - Type ID
-	- `vnode.mask & 1 << 4` - Custom element (either autonomous or customized)
-	- `vnode.mask & 1 << 5` - Has `key`
-	- `vnode.mask & 1 << 8` - Has `ref`
-	- Note: `id & 0x00FF` *must* align with `vnode.mask & 0x00FF`.
-- `vnode.tagID` - Resolved ID for tag/`is` name/custom element name/component name/control body
-- `vnode.tagName` - Raw tag/custom element name/component name/control body
-- `vnode.isName` - `is` name
-- `vnode.attrs` - Resolved non-special attributes, `oncatch` for catch vnodes
-- `vnode.children` - Children/text
-- `vnode.keyID` - Resolved ID for `attrs.key`
-- `vnode.ref` - Resolved `attrs.ref` for non-component object vnodes
-
-Notes:
-
-- An error is thrown if `vnode.attrs.children.length > 2 ** 16`
-- Holes are represented by `null`s
-- For element and component vnodes, attributes are retained with `is` (for customized built-in elements), `key`, `children`, and `ref` removed.
-- For component vnodes, attributes are retained with only `key` removed. `children` is ignored.
-- Fragments do *not* store their attributes - those are only used to read the `key` and `children`. Pass component instances around instead - even if they aren't used, they can still be useful for verifying types.
-- This step is only incrementally performed. Children are lazily normalized.
-
-This is *very* heavily optimized towards being monomorphic and strongly typed.
-
-### Why not normalize it immediately?
+### Why not normalize it?
 
 Few reasons related to performance:
 
 1. The return value is highly polymorphic anyways. Pretending it's monomorphic isn't going to change that.
-2. Normalizing vnodes as you need them have the added benefit of leveraging the GC's nursery, which could potentially result in zero-cost object allocation. It gives you the benefits of monomorphic objects without the cost of allocating them, which in turn reduces the stress on the GC.
-3. The performance cost of polymorphic and megamorphic types isn't in terms of the values themselves, but in all the implicit type checks. You're either taking the hit in one place or another, but you're taking the hit either way. (I've already dealt with how to reduce the impact of polymorphism in fast deep object matching.)
+2. Normalizing vnodes allocates more objects than necessary, which risks greater GC churn and potential jank. This is small but not entirely insignificant when normalizing internally, but it *does* make a significant difference in GC churn when you do it in userland.
+3. The performance cost of megamorphic types is in the implicit type checks specifically, not inherently in having polymorphic values themselves (beyond some engines boxing integers and floats). There is a minimum number of implicit type checks required, but you're taking the hit either way whether you normalize or not, and I've already found ways to minimize the impact in fast deep object comparisons.
 
 Also, not everyone has the same needs as the DOM renderer.
 
-- The HTML renderer doesn't need to normalize its input at all. It just needs to take note of various types and dispatch accordingly, as it doesn't need to diff anything.
-- A hypothetical native renderer would likely instead normalize it to a native struct containing most of these members. It would also want to normalize names to direct constructor/type IDs, and it'd likely *not* need `is`.
+- The HTML renderer doesn't need to compare anything at all. It just needs to know about what the *current* type is.
+- A hypothetical native renderer would likely want to operate on native types, and they wouldn't be any slower if the input *was* normalized.
 
 ## Mithril DOM IR structure
 
@@ -114,22 +82,20 @@ Here's the general vnode structure, consisting of 8 integers + some associated d
 - `id` = The index used to read `idata`, carrying basic metadata on the type itself in an attempt to avoid the need to load data into memory for simple checks.
 	- `id & 0x000F` = Type ID
 	- `id & 1 << 4` = Custom element (either autonomous or customized)
-	- `id & 1 << 5` = Has `key`
 	- `id >>> 8` = The real index used
 	- Note: all data stored here *must* remain the same across the entire lifetime of the vnode itself, so it can only really be used for diffing types.
 	- Note: `id & 0x00FF` *must* align with `vnode.mask & 0x00FF`.
 - `idata[(id >>> 8) * 8 + 0] = mask` - Status mask
 	- `mask & 0xF` - The removal state of the node. (This speeds up removal.)
 		- `(mask & 0xF) === 0x0` - No removal callbacks need called.
-		- `(mask & 0xF) === 0x1` - Control vnode `done` callback exists.
+		- `(mask & 0xF) === 0x1` - Dynamic vnode `done` callback exists.
 		- `(mask & 0xF) === 0x2` - Component vnode subscription array is non-empty.
 		- `(mask & 0xF) === 0x3` - Element vnode receiver needs closed.
 		- `(mask & 0xF) === 0x4` - Catch vnode stream needs closed.
-	- `mask >>> 8` - Type-dependent data index, ignored if none exist
-- `idata[(id >>> 8) * 8 + 1] = tag` - Element tag ID, ignored for most control vnodes
+- `idata[(id >>> 8) * 8 + 1] = tag` - Element tag ID, ignored for most dynamic vnodes
 - `idata[(id >>> 8) * 8 + 2] = parent` - Closest element parent ID or `-1` if this is the root node.
-- `idata[(id >>> 8) * 8 + 3] = key` - Element key ID
 	- Note that not all types use the same number of slots (most use 0 or 1, but DOM elements use 2), so you can't assume that `typeData + 1` represents the next element's index. You need to use the next ID and go through that indirection to get the its type-dependent data index. Note that all types use a static number of fields relative to that type, so it's still quickly calculable.
+- `idata[(id >>> 8) * 8 + 3] = typeData` - Type-dependent data index or `-1` if no data exists
 - `idata[(id >>> 8) * 8 + 4] = domStart` - DOM index start
 - `idata[(id >>> 8) * 8 + 5] = domEnd` - DOM index end (as in, index after last)
 - `idata[(id >>> 8) * 8 + 6] = childrenStart` - Children ID start, ignored for text nodes
@@ -150,23 +116,22 @@ Here are the types:
 	- This does *not* have any corresponding data in `idata`, `odata`, `ndata`, or `cdata`, so the index field is ignored.
 	- Conveniently, this means holes can be created as just `id === 0`.
 
-- Control:
+- Dynamic:
 	- Type ID: `(mask & 0x000F) === 0x1`
-	- `tag` = Resolved ID for control factory
+	- `tag` = Resolved ID for dynamic factory
 	- `odata[typeData + 0]` = `done` callback
 	- Note: `domStart` and `domEnd` are inferred from children.
-	- Assert: `key === 0`.
 	- Assert: `childrenLength === 0` before first render, `childrenLength === 1` after first render.
 
 - Text:
 	- Type ID: `(mask & 0x000F) === 0x2`
 	- `odata[typeData + 0]` = String contents
-	- Assert: `key === 0`.
 	- Assert: `domStart === domEnd - 1`
 
 - Keyed:
 	- Type ID: `(mask & 0x000F) === 0x4`
 	- `childrenStart` + `childrenLength` = Fragment children
+	- `odata[typeData + 0]` = Array of current keys
 	- Note: `domStart` and `domEnd` are inferred from children.
 
 - Fragment:
@@ -329,7 +294,6 @@ function normalize(vnode) {
 			if (typeof tag === "string") {
 				switch (tag) {
 					// Keyed, Fragment
-					case "#keyed":
 					case "#fragment":
 						var children = attrs.children
 						if (children == null || children.length === 0) {
@@ -340,6 +304,8 @@ function normalize(vnode) {
 							tag.length === 6 ? 0x4 : 0x5,
 							undefined, attrs, children
 						)
+
+					case "#keyed":
 
 					case "#catch":
 						var children = attrs.children

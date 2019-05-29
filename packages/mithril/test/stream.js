@@ -1,5 +1,17 @@
 import * as Stream from "../src/stream.mjs"
 
+// Note: this needs to test horribly obscure edge cases, too, like:
+//
+// - The madness detailed in `trackerCreate` and friends.
+// - Closing and/or erroring every stream during `next`, `error`, and `complete`
+// - Closing and/or erroring `map` and friends during the callback
+// - Invoking `next`, `error`, and/or `complete` during the callback of
+//   `onClose`
+// - Invoking `next`, `error`, and/or `complete` during closure of streams
+//   passed to all functions
+// - Emitting `next`, `error`, and/or `complete` during the callback of
+//   `recover`
+
 function spyStream() {
 	function stream() {
 		var args = []

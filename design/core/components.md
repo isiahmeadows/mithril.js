@@ -9,7 +9,7 @@
 		- On subtree removal, this invokes all subscribed observers' `.return` methods.
 		- Invoking the returned `done` callback simply removes the subscription.
 		- All observer methods are optional.
-	- `emit` is as documented [here](#events).
+	- `emit` is as documented [here](vnodes.md#events).
 	- `view` is simply a vnode. Conveniently, this *does* include streams itself.
 - Components simply map attributes to a view. Mithril doesn't care about the attribute values themselves.
 - Intentionally, components do have a friendly API that works even if you choose to use it not as a component.

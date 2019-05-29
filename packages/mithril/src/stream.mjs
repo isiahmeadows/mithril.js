@@ -16,6 +16,7 @@ function noop() {}
 
 var SKIP = {}
 var sentinel = {}
+
 var fill = Array.prototype.fill || function (value) {
 	for (var i = 0; i < this.length; i++) this[i] = value
 	return this
@@ -36,6 +37,36 @@ function invokeError(hooks, value) {
 function invokeComplete(hooks, value) {
 	if (hooks != null && typeof hooks.complete === "function") {
 		hooks.complete(value)
+	}
+}
+
+function create(init) {
+	return function (hooks) {
+		if (hooks == null) hooks = {}
+		var done = sentinel
+		var maybeDone = init({
+			next: function (value) {
+				var prev = hooks
+				if (prev != null && prev.next != null) prev.next(value)
+			},
+			error: function (value) {
+				var prev = hooks
+				hooks = done = undefined
+				if (prev != null && prev.error != null) prev.error(value)
+			},
+			complete: function () {
+				var prev = hooks
+				hooks = done = undefined
+				if (prev != null && prev.complete != null) prev.complete()
+			},
+		})
+		if (sentinel !== done) done = maybeDone
+
+		return function () {
+			var prev = done
+			done = undefined
+			if (typeof prev === "function") prev()
+		}
 	}
 }
 
@@ -103,13 +134,6 @@ function trackerConnect(t, stream, hooks, type, extra) {
 	var index = t.s.length
 	var done = sentinel
 	t.s.push(token, undefined)
-	function error(value) {
-		var tracker = parent, target = hooks
-		token = parent = hooks = extra = undefined
-		if (tracker == null) return
-		trackerCloseAll(tracker)
-		invokeError(target, value)
-	}
 	try {
 		done = stream({
 			next: function (value) {
@@ -124,7 +148,13 @@ function trackerConnect(t, stream, hooks, type, extra) {
 					trackerConnect(parent, value, hooks, 1)
 				}
 			},
-			error: error,
+			error: function (value) {
+				var tracker = parent, target = hooks
+				token = parent = hooks = extra = undefined
+				if (tracker == null) return
+				trackerCloseAll(tracker)
+				invokeError(target, value)
+			},
 			complete: function () {
 				var tracker = parent, target = hooks
 				token = parent = hooks = extra = undefined
@@ -189,6 +219,7 @@ function store(acc, func) {
 	return [
 		function (hooks) {
 			if (hooks == null || typeof hooks !== "object") return noop
+			if (hooks === store) return acc
 			if (subs == null) {
 				invokeComplete(hooks)
 				return noop
@@ -220,7 +251,7 @@ function store(acc, func) {
 			for (var i = 1; i < current.length; i += 2) {
 				invokeNext(current[i], value)
 			}
-		}
+		},
 	]
 }
 
@@ -253,7 +284,7 @@ function join(streams) {
 	if (keys.length === 0) return NEVER
 	var values = []
 	for (var i = 0; i < keys.length; i++) values[i] = streams[keys[i]]
-	return map(all(values), function (currents) {
+	return lift(values, function (currents) {
 		var object = Object.create(null)
 		for (var j = 0; j < keys.length; j++) object[keys[j]] = currents[j]
 		return object
@@ -265,17 +296,28 @@ function run(value) {
 	return value
 }
 
+function mapKey(key) {
+	return function (a) { return a[key] }
+}
+
 function map(stream, func) {
 	// Shortcut a known easy case.
 	if (NEVER === stream) return NEVER
+	if (
+		typeof func === "string" ||
+		typeof func === "number" ||
+		typeof func === "symbol"
+	) {
+		func = mapKey(func)
+	}
 	return function (hooks) {
+		var done = sentinel
 		function error(value) {
 			var target = hooks
-			hooks = sub = undefined
-			invokeError(target, value)
+			hooks = done = undefined
+			if (target != null) invokeError(target, value)
 		}
-		var sub = sentinel
-		var maybeSub = stream({
+		var maybeDone = stream({
 			next: function (value) {
 				if (hooks != null) {
 					try {
@@ -290,31 +332,47 @@ function map(stream, func) {
 			error: error,
 			complete: function () {
 				var target = hooks
-				hooks = sub = undefined
-				invokeComplete(target)
+				hooks = done = undefined
+				if (target != null) invokeComplete(target)
 			},
 		})
-		if (sentinel === sub) sub = maybeSub
+		if (sentinel === done) done = maybeDone
 		return function () {
-			var target = sub
-			hooks = sub = undefined
-			target()
+			var target = done
+			hooks = done = undefined
+			if (typeof target === "function") target()
 		}
 	}
+}
+
+function lift(deps, func) {
+	return map(all(deps), func)
+}
+
+function compareKey(key) {
+	return function (a, b) { return sameValueZero(a[key], b[key]) }
 }
 
 function distinct(stream, compare) {
 	// Shortcut a known easy case.
 	if (NEVER === stream) return NEVER
-	if (compare == null) compare = sameValueZero
+	if (compare == null) {
+		compare = sameValueZero
+	} else if (
+		typeof compare === "string" ||
+		typeof compare === "number" ||
+		typeof compare === "symbol"
+	) {
+		compare = compareKey(compare)
+	}
 	return function (hooks) {
-		var acc = sentinel, sub = sentinel
+		var acc = sentinel, done = sentinel
 		function error(value) {
 			var target = hooks
-			hooks = sub = acc = undefined
-			invokeError(target, value)
+			hooks = done = acc = undefined
+			if (target != null) invokeError(target, value)
 		}
-		var maybeSub = stream({
+		var maybeDone = stream({
 			next: function (value) {
 				if (hooks != null) {
 					var prev = acc
@@ -327,21 +385,21 @@ function distinct(stream, compare) {
 							return
 						}
 					}
-					invokeNext(hooks, value)
+					if (hooks != null) invokeNext(hooks, value)
 				}
 			},
 			error: error,
 			complete: function () {
 				var target = hooks
-				hooks = sub = acc = undefined
-				invokeComplete(target)
+				hooks = done = acc = undefined
+				if (target != null) invokeComplete(target)
 			},
 		})
-		if (sentinel === sub) sub = maybeSub
+		if (sentinel === done) done = maybeDone
 		return function () {
-			var target = sub
-			hooks = acc = sub = undefined
-			target()
+			var target = done
+			hooks = acc = done = undefined
+			if (typeof target === "function") target()
 		}
 	}
 }
@@ -390,49 +448,54 @@ function onClose(stream, func) {
 			try {
 				func()
 			} finally {
-				invokeComplete(hooks)
+				if (sentinel !== hooks) invokeComplete(hooks)
 			}
 			return noop
 		}
-		var sub = sentinel
-		var maybeSub = stream({
+		var done = sentinel
+		var maybeDone = stream({
 			next: function (value) {
-				invokeNext(hooks, value)
+				if (hooks != null) invokeNext(hooks, value)
 			},
 			error: function (error) {
 				var target = hooks
-				hooks = sub = undefined
-				if (sub != null) {
+				hooks = sentinel; done = undefined
+				if (sentinel !== target) {
 					try {
 						func()
-					} finally {
-						invokeError(target, error)
+					} catch (e) {
+						error = e
 					}
+					invokeError(target, error)
 				}
 			},
 			complete: function () {
 				var target = hooks
-				hooks = sub = undefined
-				if (sub != null) {
+				hooks = sentinel; done = undefined
+				if (sentinel !== target) {
 					try {
 						func()
-					} finally {
-						invokeComplete(target)
+					} catch (e) {
+						invokeError(target, e)
+						return
 					}
+					invokeComplete(target)
 				}
 			},
 		})
-		if (sub === sentinel) sub = maybeSub
+		if (done === sentinel) done = maybeDone
 
 		return function () {
-			var target = sub
-			hooks = sub = sentinel
-			if (sub != null) {
+			var prev = hooks, target = done
+			hooks = sentinel; done = undefined
+			if (sentinel !== prev) {
 				try {
 					func()
-				} finally {
-					target()
+				} catch (e) {
+					invokeError(prev, e)
+					return
 				}
+				if (typeof target === "function") target()
 			}
 		}
 	}
@@ -441,32 +504,41 @@ function onClose(stream, func) {
 function recover(stream, func) {
 	return function (hooks) {
 		var flipped = false
-		var sub = sentinel
-		var maybeSub = stream({
+		var done = sentinel
+		var maybeDone = stream({
 			next: function (value) {
-				invokeNext(hooks, value)
+				if (!flipped && sentinel !== hooks) {
+					invokeNext(hooks, value)
+				}
 			},
 			error: function (value) {
+				var prev = flipped
 				flipped = true
-				if (hooks != null) {
+				if (!prev && sentinel !== hooks) {
 					try {
 						var stream = func(value)
 						if (hooks != null) {
-							sub = sentinel
-							var maybeSub = stream({
+							done = sentinel
+							var maybeDone = stream({
 								next: function (value) {
-									invokeNext(hooks, value)
+									if (sentinel !== hooks) {
+										invokeNext(hooks, value)
+									}
 								},
 								error: function (value) {
-									invokeError(hooks, value)
+									if (sentinel !== hooks) {
+										invokeError(hooks, value)
+									}
 								},
 								complete: function () {
 									var target = hooks
-									sub = hooks = undefined
-									invokeComplete(target)
+									hooks = sentinel; done = undefined
+									if (sentinel !== hooks) {
+										invokeComplete(target)
+									}
 								},
 							})
-							if (sentinel === sub) sub = maybeSub
+							if (sentinel === done) done = maybeDone
 						}
 					} catch (e) {
 						invokeError(hooks, e)
@@ -474,17 +546,19 @@ function recover(stream, func) {
 				}
 			},
 			complete: function () {
-				invokeComplete(hooks)
+				var target = hooks
+				hooks = sentinel; done = undefined
+				if (!flipped && sentinel !== hooks) invokeComplete(target)
 			},
 		})
 		// If it errored synchronously, let's not bother allocating a new
 		// function.
-		if (flipped) return sub
-		if (sentinel === sub) sub = maybeSub
+		if (flipped) return done
+		if (sentinel === done) done = maybeDone
 		return function () {
-			var target = sub
-			hooks = sub = undefined
-			target()
+			var target = done
+			hooks = sentinel; done = undefined
+			if (typeof target === "function") target()
 		}
 	}
 }
@@ -492,8 +566,10 @@ function recover(stream, func) {
 export {
 	all,
 	chain,
+	create,
 	distinct,
 	join,
+	lift,
 	map,
 	merge,
 	never,
