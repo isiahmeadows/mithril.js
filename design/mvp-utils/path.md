@@ -2,17 +2,28 @@
 
 # Path templates
 
-This is exposed under `mithril/path` and in the full bundle via `Mithril.p`.
+This is exposed under `mithril/path` and in the full bundle via `Mithril.p` and `Mithril.path`.
 
 - `p(url, params = {})` - Interpolate `url` as a URL template with `params`.
 
-Note that the [router](#router-api) and [request](#request-api) utilities no longer do their own path interpolation - users should use this instead. Also, note that this carries the semantics in [#2361](https://github.com/MithrilJS/mithril.js/pull/2361) in that `:x` always escapes and `:x...` never escapes.
+Note that the [router](#router-api) and [request](#request-api) utilities no longer do their own path interpolation - users should use these instead.
 
-Also, when appending query parameters, indices are *not* added - it's always generated as `foo[]=a&foo[]=b` for `foo: ["a", "b"]`, not `foo[0]=a&foo[1]=b` as what's currently done. This plays better with most servers, since more accept the first form than the second and the vast majority that accept the second also accept the first.
+### Function syntax
+
+The syntax for `p(url, params?)` slightly differs from what's in v2, particularly for query and hash strings.
+
+- `:x` always escapes and `:x...` never escapes. This is the same as in v2, but different from v1. If you need literally `params.x` followed by `"..."`, `":..."`, or so on, prepend it with an extra colon like in `:x:...` for `escapeURIComponent(params.x) + "..."`.
+- Arrays are serialized with implied indices. In v2, `{foo: ["a", "b"]}` serializes to `?foo[0]=a&foo[1]=b`, but in this, it serializes to `?foo[]=a&foo[]=b`.
+    - This plays better with most servers, since nearly all of them accept the form with implied indices, but many don't correctly interpret the form with explicit indices.
+- Booleans are serialized by presence. In v2, `{foo: true, bar: false, baz: 1}` serializes to `?foo=true&bar=false&baz=1`, but in this, it serializes to `?foo&baz=1`.
+    - This plays better with API expectations, where booleans are usually denoted by presence/absence rather than an explicit value.
+- Hashes in variadic parameters are preferred over hashes in the template.
+- Duplicate query parameter paths from the template string are removed and overwritten by query parameters, except for arrays which are concatenated and objects which are merged.
+    - This just reduces the length of most URLs.
 
 ### Why?
 
-It's much easier and more predictable for both the library and users if path templates are resolved separately from APIs that accept paths. Also, users might want to use it with third-party apps.
+It's much easier and more predictable for both the library and users if path templates are resolved separately from APIs that accept paths. Also, users might want to use it with third-party apps, and this provides a convenient utility to do so.
 
 ### What about `m.buildQueryString` and `m.parseQueryString`?
 

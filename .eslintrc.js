@@ -59,10 +59,9 @@ module.exports = {
 		"id-match": "error",
 		"indent": [
 			"warn",
-			"tab",
+			4,
 			{
 				"outerIIFEBody": 0,
-				"SwitchCase": 1
 			}
 		],
 		"init-declarations": "off",

@@ -1,7 +1,6 @@
-// Common stuff for all the ThreaditJS examples
+// API calls
 T.time("Setup")
 
-// API calls
 const requestJson = (opts, method = "GET") => async (strs, ...args) => {
 	const url = T.apiUrl +
 		args.map(encodeURIComponent).map((x, i) => strs[i] + x).join("") +
@@ -29,26 +28,6 @@ export const api = {
 		return requestJson(opts, "POST")`/comments/create?text=${text}&parent=${id}`
 	},
 }
-
-// For just Mithril's redesign, it'd look more like this:
-// export const api = {
-// 	async home({signal} = {}) {
-// 		T.timeEnd("Setup")
-// 		return request("/threads", {signal})
-// 	},
-// 	async thread(id, {signal} = {}) {
-// 		T.timeEnd("Setup")
-// 		return T.transformResponse(
-// 			await request(p("/threads/:id", {id}), {signal})
-// 		)
-// 	},
-// 	async newThread(text, {signal} = {}) {
-// 		return request(p("/threads/create", {text}), {signal, method: "POST"})
-// 	},
-// 	async newComment(text, id, {signal} = {}) {
-// 		return request(p("/comments/create", {text, id}), {signal, method: "POST"})
-// 	},
-// }
 
 // shared
 export const demoSource = (name) =>

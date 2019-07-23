@@ -15,29 +15,29 @@ const p = (...args) => path.resolve(__dirname, ...args)
 env.PATH = p("node_modules/.bin") + path.delimiter + env.PATH
 
 function nonfatalExec(...args) {
-	var prev = config.fatal
-	config.fatal = false
-	exec(...args)
-	config.fatal = prev
+    var prev = config.fatal
+    config.fatal = false
+    exec(...args)
+    config.fatal = prev
 }
 
 target["lint"] = function () {
-	nonfatalExec("eslint . --cache", {cwd: p(".")})
+    nonfatalExec("eslint . --cache", {cwd: p(".")})
 }
 
 target["lint:fix"] = function () {
-	nonfatalExec("eslint . --cache --fix", {cwd: p(".")})
+    nonfatalExec("eslint . --cache --fix", {cwd: p(".")})
 }
 
 target["test"] = function () {
-	target["test:mithril"]()
+    target["test:mithril"]()
 }
 
 target["test:mithril"] = function () {
-	exec(
-		`${p("node_modules/.bin/_mocha")}\
+    exec(
+        `${p("node_modules/.bin/_mocha")}\
 		  --require esm --require scripts/test-setup.js\
 			--color test/`,
-		{cwd: p("packages/mithril")}
-	)
+        {cwd: p("packages/mithril")}
+    )
 }

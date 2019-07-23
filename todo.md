@@ -4,10 +4,14 @@
 
 These are things I need to do at some point, but just haven't gotten to yet. Obviously, this is not exhaustive, but it should give some insight into my plans.
 
+- Update the `src/` stuff to align with the current `design/`
+	- `src/stream.mjs` is up to date
+	- `src/internal/abortable.mjs` is up to date.
+	- `src/path.mjs` and `src/internal/query.mjs` are up to date.
+	- Most of the rest are *not* up to date.
+
 - Ensure the minified source bundle is generated with Terser option `inline: 0`.
 	- This can be dropped pending https://github.com/terser-js/terser/issues/350
-
-- Update the vnode/IR structure to reflect current internal tag names.
 
 - Update vnode structure docs to include I plan to use something similar to Inferno for the keyed diff
 	- https://github.com/infernojs/inferno/blob/master/packages/inferno/src/DOM/patching.ts
@@ -38,10 +42,11 @@ These are things I need to do at some point, but just haven't gotten to yet. Obv
 	- Similar inspirations to that of state reducers, like Redux and React Hooks
 	- Also: https://cycle.js.org/
 	- Also: Glimmer VM and [Imba](https://medium.freecodecamp.org/the-virtual-dom-is-slow-meet-the-memoized-dom-bb19f546cc52) in spirit
+	- Also: React Flare
 	- Also: HDL languages like Verilog (which only have explicit input and output parameters)
 	- Also: actors and continuation-passing style somewhat directly
 	- Also: dataflow programming and stream processing in general
-	- Also: functional programming in general. This is truly functional and reactive, at a deeper level than even Elm. (Really, this is closer to Scheme/OCaml territory.)
+	- Also: functional programming in general. This is truly functional and reactive, at a deeper level than even Elm in places. (Really, this is closer to Scheme/OCaml territory.)
 
 - Run a poll to see what browsers Mithril actually runs in, so I can get a better picture of how popular it really is and what the baseline actually needs to be.
 	- I would like to know actual analytics numbers/estimates per browser as well as what app/company so I can ensure responses can be accurately deduplicated.

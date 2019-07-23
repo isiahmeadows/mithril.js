@@ -20,6 +20,7 @@ If you have *any* feedback, questions, or concerns, please do feel free to [file
 - [Non-features](non-features.md)
 - [Vnode and IR structural changes](vnode-structure.md)
 - [Bitwise operations explainer](bitwise.md)
+- [Examples](../examples/README.md)
 
 ## Summary
 
@@ -39,7 +40,7 @@ The code you thought you wrote should be the code you meant to write. There shou
 // React
 class TextInput extends React.Component {
 	state = {
-		value: ''
+		value: ""
 	}
 	componentWillReceiveProps(nextProps) {
 		// This resets local state every time a parent receives properties *and*
@@ -50,11 +51,28 @@ class TextInput extends React.Component {
 		return (
 			<input
 				value={this.state.value}
-				onChange={(e) => {
-					this.setState({ value: e.target.value })
+				onChange={(ev) => {
+					this.setState({ value: ev.target.value })
 				}}
 			/>
 		)
+	}
+}
+
+// Mithril v2
+function TextInput() {
+	let value = ""
+	return {
+		onupdate(vnode, old) {
+			// This resets local state every time a parent receives properties
+			// *and* it schedules a re-render. It's done *after* the view is
+			// rendered to ensure the value isn't prematurely changed.
+			value = vnode.attrs.value
+			m.redraw()
+		},
+		view: () => [
+			m("input", {value, onchange: (ev) => value = ev.target.value}),
+		],
 	}
 }
 
@@ -63,39 +81,32 @@ class TextInput extends React.Component {
 // follow because the control flow is all over the place.
 function TextInput(attrs) {
 	let value = ""
-	return (render) => {
+	return (o) => {
 		function update() {
-			render(m("input", {
-				value,
-				onchange: (e) => {
-					value = e.target.value
-					update()
-				}
-			}))
+			o.next(m("input", {value, onchange(ev) {
+				value = ev.target.value
+				update()
+			}}))
 		}
 
-		update()
-
-		return attrs((nextAttrs) => {
-			value = nextAttrs.value
+		return Stream.map(attrs, (nextAttrs) => {
+			value = nextAttrs.value || ""
 			update()
 		})
 	}
 }
 
 // Simplified equivalent in this redesign - it *still* raises questions, and
-// it's equally hard to follow due to all the recursion.
+// it's equally hard to follow correctly due to all the recursion.
 function TextInput(attrs) {
-	return (render) => {
+	return (o) => {
 		function update(value) {
-			render(m("input", {
-				value,
-				onchange: (e) => update(e.target.value),
-			}))
+			o.next(m("input", {value, onchange(ev) {
+				update(ev.target.value)
+			}}))
 		}
 
-		update("")
-		return attrs(({value}) => update(value))
+		return Stream.map(attrs, ({value = ""}) => update(value))
 	}
 }
 ```
@@ -111,46 +122,71 @@ function TextInput({value, onChange}) {
 	return (
 		<input
 			value={value}
-			onChange={(e) => onChange(e.target.value)}
+			onChange={(ev) => onChange(ev.target.value)}
 		/>
 	)
 }
 
 // Option 2: Fully uncontrolled component.
-function TextInput() {
-	const [value, setValue] = useState('')
-	return (
-		<input
-			value={value}
-			onChange={(e) => setValue(e.target.value)}
-		/>
-	)
+class TextInput extends React.Component {
+	state = {
+		value: ""
+	}
+	render() {
+		return (
+			<input
+				value={this.state.value}
+				onChange={(ev) => {
+					this.setState({ value: ev.target.value })
+				}}
+			/>
+		)
+	}
 }
 
 // We can reset its internal state later by putting it in a fragment as the only
 // element in it and changing the key:
-<><TextInput key={formId} /></>
+return <><TextInput key={formId} /></>
+
+// Mithril v2
+// Option 1: Fully controlled component.
+const TextInput = {
+	view: ({attrs: {value, onchange}}) =>
+		m("input", {value, onchange}),
+}
+
+// Option 2: Fully uncontrolled component.
+function TextInput() {
+	let value = ""
+	return {
+		view: () =>
+			m("input", {value, onchange: (ev) => value = ev.target.value}),
+	}
+}
+
+// We can reset its internal state later by putting it in a fragment as the only
+// element in it and changing the key:
+return [m(TextInput, {key: formId})]
 
 // Direct equivalent in this redesign
 // Option 1: Fully controlled component.
-function TextInput(attrs, emit) {
-	function receiver(ev, capture) {
-		emit({type: ev.type, value: ev.target.value}, capture)
-	}
-	return Stream.map(attrs, ({value}) =>
-		m("input", {value, on: [receiver, "change"]})
-	)
+function TextInput(attrs, events) {
+	return m("input", {
+		value: Stream.map(attrs, "value"),
+		onchange(ev) { return events.emit("change", ev.target.value) },
+	})
 }
 
 // Option 2: Fully uncontrolled component.
 function TextInput() {
 	const [value, setValue] = Stream.store("")
-	function receiver(ev) { setValue(ev.target.value) }
-	return m("input", {value, on: [receiver, "change"]})
+	return m("input", {value, onchange(ev) { setValue(ev.target.value) }})
 }
 
-// We can reset its internal state later by using a Control:
-m(Control, {key: formId}, m(TextInput))
+// We can reset its internal state later by creating a store to fire resets on
+// command.
+const [resetSignal, reset] = Stream.store()
+return map(resetSignal, () => replace(m(TextInput)))
 ```
 
 If you have to focus on avoiding a gotcha in Mithril rather than writing logic, Mithril is clearly getting in your way of actually doing things, and this is what the redesign is aiming to avoid.

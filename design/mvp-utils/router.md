@@ -2,306 +2,248 @@
 
 # Router API
 
-This is exposed under `mithril/router` and in the full bundle via `Mithril.Router`. The default export is a global router instance. It depends on the internal path parsing utilities and a native `Promise`, but that's it.
+This is exposed under `mithril/router`. It depends on the internal path parsing utilities, the hyperscript API and a native `Promise`, but that's it.
 
-- `Router.init(router, opts)` - Set the global router, optionally with an options parameter.
-	- To keep it DOM-independent, there is no default, so you will usually want to call either `Router.init(Router.dom, prefix?)` or `Router.init(Router.memory)`
+## Router class
 
-- `Router.set(href, opts).then(...)` - Set the current route.
+- `router = new Router.Router(backend)` - Create a global router instance, using a given backend.
+	- To keep it DOM-independent, there is no default backend, so you will usually want to call either `new Router(Router.DOM)` or `new Router(Router.Memory)`
+
+- `context(({"mithril/router": router}) => ...)` - Access the current router instance.
+	- This is intentionally somewhat cumbersome. Don't use it if you can avoid it.
+	- A page transition library might choose to override this with a full replacement instance, provided they provide all the properties detailed below.
+
+- `router.path` - The full matched path, `undefined` in the root instance.
+
+- `router.query` - The matched query parameters, `undefined` in the root instance.
+
+- `router.prefix` - The current router prefix, `""` in the root instance. This does *not* include global prefixes like what `Router.DOM` sets, nor does it include a full location.
+
+- `router.goTo(route, opts).then(...)`, `router.goTo(offset).then(...)` - Set the current route.
 	- The parameters are directly passed to the current router.
-	- `href` - The target URL to move to. Specifying a string is equivalent to passing this without parameters.
+	- `route` - The target route or offset to navigate to.
+		- It *must* start with a `/`, as routes normally do. If it's a string other than that, a literal `"previous"`, or a literal `"next"`, an error is thrown for sanity's sake.
+	- `offset` - The target offset to navigate to.
+	- `opts.exact` - For nested routers with a prefix, whether to ignore the prefix and just do global navigation.
 	- `opts.replace` - Whether to replace the current history entry or append a new one.
+		- Note: it needs to be noted that this does *not* have a real effect on user's history UI, only in terms of the HTML history API. So although it's advised for redirects, it's currently redundant until browsers fix their history UIs to follow the spirit of the spec. (There's mentions of it in various places, including Twitter, and active bugs exist for Firefox and Chrome both.)
 	- `opts.state` - The state to associate with the history entry.
 	- The returned promise awaits the next route change and all applicable redirects before it returns.
+	- If `offset` is 0, this just reloads the current route.
 
-- `Router.resolve(route)` - Resolve the route to an external URL.
+- `router.resolve(route)` - Resolve the route to an external URL.
 
-- `Router.go(n).then(...)` - Move `n` history entries forward if positive, backward if negative.
-	- The returned promise awaits the next route change and all applicable redirects before it returns.
+- `router.goBack()` - Move to the previous history entry.
+	- Sugar for `router.goTo(1)` and returns the resulting promise.
 
-- `Router.back()` - Go back to the previous history entry.
-	- Sugar for `Router.go(-1)` and returns the resulting promise.
+- `router.goForward()` - Move to the next history entry.
+	- Sugar for `router.goTo(-1)` and returns the resulting promise.
 
-- `Router.forward()` - Go back to the next history entry.
-	- Sugar for `Router.go(1)` and returns the resulting promise.
+- `router.getURL(n)` - Get the URL at history offset `n`.
+	- This is used to get the URL to later traverse to that history state, in case the user might leave the app and come back at that URL.
 
-- `Router.match({...routes, default, current?})` - Dispatch based on a route.
-	- `current = href | {href, state}` forces a current route with optional associated state, ignoring the history altogether. Passing a string is equivalent to passing `{path: current, state: null}`. Don't use this unless you're rendering to a string or similar.
-	- `default:` is the fallback route if no route is detected, if no routes match, or if the current route's `href` is literally `""`. (required)
-	- `"/route/:param": (params, match) => ...` - Define a route
-		- `params` contains both query params and template params.
-		- `match` is a child matcher, which carries the same prototype of `Router.match`. Note that 1. a child `current:` overrides the parent `current:` and 2. the raw relative prefix itself is not directly accessible. This need not be directly returned.
-		- Invoke `match(href, {...opts})` or `match("/path")` to replace the current route to a particular sibling path. The first form is detected via the presence of an `href` parameter.
-		- Invoke `match(false)` to return the result from the next matching path. This can be done anywhere, including in child views or even passed as a value elsewhere.
-		- This can return either `match`/`Route.match` to skip or a value. The value need not be a vnode, but it can be.
-		- This is exact by default, but the prefix carried by the context specifically *excludes* any final parameter, either `:param` or `:param...`.
-	- When there is no active history (as in, when running without a global DOM and without an explicit `history:`), `current` is required.
-	- If you want a 404 route, define a final route of `"/:path...": () => ...`.
-	- Note: this returns a stream. That means this *can* be used independently of Mithril's view, and can really be used almost anywhere.
+- `router.next()` - Render the next route and return it.
+	- This is non-global in part to keep it agnostic of realm, but also in part to avoid stepping over the toes of routers.
+	- This lets you asynchronously dictate whether you should fall through or not.
+	- Note: if created in a `router.match(...)` call, this returns a vnode. If created in a `router.matchStream(...)` call, it returns the literal value.
 
-- `m(Router.Link, opts, elem)` - Create a link that changes to a new route on click.
-	- `children: [elem]` - An element to hook into with `onclick` + `href` (required)
-	- `elem.attrs.href` - The target to route to.
-	- You can prevent navigation by returning `false` from the target's `onclick` event handler.
-	- All other received attributes, like `replace: true`, are passed straight to `Router.set(href, opts)` as `opts`
+- `router.match(fallback = "/", ...routes)` - Dispatch based on a route.
+	- `router` - Specifies the router to use. This is usually `Router.DOM` (after possibly setting `Router.DOM.prefix`) or `Router.Memory`, but it's always required.
+	- `fallback` - Specify the fallback route if no routes match or if the current route's `href` is literally the empty string. By default, this is `"/"`, the most common route specified by far.
+	- `...routes` - A possibly nested array of routes.
+	- This returns a stream of vnodes wrapped in `context(() => ({view: ..., context: {"mithril/router": router}}))`
+	- Each route is a `[route, body]` pair where:
+		- `route` - A route template.
+		- `body` - A `(params, router) => result` function.
+		- `params` - The match result as detected above.
+		- `query` - The query parameters read from the route's query string.
+		- `router` - A nested router instance, with its prefix being the route minus any rest parameters.
+		- `result` is the resulting vnode.
+	- This structure ensures it can easily be typed with clear error messages, selectivity can be quickly determined, and that it's clear if you're matching a dynamic path.
 
-- `m(Router.Go, {n = -1}, elem)` - Create a link that traverses the history stack on click
-	- `children: [elem]` - An element to hook into with `onclick` (required)
-	- `n:` - The numeric offset to go back to, used for `Router.go(n)`. Pass `n: -1` to go back to the previous history entry or `n: 1` to go back to the history entry you last went back from.
-		- `n: "back"` is sugar for `n: -1`
-		- `n: "forward"` is sugar for `n: 1`
-	- You can prevent navigation by returning `false` from the target's `onclick` event handler.
+- `router.matchStream(fallback = "/", ...routes)` - Dispatch based on a route, returning a stream of route info objects.
+	- `router.match(...args)` is really just 99% sugar for `Stream.map(router.matchStream(...args), (v) => m("context", () => ({context: {"mithril/router": router}, view: v})))`, just using an intermediate component for optimization purposes. (It also changes `router.next()` on that instance to return a vnode instead of just the value itself.) This is just the underlying logic behind it all, provided for convenience and for use in business logic.
 
-If it helps to see what the shape of the API itself looks like, a full, relatively precise TS definition of the above would look like this:
+## Links
 
-```ts
-export interface CurrentRouterOpts {}
+Links are *really* easy: just drop a `Router.link(opts?)` in whatever you want to route whenever it gets clicked, and specify an `href`.
 
-// When you do this, also do the following alongside it, or it won't type-check:
-//
-// ```ts
-// declare module "mithril/router" {
-// 	interface CurrentRouterOpts extends YourRouterOpts {}
-// }
-//
-// // For `Router.dom(...)`
-// declare module "mithril/router" {
-// 	interface CurrentRouterOpts extends DOMRouterOpts {}
-// }
-//
-// // For `Router.memory`
-// declare module "mithril/router" {
-// 	interface CurrentRouterOpts extends MemoryRouterOpts {}
-// }
-// ```
-//
-// I've actually verified this works. The error message will be somewhat
-// misleading if you forget, but it will still be correctly rejected.
-export function init<T>(
-	router: (value: T) => Router<RouterOpts>,
-	options: T
-): void;
-
-export function init(
-	router: (value?: undefined) => Router<RouterOpts>
-): void;
-
-export function set(
-	href: CurrentRouterOpts["entry"]["href"],
-	opts: CurrentRouterOpts["set"]
-): Promise<void>;
-
-export function set(
-	href: {} extends CurrentRouterOpts["set"] ?
-		CurrentRouterOpts["entry"]["href"] :
-		never,
-	opts?: CurrentRouterOpts["set"]
-): Promise<void>;
-
-export function resolve(href: CurrentRouterOpts["entry"]["href"]): string;
-export function go(n: number): Promise<void>;
-export function back(): Promise<void>;
-export function forward(): Promise<void>;
-
-// Not a real type - the method itself just returns `undefined`
-// type Redirect = unique undefined
-const redirect: unique symbol;
-interface Redirect { [redirect]: never }
-
-// Can't do this because TypeScript checks for recursive *bindings* (with
-// interfaces and properties not normally recursed), not recursive *types*.
-// type MatchResult<R> = R | Redirect | Stream<MatchResult<R>>;
-type MatchResult<R> = R | Redirect | (
-    (o: StreamObserver<MatchResult<R>>) => StreamDone
-);
-
-interface MatchOpts<R> {
-	current?:
-		void | null | undefined |
-		CurrentRouterOpts["entry"]["href"] |
-		CurrentRouterOpts["entry"];
-	default: string;
-	[route: string]: (params: object, match: {
-		(options: MatchOpts<R>): Stream<R>;
-		(param: false): MatchResult<R>;
-		(href: string, options?: CurrentRouterOpts["set"]): Redirect;
-	}) => MatchResult<R>;
-}
-
-export function match<R>(options: MatchOpts<R>): Stream<R>;
-
-export function Link(
-	attrs: Stream<
-		CurrentRouterOpts["set"] &
-		{children: [ElementVnode<string, {href: string}>]}
-	>
-): Child;
-
-export function Go(
-	attrs: Stream<{
-		n?: number | "back" | "forward";
-		children: [ElementVnode<string, any>];
-	}>
-): Child;
+```js
+m("a[href=/]", Router.link(), "Home")
 ```
 
-### Routers
+- `Router.link(opts?)` - Create a link that changes to a new route on click.
+	- The `opts` parameter is the same as with `router.goTo`, so you can pass either `Router.goTo(href, opts?)` or `router.goTo(offset)`.
+	- If the `href` starts with a `/`, it's read as a route. If it's an integer, `back`, or `forward`, it's converted to the appropriate offset.
+	- Specify `href: "-N"` to go back N entries, `href: "+N"` to go forward N entries. For example, `href: "-2"` goes back 2 entries and `href: "+2"` goes forward two entries.
+	- Pass this in the body of an element, like `m("a[href=...]", Router.link())`. It adds an appropriate listener and updates `href` accordingly.
+	- You can prevent navigation by returning `false` from the target's `onclick` event handler.
+	- All other received attributes, like `replace: true`, are passed straight to `router.goTo(href, opts)` as `opts` if `href` is provided. Otherwise, when it's using `router.traverseTo(to)`, it ignores the options.
+	- This reads the context variable `mithril/router` to get its router instance.
 
-Routers, including both built-in and custom routers, implement the following interface:
+`Router.link` would end up something like this:
 
-```ts
-type _RouterSetOpts<S> = {state?: S};
-
-interface RouterOpts {
-	entry: {href: string, state: object};
-	set: _RouterSetOpts<this["entry"]["state"]>;
-}
-
-interface Router<O extends RouterOpts> {
-	// Required by `Router.set`, `Router.match`, and `Router.Link`
-	// Set the current history entry to `href` with router-specific `opts`.
-	set(this: Router<O>, href: O["entry"]["href"], options: O["set"]): any;
-	set(this: {} extends O ? this : never, href: O["entry"]["href"]): any;
-
-	// Required by `Router.match`, `Router.set`, and `Router.go`
-	// Register a callback to be called on each update and return a function to
-	// remove the previously registered callback. Duplicates must be tolerated,
-	// since `Router.match` may choose to reuse subscription callbacks, as could
-	// other users.
-	subscribe(callback: () => any): () => any;
-
-	// Required for `Router.Link` and `Router.Go`
-	// Resolve a URL into one that could be used for external navigation.
-	resolve(url: O["entry"]["href"]): string;
-
-	// Required for `Router.Go` and `router.go`
-	// Move `n` history entries forward if positive, backward if negative.
-	go(n: number): any;
-
-	// Required for `Router.Go`
-	// Return the history entry at offset `n` relative to this on, or `null`/
-	// `undefined` if no known such URL can be determined. Note that `0` is the
-	// current history entry.
-	at(n: number): void | null | undefined | O["entry"];
-}
+```js
+Router.link = (opts) => context(({"mithril/router": router}) => ({
+	afterCommit: (elem) => ({
+		"data-target": elem.href,
+		"href": router.getURL(elem.href),
+	}),
+	onclick(ev, capture) {
+		if (
+			// Skip if a prior listener prevented default
+			!ev.defaultPrevented &&
+			// Ignore everything but left clicks
+			(ev.button === 0 || ev.which === 0 || ev.which === 1) &&
+			// No modifier keys
+			!ev.ctrlKey && !ev.metaKey && !ev.shiftKey && !ev.altKey &&
+			// Let the browser handle `target="_blank"`, etc.
+			(!this.target || this.target === "_self")
+		) {
+			capture()
+			const target = this.getAttribute("data-target")
+			if (/^[+-]\d+$/.test(target)) router.goTo(Number(target))
+			else if (target === "back") router.goBack()
+			else if (target === "forward") router.goForward()
+			else router.goTo(target, opts)
+		}
+	}
+}))
 ```
 
-Two built-in routers exist:
+It's not magic at all - it's all just using the framework!
 
-- `Router.init(Router.dom, prefix?)` - Set the router to the DOM router.
-	- `prefix` - The global prefix to use. Defaults to `document.baseURI + "#!"`
+### Backends
+
+Backends, including both built-in and custom backends, implement the following three methods:
+
+- `unsubscribe = backend.init(render)` - Initialize the router instance with a `render(route)` callback and return an unsubscription callback.
+	- `route` here is a string route key so the router knows when the route has successfully changed.
+	- `router.match` uses this to properly handle subscription and unsubscription of external route changes.
+	- This allows multiple entry points with ease.
+
+- `backend.goTo(href, options = {})` - Set the current history entry to `href` with router-specific options.
+	- This is used directly by `router.set` and indirectly by utilities like `Router.link`.
+	- The result is coerced to a promise and awaited.
+
+- `backend.goTo(n)` - Navigate to the history entry at offset `n` relative to the current history entry.
+	- In plain English:
+		- If `n === 1`, go forward one history entry.
+		- If `n === -2`, go back 2 history entries.
+		- If `n === 0`, reload the current route.
+		- It should work similarly for all other values of `n`.
+	- If a history entry cannot be found, it should throw an error.
+	- The result is coerced to a promise and awaited.
+
+- `url = backend.getURL(n | route)` - Get the URL at offset `n` relative to the current history entry or using `route`.
+	- This returns a URL *string* target, suitable for the `href` attribute of an `<a>` or `<area>` element, not a literal `URL` instance.
+	- If a history entry cannot be found, it should throw an error.
+	- The result is coerced to a promise and awaited.
+
+Two built-in backends exist:
+
+- `Router.DOM` - The DOM backend.
+	- `Router.DOM.prefix` - The global prefix to use. Initially set to `document.baseURI + "#!"`
 	- This requires HTML5 history support, but will need to include a fallback to `onhashchange` for hash changes to work around [this IE/old Edge bug](https://developer.microsoft.com/en-us/microsoft-edge/platform/issues/3740423/#comment-9).
 		- Need to ask someone involved with https://github.com/browserstate/history.js if this bug has a workaround in their library, because I'd likely have to adopt a similar fix/workaround.
 		- Might be easiest to just watch for both and ignore duplicate requests if they were received by the other listener.
 	- Extra `set` options:
 		- `opts.title` - The title of the history entry. Currently, out of all major browsers, this only affects the UI in Firefox, but it exists in case people want to use it.
 
-- `Router.init(Router.memory, initialPath = "/")` - Set the router to the in-memory router.
-	- `initialPath` - The initial global path to start with.
+- `Router.Memory` - The in-memory backend.
+	- `Router.Memory.initial` - The initial global path to start with.
 	- Useful for testing and why it's here.
 
-Here's the TS definitions for those:
+### Route syntax
 
-```ts
-declare module "mithril/dom" {
-	export type DOMRouterOpts = {
-		entry: {
-			href: string;
-			state: object;
-		};
-		set: {
-			state?: object;
-			replace?: boolean;
-			title?: string;
-		};
-	};
+Here's how route templates are matched:
 
-	export function dom(prefix?: string): Router<DOMRouterOpts>;
-}
+- `/a/b` - Matches a literal `"/a/b"` route, saves no matches
+- `/:a/:b` - Matches the regexp `/^\/([^/.-]*)\/([^/.-]*)/`, saves `{a: exec[1], b: exec[2]}` where `exec` is the `exec` result.
+- `/:a-:b`- Matches the regexp `/^\/([^/.-]*)-([^/.-]*)/`, saves `{a: exec[1], b: exec[2]}` where `exec` is the `exec` result.
+- `/:a.:b`- Matches the regexp `/^\/([^/.-]*)\.([^/.-]*)/`, saves `{a: exec[1], b: exec[2]}` where `exec` is the `exec` result.
+- `/:a/:b...` - Matches the regexp `/^\/([^/.-]*)\/(.*)$/`, saves `{a: exec[1], b: exec[2]}` where `exec` is the `exec` result.
+- `/:a-:b...` - Matches the regexp `/^\/([^/.-]*)-(.*)$/`, saves `{a: exec[1], b: exec[2]}` where `exec` is the `exec` result.
+- `/:a.:b...` - Matches the regexp `/^\/([^/.-]*)\.(.*)$/`, saves `{a: exec[1], b: exec[2]}` where `exec` is the `exec` result.
+- No characters may exist after a `:param...` parameter, for practical reasons. This lets me simplify this to not require regexps at all and just use `indexOf`, meaning it's both faster and easier to match each segment.
 
-declare module "mithril/router" {
-	export type MemoryRouterOpts = {
-		entry: {
-			href: string;
-			state: object;
-		};
-		set: {
-			state?: object;
-			replace?: boolean;
-		};
-	};
+Precedence is dictated by the following rules, applied in order:
 
-	export function memory(initialPath?: string): Router<MemoryRouterOpts>;
-}
-```
+1. Earlier segment match > later segment match
+1. Has literal > has `:param` > has `:rest...`
+1. Specified earlier > specified later
+
+To demonstrate these rules:
+
+1. `/foo/create` matches `/foo/:method` before `/:id/create` because earlier segments are matched before later segments.
+1. `/foo/create` matches `/foo/create` before `/:id/create` because literal segments are matched before segment parameters, and it matches `/foo/:name` before `/foo/:path...` because segment parameters are matched before rest parameters.
+1. Given `Route.match(router, [["/:id/create", body], ["/:key/create", body]])`, the `/:id/create` route would match before `/:key/create`.
 
 ### Notes
 
-- Prefer `Router.Link` and `Router.Go` over explicit `router.set(...)` and `router.go(n)` for anything like back buttons and links. Mithril handles most of the boilerplate and it also covers accessibility issues as necessary.
+- Prefer `Router.link` over explicit `router.goTo(...)` for anything like back buttons and links. Mithril handles most of the boilerplate and it also covers accessibility issues as necessary.
 - Each of these wrap inconsistencies in the router passed via `router:`. Note that prefix stripping is a router feature, not a framework feature!
-- `Router.Link` and `Router.Go` create vnodes via a raw object (avoiding the direct `mithril/m` dependency), but this is otherwise fully zero-dependency, so you *could* use this in both streams and the virtual DOM tree without issue. Also, those can easily shake out.
 - You can have multiple separate `Router.match` instances active at once. So for example, you could use one in your navigation to select which item is considered "active" *and* one in the main page to select which page body to render. As mentioned above, it returns a stream that passes through its output, so you can still use it in other contexts like your data model.
-- This is necessarily somewhat larger than the current v2 router, because of the dynamic nature of it all.
+- This is necessarily going to be larger than the current v2 router, because of the dynamic nature of it all.
 
-Also, `Router.Link` and `Router.Go` should work like this, for better accessibility and compatibility:
+### TypeScript definitions
 
-```js
-function view(makeNext) {
-	let current, memoSet
-	// This is called after all applicable event listeners could've been
-	// added, including by Mithril. Much easier this way to sidestep the
-	// framework
-	function handler(ev) {
-		if (
-			// Skip if a prior listener prevented default
-			!ev.defaultPrevented &&
-			// Ignore everything but left clicks
-			(ev.button === 0 || ev.which === 0 || ev.which === 1) &&
-			// Let the browser handle `target="_blank"`, etc.
-			(!this.target || this.target === "_self") &&
-			// No modifier keys
-			!ev.ctrlKey && !ev.metaKey && !ev.shiftKey && !ev.altKey
-		) {
-			ev.preventDefault()
-			ev.stopPropagation()
-			memoSet()
-		}
-	}
-	return (attrs) => (o) => attrs({
-		next: makeNext(({tag, attrs}, href, set) => {
-			memoSet = set
-			o.next({tag, attrs: {...attrs, href, ref(elem) {
-				attrs.ref(elem)
-				var prev = current
-				current = elem
-				if (prev !== elem) {
-					if (prev != null) {
-						prev.removeEventListener("click", handler, false)
-					}
-					elem.addEventListener("click", handler, false)
-				}
-			}}})
-		}),
-		complete: () => {
-			var prev = current
-			current = undefined
-			if (prev != null) prev.removeEventListener("click", handler, false)
-		},
-	})
+If it helps to see what the shape of the API itself looks like, a full, relatively precise TS definition of the above would look like this:
+
+```ts
+interface BaseSetOpts {
+	replace?: boolean;
+	state?: any;
+	exact?: any;
 }
 
-Router.Link = view((next) => ({children: [child], ...opts}) => {
-	const href = child.attrs.href
-	next(child, Router.resolve(href), () => Router.push(href, opts))
-})
+// Extend this with your own backend options.
+interface LinkSetOpts extends BaseSetOpts {}
 
-Router.Go = view((next) => ({n, children: [child]}) => {
-	if (n === "back" || n == null) n = -1
-	else if (n === "forward") n = 1
-	const result = Router.at(n)
-	const href = result != null ? Router.resolve(result.href) : undefined
-	next(child, href, () => Router.go(n))
-})
+type BackendRender<State> =
+	(route: string, state: State) => void
+
+interface Backend<SetOpts extends BaseSetOpts> {
+	init(render: BackendRender<SetOpts["state"]>): () => void;
+	goTo(href: string, options?: SetOpts): any;
+	goTo(n: number): any;
+	getURL(target: string): string;
+	getURL(offset: number): void | null | undefined | string;
+}
+
+type MatchResult = {readonly [key: string]: string};
+type QueryResult = object & QueryResult;
+interface QueryResult {
+	readonly [key: string]: string | true | object & QueryResult;
+}
+
+type Route<V, SetOpts> =
+	[string, (matched: MatchResult, router: Router<V, SetOpts>) => V];
+
+export class Router<SetOpts extends BaseSetOpts, V = never> {
+	constructor(backend: Backend<SetOpts>)
+	goTo(offset: number): Promise<void>;
+	goTo(href: string, opts?: SetOpts): Promise<void>;
+	goBack(): Promise<void>;
+	goForward(): Promise<void>;
+	getURL(target: string | number): string;
+	getURL(target: string): string;
+	getURL(offset: number): void | null | undefined | string;
+
+	readonly prefix: string;
+	readonly path: string;
+	readonly query: QueryResult;
+	readonly backend: Backend<SetOpts>;
+
+	next(): V;
+	match(...routes: Route<Child, SetOpts>[]): Child;
+	matchStream<V>(...routes: Route<V, SetOpts>[]): Stream<V>;
+}
+
+export function link(opts?: LinkSetOpts): Child;
+
+export const DOM: Backend<BaseSetOpts & {title?: string}> & {prefix: string};
+export const Memory: Backend<BaseSetOpts> & {initial: string};
 ```
 
 ### Why?
@@ -309,6 +251,6 @@ Router.Go = view((next) => ({n, children: [child]}) => {
 Well, the need for routing is obvious, but there are a few key differences from the existing system I'd like to explain.
 
 - Routing is partially dynamic. Because you can invoke `match` at any point, you can load routes asynchronously and just invoke `match` lazily after the child is loaded. This is *very* useful for async routes and lazy loading of common child layouts in larger apps.
-- Routing returns a valid vnode. This means you can define a layout and on `render(dom, m(Layout, {...}))`, you can define in your children a simple route. On route change, your layout ends up preserved and *not* redrawn, while your page *is*.
-- Routing returns a valid stream that doesn't itself to be mounted to the DOM, and it supports multiple entry points. This means you can use it not only in your views, but also in your model when certain state is route-dependent.
+- Routing can return a valid vnode. This means you can define a layout and on `render(dom, m(Layout, {...}))`, you can define in your children a simple route. On route change, your layout ends up preserved and *not* redrawn, while your page *is*.
+- Routing can return a valid stream that doesn't itself to be mounted to the DOM, and it supports multiple entry points. This means you can use it not only in your views, but also in your model when certain state is route-dependent.
 - Each of the various route setting methods return promises. That way, you get notified when the route change completes.

@@ -4,10 +4,13 @@
 
 This is a set of [ThreaditJS](http://threaditjs.com/) implementations to show how the redesign compares to Mithril v2, traditional React, and React with their experimental Hooks API. It implements effectively identical functionality, but they come out with dramatically different source features and sizes, particularly the redesign compared to the rest.
 
-- [Mithril redesign](https://github.com/isiahmeadows/mithril.js/tree/redesign/examples/threaditjs/mithril-redesign)
-- [Mithril v1/v2](https://github.com/isiahmeadows/mithril.js/tree/redesign/examples/threaditjs/mithril-v2)
-- [React](https://github.com/isiahmeadows/mithril.js/tree/redesign/examples/threaditjs/react)
+- [Mithril redesign (vanilla)](https://github.com/isiahmeadows/mithril.js/tree/redesign/examples/threaditjs/mithril-redesign-vanilla)
+- [Mithril redesign (JSX)](https://github.com/isiahmeadows/mithril.js/tree/redesign/examples/threaditjs/mithril-redesign-jsx)
+- [Mithril v1/v2 (vanilla)](https://github.com/isiahmeadows/mithril.js/tree/redesign/examples/threaditjs/mithril-v2-vanilla)
+- [Mithril v1/v2 (JSX)](https://github.com/isiahmeadows/mithril.js/tree/redesign/examples/threaditjs/mithril-v2-jsx)
+- [React with classes](https://github.com/isiahmeadows/mithril.js/tree/redesign/examples/threaditjs/react), using [the class fields proposal](https://github.com/tc39/proposal-class-fields) commonly used in that community for the JSX variant. (Reduces some of the class setup boilerplate.)
 - [React + experimental Hooks API](https://github.com/isiahmeadows/mithril.js/tree/redesign/examples/threaditjs/react-hooks)
+- [Vue](https://github.com/isiahmeadows/mithril.js/tree/redesign/examples/threaditjs/vue), with all the templates specified in the main JS source file for consistency with the rest. (Idiomatically, it'd be in the HTML, but it'd amount to roughly the same lines of code either way.)
 
 ### Source format
 
@@ -17,43 +20,34 @@ They are coded to generally share the same architecture, to keep it as much an a
 
 ### Source sizes
 
-These only include the `/app.mjs`/`/app.js` source files in each variant, and it doesn't include all the common stuff in `/common.mjs` that is largely identical. The totals exclude the usual whitespace-only lines, comment-only lines, and empty lines. The numbers are certainly compelling and intriguing, though.
-
-**Vanilla:**
+These only include the main source files in each variant. The totals exclude the usual whitespace-only lines, comment-only lines, and empty lines, but they *do* include the full source code minus configuration and HTML entry point. This even includes the API wrappers.
 
 | Library                    | SLoC | Total |
 |:-------------------------- |:----:|:-----:|
-| Mithril redesign           | 124  |  143  |
-| Mithril v1/v2              | 146  |  167  |
-| React                      | 188  |  213  |
-| React + experimental Hooks | 144  |  166  |
+| Mithril redesign (vanilla) | 141  |  162  |
+| Mithril redesign (JSX)     | 162  |  184  |
+| Mithril v1/v2 (vanilla)    | 171  |  196  |
+| Mithril v1/v2 (JSX)        | 191  |  215  |
+| React with classes         | 233  |  268  |
+| React + experimental Hooks | 194  |  221  |
+| Vue                        | 195  |  232  |
 
-**JSX:**
+*SLoC = Significant Lines of Code, if you're not familiar with the acronym. This excludes comments and whitespace-only lines, but includes all others.*
 
-| Library                    | SLoC | Total |
-|:-------------------------- |:----:|:-----:|
-| Mithril redesign           | 150  |  169  |
-| Mithril v1/v2              | 166  |  188  |
-| React                      | 210  |  239  |
-| React + experimental Hooks | 163  |  185  |
-
-*SLoC = Significant Lines of Code, if you're not familiar with the acronym.*
-
-If you look at those SLoC numbers, one certainly sticks out to me: how *small* the Mithril redesign code is, despite it feeling a little boilerplatey in spots. It's substantially smaller than either of the rest in the vanilla variant, and is still the smallest with the overly spacious idiomatic JSX:
+If you look at those SLoC numbers, one certainly sticks out to me: how *small* the Mithril redesign code is, despite it feeling a little boilerplatey and verbose in spots. It's substantially smaller than any of its competitors in both variants, and is still the smallest with the usually overly spacious idiomatic JSX by similar margins:
 
 - Vanilla:
-	- ~15% smaller than Mithril v1/v2.
-	- ~34% smaller than React.
-	- ~14% smaller than React + hooks.
+	- ~18% fewer lines than Mithril v1/v2.
+	- ~28% fewer lines than Vue.
 
 - JSX:
-	- ~10% smaller than Mithril v1/v2.
-	- ~29% smaller than React.
-	- ~8% smaller than React + hooks.
+	- ~15% fewer lines than Mithril v1/v2.
+	- ~30% fewer lines than React with classes.
+	- ~16% fewer lines than React + hooks.
 
 *If you'd like to verify these numbers, just do 1 - (size of redesign's SLoC) / (size of other's SLoC). These figures are all rounded to the nearest percent.*
 
-Being 2/3 the size of vanilla React for functionally identical code is impressive in of itself (imagine React Redux), but being substantially smaller than even Mithril v2, which itself strips nearly all the React boilerplate away, is itself pretty impressive.
+Being almost 2/3 the size of vanilla React for functionally identical code is impressive in of itself (imagine how it would be compared with React Redux), but being substantially smaller than even Mithril v2, which itself strips nearly all the React boilerplate away, is itself even more impressive.
 
 ### Stability
 
@@ -94,27 +88,27 @@ Here's what the diffs for each of those in the vanilla version:
 - Mithril redesign:
 
 	```diff
-	-const Layout = pure(({load, children: [loaded]}) => [
-	-	m(Header),
-	-	m("div.main", abortable((signal, o) => {
-	-		o.next(m("h2", "Loading"))
-	-		return load(signal).then(
-	-			(response) => o.next(loaded(response)),
-	-			(e) => o.next(e.status === 404
-	-				? m("h2", "Not found! Don't try refreshing!")
-	-				: m("h2", "Error! Try refreshing."))
-	-		)
-	-	}))
-	-])
-	+const async = ({load, loaded}) => abortable((signal, o) => {
-	+	o.next(m("h2", "Loading"))
-	+	return load(signal).then(
-	+		(response) => o.next(loaded(response)),
-	+		(e) => o.next(e.status === 404
-	+			? m("h2", "Not found! Don't try refreshing!")
-	+			: m("h2", "Error! Try refreshing."))
-	+	)
-	+})
+	-const async = ({load, loaded}) => abortable((signal, o) => {
+	-	o.next(m("h2", "Loading"))
+	-	return load(signal).then(
+	-		(response) => o.next(loaded(response)),
+	-		(e) => o.next(e.status === 404
+	-			? m("h2", "Not found! Don't try refreshing!")
+	-			: m("h2", "Error! Try refreshing."))
+	-	)
+	-})
+	+const Layout = pure(({load, children: [loaded]}) => [
+	+	m(Header),
+	+	m("div.main", abortable((signal, o) => {
+	+		o.next(m("h2", "Loading"))
+	+		return load(signal).then(
+	+			(response) => o.next(loaded(response)),
+	+			(e) => o.next(e.status === 404
+	+				? m("h2", "Not found! Don't try refreshing!")
+	+				: m("h2", "Error! Try refreshing."))
+	+		)
+	+	}))
+	+])
 	```
 
 	Here's that diff with the old expressions realigned to show what's really different, since the diff does a poor job of showing what precisely changed (very little changed beyond indentation):
@@ -137,12 +131,14 @@ Here's what the diffs for each of those in the vanilla version:
 	+])
 	```
 
+	Or, to put it another way, not much actually changed aside from just cutting the original, typing the new outside, and pasting the old stuff back in. Pretty easy.
+
 - React + experimental hooks API:
 
 	```diff
 	-function Async({load, onLoad, children}) {
 	+function Layout({load, onLoad, children}) {
-	 	const [view, setView] = useState(h("h2", "Loading"))
+	 	const [view, setView] = useState(<h2>Loading</h2>)
 
 	 	useEffect(() => {
 	 		const controller = new AbortController()
@@ -152,19 +148,21 @@ Here's what the diffs for each of those in the vanilla version:
 	 				onLoad(response)
 	 			}, (e) => {
 	 				setView(e.status === 404
-	 					? h("h2", "Not found! Don't try refreshing!")
-	 					: h("h2", "Error! Try refreshing."))
+	 					? <h2>Not found! Don&apos;t try refreshing!</h2>
+	 					: <h2>Error! Try refreshing.</h2>)
 	 			})
 	 		return () => controller.abort()
 	 	}, []) // eslint-disable-line react-hooks/exhaustive-deps
 
 	-	return view
-	+	return h(React.Fragment, null,
-	+		h(Header, null),
-	+		h("div", {className: "main"}, view)
-	+	)
+	+	return <>
+	+		<Header />
+	+		<div className="main">{view}</div>
+	+	</>
 	 }
 	```
+
+	React Hooks is slightly simpler and results in a much smaller computed diff, but it still amounts to roughly the same change. The only difference here is the logic is separated enough it doesn't find its way into the diff, but I could've accomplished the same thing in the redesign code just by factoring the dynamic part out. So it doesn't actually blow the redesign code away in this respect.
 
 - Mithril v1/v2:
 
@@ -212,176 +210,7 @@ Here's what the diffs for each of those in the vanilla version:
 	 }
 	```
 
-- React class:
-
-	```diff
-	-class Async extends React.Component {
-	+class Layout extends React.Component {
-	 	constructor(...args) {
-	 		super(...args)
-	 		this.state = {state: "loading"}
-	 		this.controller = new AbortController()
-
-	 		this.props.load(this.controller.signal).then((response) => {
-	 			document.title = "ThreaditJS: React | Home"
-	 			this.setState({state: "ready"})
-	 			this.props.onLoad(response)
-	 		}, (e) => {
-	 			this.setState({
-	 				state: e.status === 404 ? "notFound" : "error",
-	 			})
-	 		})
-	 	}
-
-	 	componentWillUnmount() {
-	 		this.controller.abort()
-	 	}
-
-	-	render() {
-	+	renderPage() {
-	 		switch (this.state.state) {
-	 			case "loading": return h("h2", "Loading")
-	 			case "notFound": return h("h2", "Not found! Don't try refreshing!")
-	 			case "error": return h("h2", "Error! Try refreshing.")
-	 			default: return this.props.children
-	 		}
-	 	}
-	+
-	+	render() {
-	+		return h(React.Fragment, null,
-	+			h(Header, null),
-	+			h("div", {className: "main"}, this.renderPage())
-	+		)
-	+	}
-	 }
-	```
-
-Here's what the diffs for each of those in the JSX version:
-
-- Mithril redesign:
-
-	```diff
-	-const Async = pure(({load, children}) => abortable((signal, o) => {
-	-	o.next(<h2>Loading</h2>)
-	-	return load(signal).then(
-	-		(response) => o.next(children(response)),
-	-		(e) => o.next(e.status === 404
-	-			? <h2>Not found! Don&apos;t try refreshing!</h2>
-	-			: <h2>Error! Try refreshing.</h2>)
-	-	)
-	-}))
-	+const Layout = pure(({load, children}) => <>
-	+	<Header />
-	+	<div class="main">
-	+		{abortable((signal, o) => {
-	+			o.next(<h2>Loading</h2>)
-	+			return load(signal).then(
-	+				(response) => o.next(children(response)),
-	+				(e) => o.next(e.status === 404
-	+					? <h2>Not found! Don&apos;t try refreshing!</h2>
-	+					: <h2>Error! Try refreshing.</h2>)
-	+			)
-	+		})}
-	+	</div>
-	+</>)
-	```
-
-	Here's that diff with the old expressions realigned to show what's really different:
-
-	```diff
-	-const Async  = pure(({load, children}) =>
-	+const Layout = pure(({load, children}) => <>
-	+	<Header />
-	+	<div class="main">
-	-		 abortable((signal, o) => {
-	+		{abortable((signal, o) => {
-	 			o.next(<h2>Loading</h2>)
-	 			return load(signal).then(
-	 				(response) => o.next(children(response)),
-			 		(e) => o.next(e.status === 404
-			 			? <h2>Not found! Don&apos;t try refreshing!</h2>
-			 			: <h2>Error! Try refreshing.</h2>)
-				)
-	-		})
-	+		})}
-	+	</div>
-	+</>)
-	```
-
-- React + experimental hooks API:
-
-	```diff
-	-function Async({load, onLoad, children}) {
-	+function Layout({load, onLoad, children}) {
-	 	const [view, setView] = useState(<h2>Loading</h2>)
-
-	 	useEffect(() => {
-	 		const controller = new AbortController()
-	 		new Promise((resolve) => resolve(load(controller.signal)))
-	 			.then((response) => {
-	 				setView(children)
-	 				onLoad(response)
-	 			}, (e) => {
-	 				setView(e.status === 404
-	 					? <h2>Not found! Don&apos;t try refreshing!</h2>
-	 					: <h2>Error! Try refreshing.</h2>)
-	 			})
-	 		return () => controller.abort()
-	 	}, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-	-	return view
-	+	return <>
-	+		<Header />
-	+		<div className="main">{view}</div>
-	+	</>
-	 }
-	```
-
-- Mithril v1/v2:
-
-	```diff
-	-function Async({attrs}) {
-	+function Layout({attrs}) {
-	 	const controller = new AbortController()
-	 	let state = "loading"
-
-	 	attrs.load(controller.signal)
-	 		.then((response) => {
-	 			state = "ready"
-	 			attrs.onload(response)
-	 		}, (e) => {
-	 			state = e.status === 404 ? "notFound" : "error"
-	 		})
-	 		.finally(m.redraw)
-
-	+	function pageView() {
-	+		switch (state) {
-	+			case "loading": return <h2>Loading</h2>
-	+			case "notFound": return <h2>Not found! Don&apos;t try refreshing!</h2>
-	+			case "error": return <h2>Error! Try refreshing.</h2>
-	+			default: return attrs.view()
-	+		}
-	+	}
-	+
-	 	return {
-	 		onremove: () => controller.abort(),
-
-	 		view: (vnode) => {
-	 			attrs = vnode.attrs
-	-			switch (state) {
-	-				case "loading": return <h2>Loading</h2>
-	-				case "notFound": return <h2>Not found! Don&apos;t try refreshing!</h2>
-	-				case "error": return <h2>Error! Try refreshing.</h2>
-	-				default: return attrs.view()
-	-			}
-	+			return <>
-	+				<Header />
-	+				<div class="main">{pageView()}</div>
-	+			</>
-	 		},
-	 	}
-	 }
-	```
+	Yep, it felt almost like small-scale [shotgun surgery](https://en.wikipedia.org/wiki/Shotgun_surgery) here.
 
 - React class:
 
@@ -433,5 +262,7 @@ Here's what the diffs for each of those in the JSX version:
 	+	}
 	 }
 	```
+
+	More or less the same as what happened with Mithril v2, just with a smaller diff footprint.
 
 As you can see, it's a little easier to refactor with this redesign.

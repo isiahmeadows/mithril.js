@@ -24,32 +24,29 @@
 		<div id="root"></div>
 		<script src="../../mithril/core.js"></script>
 		<script>
-const {m} = Mithril
-
-const range = (start, end) =>
-	Array.from({length: end - start}, (_, i) => i + start)
-
 const backgroundPosition = (i, step) =>
 	// X% Y%
 	`${i % step * (step + 1)}% ${Math.floor(i / step) * (step + 1)}%`
 
-Mithril.render("#root", {class: "container"}, (o) => {
+const cycle = (tag) =>
+	Array.from({length: 100}, (_, i) => Mithril.m("div.slice", {
+		style: {backgroundPosition: backgroundPosition(i, 10)},
+	}))
+
+const cycles = [
+	cycle("div.slice"),
+	cycle("div.slice"),
+	cycle("div.slice.exit"),
+	undefined,
+]
+
+Mithril.render("#root", (o) => {
 	let state = 0
-	setInterval(() => { state = (state + 1) & 3; update() }, 1000)
-	update()
-
-	function update() {
-		const show = (state & 2) === 0
-		const remove = state === 3
-
-		if (remove) {
-			o.next()
-		} else {
-			o.next(range(100).map((i) => m("div.slice", {
-				class: show ? undefined : "exit",
-				style: {backgroundPosition: backgroundPosition(i, 10)},
-			})))
-		}
+	loop()
+	function loop() {
+		o.next(cycles[state])
+		state = (state + 1) % cycles.length
+		setTimeout(loop, 1000)
 	}
 })
 		</script>

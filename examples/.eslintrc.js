@@ -6,7 +6,7 @@ module.exports = {
 		"node": true
 	},
 	// Used for some of the examples
-	"plugins": ["react", "react-hooks"],
+	"plugins": ["babel", "react", "react-hooks"],
 	"extends": "eslint:recommended",
 	"parserOptions": {
 		"sourceType": "module",

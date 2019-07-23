@@ -46,8 +46,9 @@ function update() {
 	const data = ENV.generateData()
 
 	perfMonitor.startProfile("render")
-	ReactDOM.render(h(DBMon, {data}), root)
-	perfMonitor.endProfile("render")
+	ReactDOM.render(h(DBMon, {data, ref: () => {
+		perfMonitor.endProfile("render")
+	}}), root)
 }
 
 update()

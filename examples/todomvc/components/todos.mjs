@@ -1,20 +1,22 @@
 import * as State from "./model.mjs"
-import {m, pure} from "../../../mithril/m.mjs"
+import {keyed, m, pure} from "../../../mithril/index.mjs"
 import Todo from "./todo.mjs"
 
 export default pure(({state, showing}) => {
-	function receiver(ev) {
-		State.dispatch({type: "setStatuses", completed: ev.target.checked})
-	}
 	const shownTodos = State.getTodosByStatus(state, {showing})
 	return m("section#main", [
 		m("input#toggle-all[type=checkbox]", {
 			checked: !State.hasRemaining(state),
-			on: [receiver, "change"],
+			onchange(ev) {
+				State.dispatch({
+					type: "setStatuses",
+					completed: ev.target.checked
+				})
+			},
 		}),
 		m("label[for=toggle-all]", "Mark all as complete"),
-		m("ul#todo-list", m("#keyed", {of: shownTodos, by: "id"}, [
+		m("ul#todo-list", keyed(shownTodos, "id",
 			(todo) => m(Todo, {state, todo})
-		])),
+		)),
 	])
 })

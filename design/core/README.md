@@ -5,9 +5,12 @@
 Core would change considerably, but this is to simplify the API and better accommodate components.
 
 - [Streams](streams.md)
-- [Components](components.md)
-- [Vnodes](vnodes.md)
+- [Hyperscript API](hyperscript.md)
+- [JSX API](jsx.md)
 - [DOM renderer API](dom.md)
+- [Streams API](streams.md)
+- [Stream utilities](stream-utils.md)
+- [Events API](events.md)
 
 ## Goals
 
@@ -24,7 +27,10 @@ Type definitions would be moved into core, to live alongside everything else. I 
 
 ## Core bundle
 
-The core bundle, `mithril/core`, exposes the following under the `Mithril` namespace and as a UMD module:
+The core bundle, `mithril/core` re-exports the following:
 
-- All exports from `mithril/m`
+- All exports from `mithril/hyperscript`
+- All exports from `mithril/stream`
 - `render` and `abortable` from `mithril/dom`, but not `hydrate`.
+
+A UMD bundle of this will also be made available in `mithril/dist/core.dev.js`, minified in `mithril/dist/core.min.js`. In addition, a UMD bundle of `mithril/stream` itself will be made available in `mithril/dist/stream.dev.js`, minified in `mithril/dist/stream.min.js`.

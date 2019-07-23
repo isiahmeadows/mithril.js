@@ -105,18 +105,18 @@ They sound nice in theory, for similar reasons `m.prop` sounds nice in theory. I
 
 	```js
 	let minActive, maxActive, bias
-	function receiver(_, capture) {
-		capture()
-		request("/api/example", {method: "POST", data: {
-			minActive: minActive.value,
-			maxActive: maxActive.value,
-			bias: bias.value,
-		}})
-	}
-	return m("form", {on: [receiver, "submit"]}, [
-		m("input[type=number]", {value: 0, ref: elem => minActive = elem}),
-		m("input[type=number]", {value: 100, ref: elem => maxActive = elem}),
-		m("input[type=range]", {value: 50, ref: elem => bias = elem}),
+	return m("form", [
+		m("input[type=number][value=0]", {afterCommit(e) { minActive = e }}),
+		m("input[type=number][value=100]", {afterCommit(e) { maxActive = e }}),
+		m("input[type=range][value=50]", {afterCommit(e) { bias = e }}),
+		{onsubmit(ev, capture) {
+			capture()
+			request("/api/example", {method: "POST", body: {
+				minActive: minActive.value,
+				maxActive: maxActive.value,
+				bias: bias.value,
+			}})
+		}},
 	])
 	```
 
@@ -124,19 +124,19 @@ They sound nice in theory, for similar reasons `m.prop` sounds nice in theory. I
 
 	```js
 	let current
-	const refs = Ref.join(elems => current = elems)
-	function receiver(_, capture) {
-		capture()
-		request("/api/example", {method: "POST", data: {
-			minActive: current.minActive.value,
-			maxActive: current.maxActive.value,
-			bias: current.bias.value,
-		}})
-	}
-	return m("form", {on: [receiver, "submit"]}, [
-		m("input[type=number]", {value: 0, ref: refs("minActive")}),
-		m("input[type=number]", {value: 100, ref: refs("maxActive")}),
-		m("input[type=range]", {value: 50, ref: refs("bias")}),
+	const refs = Ref.join((elems) => current = elems)
+	return m("form", [
+		m("input[type=number][value=0]", {afterCommit: refs("minActive")}),
+		m("input[type=number][value=100]", {afterCommit: refs("maxActive")}),
+		m("input[type=range][value=50]", {afterCommit: refs("bias")}),
+		{onsubmit(ev, capture) {
+			capture()
+			request("/api/example", {method: "POST", body: {
+				minActive: minActive.value,
+				maxActive: maxActive.value,
+				bias: bias.value,
+			}})
+		}},
 	])
 	```
 

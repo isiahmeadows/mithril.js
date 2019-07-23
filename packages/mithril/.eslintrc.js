@@ -1,6 +1,8 @@
 module.exports = {
 	"plugins": ["no-esnext"],
-	"extends": "eslint:recommended",
+	"globals": {
+		"Promise": false,
+	},
 	"parserOptions": {
 		"sourceType": "module",
 		"ecmaVersion": 2018

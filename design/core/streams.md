@@ -44,7 +44,7 @@ There's a few reasons:
 - This is part 1 of our answer to React Hooks, just substantially lower in overhead. And hey, you don't actually *need* a library to use this.
 - Most streaming needs can directly translate to this.
 
-Also, there's a handful of helpers [here](https://github.com/isiahmeadows/mithril.js/tree/redesign/helpers) based on [some of these hooks](https://usehooks.com/), in case you want to know what it could look like in practice. Some of those use [some built-in utilities](../mvp-utils/stream.md).
+Also, there's a handful of helpers [here](https://github.com/isiahmeadows/mithril.js/tree/redesign/helpers) based on [some of these hooks](https://usehooks.com/), in case you want to know what it could look like in practice. Some of those use [some built-in utilities](stream-utils.md).
 
 ### What about v2 streams?
 
@@ -58,7 +58,7 @@ Well, a few reasons:
 2. This is stripped down much further, to where it's much simpler to learn. The core ES proposal still includes a lot of frills, while this just takes the essence of the API with not much else.
 3. I wanted streams to be a type that I can quickly and easily tell apart from any other virtual DOM node, ideally without even having to check any object members. Functions suit this nicely, and they make for a convenient initialization mechanism, too.
 
-The `Stream.create(init)` utility from [my proposed `mithril/stream`](../mvp-utils/stream.md) sugars over all the inconsistencies in the span of literally 29 lines of code. It alone implements most of the core functionality of [the proposed ES observables](https://github.com/tc39/proposal-observable), but it doesn't implement equivalents for most of the frills:
+The `Stream.create(init)` utility from [my proposed `mithril/stream`](stream-utils.md) sugars over all the inconsistencies in the span of literally 29 lines of code. It alone implements most of the core functionality of [the proposed ES observables](https://github.com/tc39/proposal-observable), but it doesn't implement equivalents for most of the frills:
 
 - `sub.closed` and `observer.closed` - You can track those easily enough yourself through an extra variable.
 	- For `sub.closed`, you can define a variable you set whenever `error` or `complete` is called, before you do anything else.

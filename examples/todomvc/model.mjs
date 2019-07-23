@@ -1,11 +1,7 @@
-import {store, map} from "../../mithril/stream.mjs"
+import {map, store} from "../../mithril/stream.mjs"
 
 function destroy(todos, todo) {
 	return todos.filter((t) => t !== todo)
-}
-
-function update(todos, todo, func) {
-	return todos.filter((t) => t.id === todo.id ? func(t) : t)
 }
 
 const initialTodos = JSON.parse(localStorage["todos-mithril"] || "[]")
@@ -15,7 +11,7 @@ const initialState = {
 	editing: null,
 }
 
-const [state, dispatch] = store(initialState, ({todos, id, editing}, args) => {
+const [state, update] = store(initialState, ({todos, id, editing}, args) => {
 	switch (args.type) {
 		case "createTodo":
 			return {...state, id: state.id + 1, todos: [
@@ -29,15 +25,15 @@ const [state, dispatch] = store(initialState, ({todos, id, editing}, args) => {
 			)}
 
 		case "setStatus":
-			return {editing, id, todos: update(todos, args.todo, (t) =>
-				({...t, completed: args.completed})
+			return {editing, id, todos: todos.map((t) =>
+				t.id === args.todo.id ? {...t, completed: args.completed} : t
 			)}
 
 		case "destroy":
-			return {editing, id, todos: destroy(s, todo)}
+			return {editing, id, todos: destroy(todos, args.todo)}
 
 		case "clear":
-			return {editing, id, todos: s.todos.filter((t) => !t.completed)}
+			return {editing, id, todos: todos.filter((t) => !t.completed)}
 
 		case "edit":
 			return {todos, id, editing: args.todo}
@@ -46,7 +42,7 @@ const [state, dispatch] = store(initialState, ({todos, id, editing}, args) => {
 			if (editing == null) {
 				editing.title = args.title.trim()
 				if (editing.title === "") {
-					return {editing: null, id, todos: destroy(todos, todo)}
+					return {editing: null, id, todos: destroy(todos, args.todo)}
 				}
 			}
 			return {todos, id, editing: null}
@@ -59,7 +55,9 @@ const [state, dispatch] = store(initialState, ({todos, id, editing}, args) => {
 	}
 })
 
-export {dispatch}
+export function dispatch(type, action) {
+	update({type, ...action})
+}
 
 let awaitingFrame = false
 map(state, ({todos}) => {

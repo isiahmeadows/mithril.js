@@ -1,53 +1,43 @@
-import * as State from "./model.mjs"
-import {m, pure} from "../../../mithril/m.mjs"
+import {m, pure} from "../../../mithril/index.mjs"
+import {dispatch} from "./model.mjs"
 
-export default pure(({state, todo}) => {
-	let input
-
-	function inputRef(elem) {
-		input = elem
-		if (
-			todo === state.editing &&
-			input !== document.activeElement
-		) {
-			input.focus()
-			input.value = todo.title
-			input.selectionStart = todo.title.length
-			input.selectionEnd = todo.title.length
-		}
-	}
-
-	function receiver(ev) {
-		if (ev.type === "click") {
-			if (ev.target.tagName === "input") {
-				const completed = !todo.completed
-				State.dispatch({type: "setStatus", todo, completed})
-			} else {
-				State.dispatch({type: "destroy", todo})
+export default pure(({state, todo}) => m("li", {
+	class: {
+		completed: todo.completed,
+		editing: todo === state.editing,
+	},
+}, [
+	m("div.view", [
+		m("input.toggle[type=checkbox]", {
+			checked: todo.completed,
+			onclick() {
+				dispatch("setStatus", {todo, completed: !todo.completed})
 			}
-		} else if (ev.type === "dblclick") {
-			State.dispatch({type: "edit", todo})
-		} else if (ev.type === "keyup" || ev.type === "blur") {
-			if (ev.keyCode === 13 || ev.type === "blur") {
-				State.dispatch({type: "update", title: input.value})
+		}),
+		m("label", todo.title, {ondblclick() { dispatch("edit", {todo}) }}),
+		m("button.destroy", {onclick() { dispatch("destroy", {todo}) }}),
+	]),
+	m("input.edit", {
+		onkeyup(ev) {
+			if (ev.keyCode === 13) {
+				dispatch("update", {title: ev.target.value})
 			} else if (ev.keyCode === 27) {
-				State.dispatch({type: "reset"})
+				dispatch("reset")
 			}
-		}
-	}
-
-	return m("li", {
-		class: (todo.completed ? "completed" : "") + " " +
-			(todo === state.editing ? "editing" : ""),
-	}, [
-		m("div.view", [
-			m("input.toggle[type=checkbox]", {
-				checked: todo.completed,
-				on: [receiver, "click"],
-			}),
-			m("label", {on: [receiver, "dblclick"]}, todo.title),
-			m("button.destroy", {on: [receiver, "click"]}),
-		]),
-		m("input.edit", {on: [receiver, "keyup", "blur"], ref: inputRef}),
-	])
-})
+		},
+		onblur(ev) {
+			dispatch("update", {title: ev.target.value})
+		},
+		afterCommit(input) {
+			if (
+				todo === state.editing &&
+				input !== document.activeElement
+			) {
+				input.focus()
+				input.value = todo.title
+				input.selectionStart = todo.title.length
+				input.selectionEnd = todo.title.length
+			}
+		},
+	}),
+]))

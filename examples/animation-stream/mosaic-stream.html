@@ -34,7 +34,7 @@ const backgroundPosition = (i, step) =>
 
 const view = (state, cells) =>
 	cells == null ? undefined : cells.map((i) => m("div.slice", {
-		class: state === "hide" ? "exit" : undefined,
+		class: {exit: state === "hide"},
 		style: {backgroundPosition: backgroundPosition(i, 10)},
 	}))
 
@@ -47,7 +47,7 @@ const alternate = (delay, array) => (o) => {
 // prepare stream alternating between empty and full
 const rangeMemo = range(0, 100)
 
-Mithril.render("#root", {class: "container"}, Stream.run(
+Mithril.render("#root", Stream.run(
 	alternate(1000, [
 		["show", rangeMemo], ["show", rangeMemo],
 		["hide", rangeMemo], ["hide", undefined],

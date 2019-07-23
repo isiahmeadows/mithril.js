@@ -1,4 +1,4 @@
-import {m, pure} from "../../../mithril/m.mjs"
+import {m, pure} from "../../../mithril/index.mjs"
 import Footer from "./footer.mjs"
 import Header from "./header.mjs"
 import Todos from "./todos.mjs"
