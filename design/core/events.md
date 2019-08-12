@@ -4,10 +4,10 @@
 
 Event and lifecycle handling is significantly changed, to open up a new possibilities for how components can interact with each other and to encourage composable reuse in several new cases. Instead of it being based on attributes, it's now based on vnodes. There's a few special attributes that dictate it:
 
-- `duringCommit: callback` - Schedules `callback` to be called with the closest parent element's or component's ref before any tree updates are committed. It's scheduled in iteration order with the parent ref that exists after all changes have been committed. Note: this *does not* penetrate component boundaries to find the ref, and it will use `undefined` if it can't find one.
-	- This is primarily for getting the initial state to detect and transition moves, but other uses might exist.
-	- This is called while applying attributes and after instantiating the component, but before updating the component with initial/new attributes.
-	- You can optionally return new attributes to apply from this, but not arbitrary children. Use this with caution, as you *could* end up accidentally causing performance issues.
+- `beforeCommit: callback` - Schedules `callback` to be called with the closest parent element's or component's ref before any tree updates are committed. It's scheduled in iteration order with the parent ref that exists before any changes have been committed. Note: this *does not* penetrate component boundaries to find the ref, and it will use `undefined` if it can't find one.
+	- This is called *before* any movement is attempted of the corresponding parent node, making it possible to get initial state for transitions.
+	- This is *not* called on first render, but only on subsequent renders where this exists. It works similar to v2's `onupdate` in that respect, just at a different timing point.
+	- You can optionally return new attributes to apply from this, but not arbitrary children. These are queued up and applied after all `beforeCommit`s have been called, but they are *not* immediately applied.
 
 - `blockRemoval: callback` - Schedules `callback` to be called with the closest parent element's or component's ref before the immediate element is removed. It's scheduled in iteration order with the parent ref that exists after all changes have been committed. Note: this *does not* penetrate component boundaries to find the ref, and it will use `undefined` if it can't find one.
 	- The return value is optionally a promise that's awaited before finally removing the node.

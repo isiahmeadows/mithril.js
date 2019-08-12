@@ -106,7 +106,7 @@ There are a few special attributes:
 - `onevent: (ev) => ...`, `onevent: [(ev) => ..., options = false]` - Set event listeners, optionally with options.
 	- See [the events documentation](events.md) for how this would work.
 
-- `duringCommit: (elem) => newAttrs?` - Specify a callback to be called during update. You can also specify new attributes to apply in this callback, but not arbitrary children.
+- `beforeCommit: (elem) => newAttrs?` - Specify a callback to be called before update on the corresponding node. You can also specify new attributes to apply in this callback, but not arbitrary children.
 	- See [the events documentation](events.md) for how this would work.
 
 - `blockRemoval: (elem) => promise` - Specify a callback to be called to block removal of the parent element.
@@ -140,14 +140,14 @@ All valid literal attributes, unless otherwise specified, can have their values 
 
 - `children:` on element and component vnodes
 - `is:` on element vnodes
-- `duringCommit:` on element and component vnodes
+- `beforeCommit:` on element and component vnodes
 - `afterCommit:` on element and component vnodes
 - `blockRemoval:` on element and component vnodes
 - `onevent:` on element and component vnodes
 
-Without an ancestor element or component vnode, only `afterCommit` can be specified. (It will receive `undefined` for the ref.) All other attributes are silently ignored, including `duringCommit` and `blockRemoval`.
+Without an ancestor element or component vnode, only `afterCommit` can be specified. (It will receive `undefined` for the ref.) All other attributes are silently ignored, including `beforeCommit` and `blockRemoval`.
 
-The attributes `duringCommit`, `afterCommit`, and `blockRemoval` are excluded from the attributes passed to components, for sanity's sake.
+The attributes `beforeCommit`, `afterCommit`, and `blockRemoval` are excluded from the attributes passed to components, for sanity's sake.
 
 ## Selectors
 
@@ -353,7 +353,7 @@ Async rendering frames operate in this order:
 
 1. For each root being redrawn, update the root's subtree with the given updated trees. If a child has an updated tree after sending new attributes, that subtree is updated, too.
 	1. Each update is attached to a fragment and added to the DOM immediately after this step.
-	1. `duringCommit` callbacks are called during this step.
+	1. `beforeCommit` callbacks are called during this step.
 1. Invoke all scheduled `afterCommit` callbacks in order of appearance.
 1. Close all removed streams in order of appearance.
 
@@ -379,7 +379,7 @@ If you want easy sugar to require a particular version, use `requireVersion(meta
 
 Those have been split into two parts:
 
-- `oncreate`/`onupdate` - [`duringCommit:` and `afterCommit:`](events.md)
+- `oncreate`/`onupdate` - [`beforeCommit:` and `afterCommit:`](events.md)
 - `onremove` - Stream unsubscription, `attrs` completion, [`onremove(func)` event listener](events.md).
 - `oninit` - Function initializers for native vnodes that have them, component intitialization.
 - `onbeforeupdate` - `attrs` stream emit + if nothing changed, just don't send an update. If you'd like some sugar for the equivalent for the boolean-returning `onbeforeupdate`, there's a `distinct(stream, by?)` method in [the core stream utilities](stream-utils.md) that you can use for equivalent effect.
