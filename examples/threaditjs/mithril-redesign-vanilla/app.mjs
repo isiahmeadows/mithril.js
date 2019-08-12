@@ -1,6 +1,6 @@
 import {
 	DOM, Router, abortable, distinct,
-	keyed, link, m, map, p, pure, render,
+	keyed, linkTo, m, map, p, pure, render,
 	replace, request, store,
 } from "mithril"
 
@@ -40,7 +40,7 @@ function Header() {
 			m("a", {href: demoSource}, "Source"), " | ",
 			m("a[href='http://threaditjs.com']", "ThreaditJS Home"),
 		]),
-		m("h2 > a[href=/]", link(), "ThreaditJS: Mithril"),
+		m("h2 > a", linkTo("/"), "ThreaditJS: Mithril"),
 	]
 }
 
@@ -62,7 +62,7 @@ const Layout = pure(({load, children: [loaded]}) => [
 // home
 // eslint-disable-next-line camelcase
 const ThreadPreview = pure(({thread: {id, text, comment_count}}) => [
-	m("p > a", link(), {href: `/thread/${id}`, innerHTML: T.trimTitle(text)}),
+	m("p > a", linkTo(`/thread/${id}`), {innerHTML: T.trimTitle(text)}),
 	m("p.comment_count", comment_count, " comment(s)"),
 	m("hr"),
 ])
@@ -156,7 +156,7 @@ function Reply(attrs) {
 }
 
 // router
-render("#app", new Router(DOM).match([
+render("#app", new Router(DOM).match(
 	["/", () => m(Home)],
-	["/thread:id", ({id}) => m(Thread, {id})],
-]))
+	["/thread:id", ({id}) => m(Thread, {id})]
+))

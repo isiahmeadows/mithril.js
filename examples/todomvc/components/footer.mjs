@@ -1,13 +1,12 @@
 import * as State from "./model.mjs"
-import {m, pure} from "../../../mithril/index.mjs"
-import {link} from "../../mithril/router.mjs"
+import {linkTo, m, pure} from "../../../mithril/index.mjs"
 
 export default pure(({state, showing}) => {
 	const remaining = State.countRemaining(state)
 
 	function filter(href, label, children) {
-		return m("li > a", link(), children, {
-			href, class: {selected: showing === label},
+		return m("li > a", linkTo(href), children, {
+			class: {selected: showing === label},
 		})
 	}
 

@@ -2,10 +2,21 @@
 
 # Events
 
-Event and ref handling is significantly changed, to open up a new possibilities for how components can interact with each other and to encourage composable reuse in several new cases. Instead of it being based on attributes, it's now based on vnodes. There's a few special attributes that dictate it:
+Event and lifecycle handling is significantly changed, to open up a new possibilities for how components can interact with each other and to encourage composable reuse in several new cases. Instead of it being based on attributes, it's now based on vnodes. There's a few special attributes that dictate it:
+
+- `duringCommit: callback` - Schedules `callback` to be called with the closest parent element's or component's ref before any tree updates are committed. It's scheduled in iteration order with the parent ref that exists after all changes have been committed. Note: this *does not* penetrate component boundaries to find the ref, and it will use `undefined` if it can't find one.
+	- This is primarily for getting the initial state to detect and transition moves, but other uses might exist.
+	- This is called while applying attributes and after instantiating the component, but before updating the component with initial/new attributes.
+	- You can optionally return new attributes to apply from this, but not arbitrary children. Use this with caution, as you *could* end up accidentally causing performance issues.
+
+- `blockRemoval: callback` - Schedules `callback` to be called with the closest parent element's or component's ref before the immediate element is removed. It's scheduled in iteration order with the parent ref that exists after all changes have been committed. Note: this *does not* penetrate component boundaries to find the ref, and it will use `undefined` if it can't find one.
+	- The return value is optionally a promise that's awaited before finally removing the node.
+	- Note: this blocks removal of not only the element, but all potentially removed parents. Even if Mithril attempts to later remove a parent, this can block that, too. (Translation: Mithril will need both children and parent pointers internally.)
+	- Note: removal hooks are called *before* removing, and if multiple `blockRemoval` callbacks apply to a node, even in nested descendants, they're all awaited in parallel.
 
 - `afterCommit: callback` - Schedules `callback` to be called with the closest parent element's or component's ref after all tree updates have been committed. It's scheduled in iteration order with the parent ref that exists after all changes have been committed. Note: this *does not* penetrate component boundaries to find the ref, and it will use `undefined` if it can't find one.
-	- You can optionally return new attributes to apply from this.
+	- Use this with caution, as you *could* end up accidentally causing performance issues.
+
 - `onevent: callback`, `onevent: [callback, options = false]` - Schedules `callback` to be called when an event named `"event"` is emitted, with optional event listener options for DOM events. `callback` is called with the raw event and a `capture()` callback to prevent the default action and stop propagation if applicable. If the callback returns a promise that eventually rejects, it's translated into an event listener error. If it returns literally `false`, it's equivalent to invoking `capture()`. Otherwise, the return value is ignored.
 	- Invoke `capture()` to cause the originating component's `events.emit(event, ev)` to return `false`.
 	- Invoke `capture()` to have the DOM handler invoke `ev.preventDefault(); ev.stopPropagation()`. (This only occurs *after* all listeners have been invoked.)
@@ -16,15 +27,12 @@ Event and ref handling is significantly changed, to open up a new possibilities 
 
 ## Refs
 
-Refs can be requested by passing `afterCommit: callback` to get the underlying value, where `func` accepts the parent node's ref and returns an optional cleanup function. Most vnodes have a ref of some kind they can expose:
+Refs can be acquired by passing either `beforeCommit: callback` or `afterCommit: callback` to get the underlying value, where `func` accepts the parent node's ref and returns an optional cleanup function. Most vnodes with static lists have a ref of some kind they can expose:
 
 - Elements and portals expose the underlying value.
 - Components expose whatever ref is returned from them via `setRef(ref, ...children)`, or `undefined` if they don't return one.
-- Fragments and keyed fragments expose an array of child refs.
-- Text slices expose the underlying text node.
-- Holes and dynamic vnodes expose literally `undefined`.
-- Context and config vnodes expose whatever the view inside their callback exposes.
-- Replacer vnodes expose whatever their wrapping vnode exposes.
+- All other vnodes either don't support children or expose their parent refs.
+- If no parent ref exists, `afterCommit` exposes `undefined` as its ref and all other event attribute are flatly ignored.
 
 ### Why not just provide a `vnode.dom`?
 

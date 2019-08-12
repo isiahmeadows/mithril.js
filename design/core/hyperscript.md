@@ -17,7 +17,7 @@ It uses much of the same concepts from the existing hyperscript syntax, but with
 - Attributes: `{key: value, ...}`
 	- Attributes on element vnodes other than magic attributes *may* be set to streams rather than literal values. This enables updates without actually performing a full diff, which is significantly faster. (We'll blow benchmarks out of the water that way, but it also just makes more sense in this model.) Note that this doesn't carry over to components.
 	- Set `rawAttrs:` if you want to set a special type or a special listener.
-	- Components receive the values literally and merged.
+	- Components receive the values literally and simply merged. (They may have special semantics for particular functions, so I can't just treat all functions as streams.)
 	- These are detected by the lack of a `%type` property.
 	- Note: `m("div", attrs, ...children)` is literally just a special case where the first child is an attributes vnode.
 - Fragment: `[...children]`
@@ -59,6 +59,10 @@ It uses much of the same concepts from the existing hyperscript syntax, but with
 	- This does not support children.
 - Set reference: `setRef(ref, ...children)`
 	- This can only be used top-level in components.
+- Inline: `inline((prevState = undefined) => [nextState, ...children])`
+	- This is basically simplified dynamic vnode. It's very dumb.
+	- It's great for very small-scale, simple operations requiring persistence like transitions.
+	- Unlike components, these can still set attributes.
 
 Non-array object vnodes have a `%type` member, but the rest of the structure should be considered an implementation detail.
 
@@ -88,6 +92,7 @@ The JSX API is similar to the standard hyperscript API, but uses a different ent
 	- Non-hole, non-attribute children are passed via the `children` attribute to components.
 - Context: `<Context update={(context) => ({context: newContext, view})} />`
 - Portal: `<Portal root={elemOrSelector} {...attrs} />`
+- Inline: `{inline((prev) => [next, <>...</>])}`
 - Attributes: inline in components or via `Self` attributes. Spread attributes are converted into literal children and delimit attributes objects, so do note that.
 
 Each of these names, `Self`, `Config`, `Recover`, `Keyed`, `Context`, and `Portal`, all have corresponding `mithril/hyperscript` exports and special knowledge from the `jsx` factory.
@@ -101,7 +106,13 @@ There are a few special attributes:
 - `onevent: (ev) => ...`, `onevent: [(ev) => ..., options = false]` - Set event listeners, optionally with options.
 	- See [the events documentation](events.md) for how this would work.
 
-- `afterCommit: (elem) => newAttrs?` - Specify a callback to be called after initialization. You can also specify new attributes to apply in this callback.
+- `duringCommit: (elem) => newAttrs?` - Specify a callback to be called during update. You can also specify new attributes to apply in this callback, but not arbitrary children.
+	- See [the events documentation](events.md) for how this would work.
+
+- `blockRemoval: (elem) => promise` - Specify a callback to be called to block removal of the parent element.
+	- See [the events documentation](events.md) for how this would work.
+
+- `afterCommit: (elem) => ignored` - Specify a callback to be called after initialization.
 	- See [the events documentation](events.md) for how this would work.
 
 - `children:` - This is the attribute's list of children.
@@ -118,7 +129,7 @@ There are a few special attributes:
 
 - `rawAttrs:`, special for element vnodes and unique to the DOM and string renderers, lets you specify any raw attribute you normally couldn't otherwise. You can even specify literal `on${event}` strings within it, and it makes for a convenient escape hatch in JSX for other attributes that might be valid HTML/XML attribute names, but aren't valid in JSX itself. Individual members within it can also be streams, as can the entire object itself.
 	- These are always interpreted as attributes and never properties. So if you have something normally interpreted as a property but the attribute has different semantics (something that may come up with poorly-designed custom elements), you can use this to escape out of it.
-	- There's a reason why this isn't the default - don't use this as an idiomatic shortcut for just installing `on${event}` handlers, for instance. It *can* open you up to security issues and unexpected behavior, like `onclick: function () { count++ }` resulting in a `elem.setAttribute("onclick", "function () { count++ }")`, which is almost certainly *not* what you meant to do.
+	- There's a reason why this isn't the default - don't use this as an idiomatic shortcut for just installing `on${event}` handlers, for instance. It *can* open you up to security issues and unexpected behavior, like `onclick: function () { count++ }` resulting in a `elem.setAttribute("onclick", "function () { count++ }")` in the DOM renderer, which is almost certainly *not* what you meant to do.
 	- No equivalent exists for properties as the DOM renderer normally checks for properties first, and if you really do need to work around a special attribute, you can always use an [`afterCommit` listener](events.md). (The string renderer may need this for other reasons.)
 
 On DOM elements, attributes other than the above *may* be set to streams, in which they're updated with the value of each stream emit. This simplifies a lot of attribute binding for DOM elements. Also, by side effect, it sidesteps a lot of our diff calculation overhead, but this isn't why I chose to allow this. It gives us much of the benefits of a system like Glimmer's pre-compiled VM architecture without the tooling overhead.
@@ -129,10 +140,14 @@ All valid literal attributes, unless otherwise specified, can have their values 
 
 - `children:` on element and component vnodes
 - `is:` on element vnodes
+- `duringCommit:` on element and component vnodes
 - `afterCommit:` on element and component vnodes
+- `blockRemoval:` on element and component vnodes
 - `onevent:` on element and component vnodes
 
-Without an ancestor element or component vnode, only `afterCommit` can be specified. (It will receive `undefined` for the ref.) All other attributes are silently ignored.
+Without an ancestor element or component vnode, only `afterCommit` can be specified. (It will receive `undefined` for the ref.) All other attributes are silently ignored, including `duringCommit` and `blockRemoval`.
+
+The attributes `duringCommit`, `afterCommit`, and `blockRemoval` are excluded from the attributes passed to components, for sanity's sake.
 
 ## Selectors
 
@@ -334,12 +349,13 @@ Rendering is two-part, but not really that complicated:
 
 These commit asynchronously, so if you want to run a callback on init, emit a `{view: child, init() { ... }}` object instead. This is intended to support things that require [DOM calculation or similar](https://github.com/MithrilJS/mithril.js/issues/1166#issuecomment-234965960) immediately after rendering to re-patch the tree.
 
-Async rendering frames operate in this order for each root being redrawn:
+Async rendering frames operate in this order:
 
-1. Update the root's subtree with the given updated trees. If a child has an updated tree after sending new attributes, that subtree is updated, too.
+1. For each root being redrawn, update the root's subtree with the given updated trees. If a child has an updated tree after sending new attributes, that subtree is updated, too.
 	1. Each update is attached to a fragment and added to the DOM immediately after this step.
-1. Invoke all `afterCommit` callbacks in order of appearance.
-1. Unsubscribe closed streams in order of appearance.
+	1. `duringCommit` callbacks are called during this step.
+1. Invoke all scheduled `afterCommit` callbacks in order of appearance.
+1. Close all removed streams in order of appearance.
 
 ## Context
 
@@ -363,7 +379,7 @@ If you want easy sugar to require a particular version, use `requireVersion(meta
 
 Those have been split into two parts:
 
-- `oncreate`/`onupdate` - [`afterCommit: callback`](events.md)
+- `oncreate`/`onupdate` - [`duringCommit:` and `afterCommit:`](events.md)
 - `onremove` - Stream unsubscription, `attrs` completion, [`onremove(func)` event listener](events.md).
 - `oninit` - Function initializers for native vnodes that have them, component intitialization.
 - `onbeforeupdate` - `attrs` stream emit + if nothing changed, just don't send an update. If you'd like some sugar for the equivalent for the boolean-returning `onbeforeupdate`, there's a `distinct(stream, by?)` method in [the core stream utilities](stream-utils.md) that you can use for equivalent effect.

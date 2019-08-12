@@ -7,7 +7,8 @@ These are exposed via `mithril/vnodes` and as `Mithril.Vnodes` in the full bundl
 - Get tag: `getTag(vnode)` - Returns the tag for element vnodes, the component for component vnodes, `"#text"` for text nodes, `"#fragment"` for fragments, `"#hole"` for holes, `"#replace"` for replace vnodes, and `"#dynamic"` for dynamic vnodes.
 - Get attrs: `getAttrs(vnode)` - Returns all attributes, including `children` for children.
 - Get single attribute: `getAttr(vnode, key)` - Returns that single attribute's value.
-- Clone and merge attributes: `setAttrs(vnode, {...attrs})` - Returns a new vnode with the same tag as `vnode` and the attributes of `vnode` merged with `attrs` with `attrs` preferred for conflicts.
+- Prepend children: `prepend(vnode, ...children)` - Returns a new vnode with the same tag as `vnode` and the attributes of `vnode` merged with `attrs` with `attrs` preferred for conflicts.
+- Append children: `append(vnode, ...children)` - Returns a new vnode with the same tag as `vnode` and the attributes of `vnode` merged with `attrs` with `attrs` preferred for conflicts.
 
 ## Why?
 

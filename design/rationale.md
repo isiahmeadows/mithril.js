@@ -44,6 +44,8 @@ Second, it lets you group attributes more easily and abstract over them better. 
 - Quite often, you don't need just values, but a full template. Normally, you'd do `...someAttrs(foo, bar, baz)` where `someAttrs` returns an attributes object, but this would let you elide that boilerplate.
 - Sometimes, the attributes you might need relies on context. In Mithril v2 and prior, there was no concept of context, so it was just relying on global state, but with this redesign, that *can* happen. I've seen it even happen in React.
 
+The ability to group and abstract over groups of attributes with local state is exploited to near insanity for [the transition API](mvp-utils/transition.md) - that userland utility isn't made of magic, even though it might as well be.
+
 And finally, you'll often see the flow of information broken. You'll be reading this tree, reading all the attributes, and suddenly you run into a giant block of barely related code, that of an event listener. People are already frequently using one of two workarounds for this in most frameworks using tree diffing techniques:
 
 1. Saving the function at the beginning or as a class method - this is a common idiom in nearly every JSX and hyperscript in my experience, where the framework allows inline listeners.
@@ -87,17 +89,17 @@ Few reasons:
 
 I killed this because in general, global redraws *do* frequently get in the way. You'll end up making a lot of unnecessary updates, and this *does* become a problem when you're managing mounted subtrees. It also just generally doesn't scale well, and it's already a common request to have subtree redraws.
 
-You can emulate Mithril's current API by adding a subscription mechanism that invokes sync/async redraws as necessary. The [TodoMVC example](https://github.com/isiahmeadows/mithril.js/blob/redesign/examples/todomvc/todomvc.mjs) does this very thing, and you can still get a global redraw using this simple wrapper if absolutely necessary:
+You can emulate Mithril's current API by adding a subscription mechanism that invokes redraws as necessary. The [TodoMVC example](https://github.com/isiahmeadows/mithril.js/blob/redesign/examples/todomvc/todomvc.mjs) does this indirectly by mapping over a global `state` stream in a proxy view, and you can still get a global redraw using this simple wrapper if absolutely necessary:
 
 ```js
-import render from "mithril/render"
+import {config, render} from "mithril/core"
 const subtrees = new Map()
 
 export function mount(root, func) {
 	if (func != null) {
-		render(root, (render, context) => {
-			subtrees.set(root, {context, func})
-			render(func())
+		render(root, (o) => {
+			subtrees.set(root, {o, func})
+			o.next(config(func))
 			return () => subtrees.delete(root)
 		})
 	} else {
@@ -106,16 +108,8 @@ export function mount(root, func) {
 }
 
 export function redraw() {
-	for (const {context, func} of subtrees.values()) {
-		context.scheduleLayout(() => {
-			context.renderSync(func())
-		})
-	}
-}
-
-export function redrawSync() {
-	for (const {context, func} of subtrees.values()) {
-		context.renderSync(func())
+	for (const {o, func} of subtrees.values()) {
+		o.next(config(func))
 	}
 }
 ```

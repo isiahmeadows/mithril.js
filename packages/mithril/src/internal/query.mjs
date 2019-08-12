@@ -1,6 +1,6 @@
 import {forEach} from "./internal/util.mjs"
 
-// This needs to be reasonably fast as it could be used in a `Router.link`
+// This needs to be reasonably fast as it could be used in a `Router.linkTo`
 // parameter in the view.
 function destructure(parts, skip, path, value) {
     if (value != null && value !== false) {
@@ -24,7 +24,7 @@ function destructure(parts, skip, path, value) {
     }
 }
 
-// This needs to be reasonably fast as it could be used in a `Router.link`
+// This needs to be reasonably fast as it could be used in a `Router.linkTo`
 // parameter in the view.
 export function buildQuery(query, prefix) {
     var parts = prefix.split("&")

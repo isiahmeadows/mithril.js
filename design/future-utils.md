@@ -30,30 +30,6 @@ This is exposed under `mithril/stream-extras`, and contains several various more
 
 This can eventually include others, too, and is meant to be the catch-all kitchen sink of stream operators as long as they're reasonably useful and not too niche. It's not the main module because you generally don't need these (for example, `on` - event handlers are usually good enough, and attributes), but it's there in case you need at least some of them.
 
-## List diff
-
-This is exposed under `mithril/list-diff`, and is useful when you need to apply Mithril's diffing algorithm before actually rendering the list. This is out of core because the internal diff/patch algorithm is actually stateful and operates on the IR directly, while this is necessarily a separate, second implementation emulating it for simple immutable lists of objects.
-
-- `diff = new ListDiff.Keyed(initialValues, getKey?)` - Create a keyed diff tracker
-- `diff = new ListDiff.Unkeyed(initialValues, getType?)` - Create a typed diff tracker
-- Diff trackers:
-	- `diff.all` - Get the list of all values.
-	- `diff.isRemoved(index)` - Get whether the value at `diff.all[index]` is being removed.
-	- `diff.update(nextValues)` - Update for next list of values
-	- `diff.flush()` - Flush last update
-	- `diff.scheduled` - Get the number of yet-to-be-flushed updates
-
-Notes:
-
-- Keys are treated as object properties, just like keys in Mithril's internal keyed diff algorithm.
-- Types are compared by referential identity, just like keys in Mithril's internal unkeyed diff algorithm.
-- Internally, I'd do a form of generational mark-and-sweep:
-	- When adding a key, it starts at the global diff counter.
-	- I'd increment all retained values' counters on update.
-	- On flush, I'd remove all counters at 0 and then decrement the global diff counter and all remaining value counters.
-
-This is *not* part of the MVP, but exists as part of the necessary standard library. It's a separate unit because it's hard to get right, but several relatively low-level async things like lists of transitioned elements and lists of elements linked to remote resources need it to perform proper caching aligning with Mithril's internal behavior.
-
 ## List transition API
 
 This is exposed under `mithril/transition-list` and depends on `mithril/list-diff` (for `TransitionKeyed` only) and `mithril/transition` (for both).
@@ -138,7 +114,7 @@ This was also in large part inspired by the React core team's work on sugared ev
 I'd like to fork `eslint-plugin-react` as `@mithriljs/eslint-plugin-mithril`, and provide most of the same rules. Of course, we can't use it directly, and much of it applies neither to Mithril v2 *or* this redesign, so we'll have to alter a *lot* of them. For instance:
 
 - [This rule](https://github.com/yannickcr/eslint-plugin-react/blob/master/docs/rules/no-array-index-key.md) would instead be checking if they're using the second argument to the `key` function.
-- [This rule](https://github.com/yannickcr/eslint-plugin-react/blob/master/docs/rules/sort-comp.md) doesn't make much sense in a design that almost entirely *lacks* lifecycle methods to begin with. There's literally one: when the node is written to DOM. However, you *could* enforce a sort order with `afterCommit`, event handlers, and other vnodes.
+- [This rule](https://github.com/yannickcr/eslint-plugin-react/blob/master/docs/rules/sort-comp.md) doesn't make much sense in a design that almost entirely *lacks* lifecycle methods to begin with. There's literally one: when the node is written to DOM. However, you *could* enforce a sort order with individual attributes and attributes relative to other nodes.
 
 Also, rules based on [this accessibility plugin](https://github.com/evcohen/eslint-plugin-jsx-a11y) should be included in this plugin, with equivalents to their recommended rules + options included in our plugin's `recommended` list.
 

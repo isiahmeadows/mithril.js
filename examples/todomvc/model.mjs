@@ -1,4 +1,4 @@
-import {map, store} from "../../mithril/stream.mjs"
+import {map, store} from "../../mithril/index.mjs"
 
 function destroy(todos, todo) {
 	return todos.filter((t) => t !== todo)
@@ -69,9 +69,7 @@ map(state, ({todos}) => {
 	})
 })()
 
-export function subscribe(f) {
-	return state({next: f})
-}
+export {state}
 
 export function countRemaining(state) {
 	return getTodosByStatus(state, "active").length

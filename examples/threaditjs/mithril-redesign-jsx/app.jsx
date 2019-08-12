@@ -1,5 +1,5 @@
 import {
-	DOM, Router, abortable, distinct, link,
+	DOM, Router, abortable, distinct, linkTo,
 	map, p, pure, render, request, store,
 } from "mithril"
 
@@ -40,7 +40,7 @@ function Header() {
 			<a href="http://threaditjs.com">ThreaditJS Home</a>
 		</p>
 		<h2>
-			<a href="/">{link()}ThreaditJS: Mithril</a>
+			<a>{linkTo("/")}ThreaditJS: Mithril</a>
 		</h2>
 	</>
 }
@@ -66,7 +66,7 @@ const Layout = pure(({load, children: [loaded]}) => <>
 // eslint-disable-next-line camelcase
 const ThreadPreview = pure(({thread: {id, text, comment_count}}) => <>
 	<p>
-		<a {...link()} href={`/thread/${id}`} innerHTML={T.trimTitle(text)} />
+		<a {...linkTo(`/thread/${id}`)} innerHTML={T.trimTitle(text)} />
 	</p>
 	{/* eslint-disable-next-line camelcase */}
 	<p class="comment_count">{comment_count} comment(s)</p>
@@ -178,7 +178,7 @@ function Reply(attrs) {
 }
 
 // router
-render("#app", new Router(DOM).match([
+render("#app", new Router(DOM).match(
 	["/", () => <Home />],
-	["/thread:id", ({id}) => <Thread id={id} />],
-]))
+	["/thread:id", ({id}) => <Thread id={id} />]
+))
