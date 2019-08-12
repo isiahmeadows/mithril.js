@@ -13,15 +13,6 @@ These are things I need to do at some point, but just haven't gotten to yet. Obv
 - Ensure the minified source bundle is generated with Terser option `inline: 0`.
 	- This can be dropped pending https://github.com/terser-js/terser/issues/350
 
-- Update vnode structure docs to include I plan to use something similar to Inferno for the keyed diff
-	- https://github.com/infernojs/inferno/blob/master/packages/inferno/src/DOM/patching.ts
-	- Use `result` directly from the LIS algorithm and just return the length to iterate. That way I can keep it fully amortized zero-allocation.
-	- Look into Inferno's idea of copying to an integer array - Keys are normalized to integers already, so I can take advantage of the fact engines have optimized representations of sparse integer arrays.
-		- I could do this during the type-checking part.
-	- Iteratively patch the largest chunks at the beginning and end that match an iterative diff.
-		- The beginning is patched before the middle, but the middle is patched before the end.
-		- This converts an `O(n log n)` problem to an `O(n)` problem for the 99% cases of no change and of a single addition/replacement/removal.
-
 - Add component for carousels/slides/page transitions
 	- Will require keeping both pages live during the transition
 	- Will require "page"/"slide" containers to be actual elements (avoids the need to procedurally splice IRs in and out of other IRs)
@@ -30,6 +21,11 @@ These are things I need to do at some point, but just haven't gotten to yet. Obv
 	- By option, keeps previously visited components live on a detached fragment
 	- Will require ???
 	- What primitives are required for this?
+	- Maybe look at Flutter?
+		- https://flutter.dev/docs/cookbook/animation/page-route-animation
+		- https://api.flutter.dev/flutter/widgets/Navigator-class.html
+		- https://api.flutter.dev/flutter/widgets/PageRouteBuilder-class.html
+		- https://api.flutter.dev/flutter/widgets/Route-class.html
 
 - Benchmark streams vs other alternatives detailed in [the rationale](rationale.md#creating-the-cell-abstraction), especially the other stream libraries.
 	- This will likely be among the fastest, but it might not be *the* fastest.
