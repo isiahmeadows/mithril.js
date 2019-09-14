@@ -4,8 +4,8 @@
 
 Throughout this repo, there's a lot of bitwise operations used. These mainly come down to a few simple reasons:
 
-- I want to be able to compare vnodes in various ways without object type interference
-- I want to be able to compare several features of vnodes in parallel.
+- I want to be able to compare vnodes in various ways in as few operations as practically possible.
+- I want to be able to compare several states and features in parallel.
 - I want to keep memory down by packing all the extra type info into a single integer.
 
 Here's a quick explainer of how it works.

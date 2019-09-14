@@ -22,51 +22,23 @@ This is exposed under `mithril/stream-extras`, and contains several various more
 - `newStream = StreamExtras.throttle(stream, ms)` - Emit the latest value only if it's been at least `ms` milliseconds since the last value has been sent from the returned stream.
 - `newStream = StreamExtras.cycle(ms, [...values])` - Cycle through `values`, emitting a value every `ms` milliseconds.
 - `newStream = StreamExtras.zip([...streams])` - Zip an array of streams into a stream of arrays, buffering values as necessary.
-	- Note: this does *not* drop values.
+    - Note: this does *not* drop values.
 - `newStream = StreamExtras.from(object)` - Create a stream that wraps an iterable or an object with a `.subscribe` method.
 - `newStream = StreamExtras.range(start = 0, end, step = 1)` - Create a stream that emits a range of values.
 - `newStream = StreamExtras.toStream(value)` - Converts `value` to a stream if it's either an observable, a promise, an observable-like object (including Mithril streams with the redesign), a thenable, or just about anything else that could be considered async emitting from a single channel.
-	- Note that only some things can be ended - notably promises and thenables can't.
+    - Note that only some things can be ended - notably promises and thenables can't.
 
 This can eventually include others, too, and is meant to be the catch-all kitchen sink of stream operators as long as they're reasonably useful and not too niche. It's not the main module because you generally don't need these (for example, `on` - event handlers are usually good enough, and attributes), but it's there in case you need at least some of them.
-
-## List transition API
-
-This is exposed under `mithril/transition-list` and depends on `mithril/list-diff` (for `TransitionKeyed` only) and `mithril/transition` (for both).
-
-- `m(TransitionKeyed, {in, out, event}, children)` - Define a keyed list of transitioned elements
-	- `in:` - Zero or more space-separated classes to toggle while transitioning inward.
-	- `out:` - Zero or more space-separated classes to toggle while transitioning outward.
-	- `event:` - The event name to listen for. By default, this watches for `"transitionend"`.
-	- `children:` - An array of zero or more keyed elements.
-
-- `m(TransitionFragment, {in, out, event}, children)` - Define an unkeyed list of transitioned elements
-	- `in:` - Zero or more space-separated classes to toggle while transitioning inward.
-	- `out:` - Zero or more space-separated classes to toggle while transitioning outward.
-	- `event:` - The event name to listen for. By default, this watches for `"transitionend"`.
-	- `children:` - A function taking a value and index and returning a keyed element.
-
-Notes:
-
-- The values in `children:` are fed to `m(Transition)` as appropriate.
-- Children are removed and re-added as applicable per the rules stated in `m(Transition)`.
-- Keys are removed from transitioned elements in `TransitionKeyed` and `TransitionFragment` children when they're actually rendered.
-- While an element is being animated out, if it's re-added without being removed, the `out` classes are simply removed, letting the animation reverse naturaly.
-- While an element is being animated out, if it's re-added and removed again during that process, those cancel each other out and the `out` classes are re-added.
-
-### Why?
-
-1. Animated lists aren't easy to get right. I'll leave it as an exercise for the reader to try this first. 😉
 
 ## Selector binding
 
 This is exposed under `mithril/select` and depends on `mithril/render`.
 
 - `close = select(root, selectors)` - Bind selectors from an element to a vnode tree and return an unsubscription function.
-	- `root` - The root element to watch selectors on
-	- `selectors` - A key/value map where keys are selector strings and values vnodes plugged straight into `render(elem, vnode)` as the second parameter.
-	- `close()` - Stop observing changes and clear the selectors.
-	- Note: this doesn't recursively observe through selected roots. This helps keep things sane.
+    - `root` - The root element to watch selectors on
+    - `selectors` - A key/value map where keys are selector strings and values vnodes plugged straight into `render(elem, vnode)` as the second parameter.
+    - `close()` - Stop observing changes and clear the selectors.
+    - Note: this doesn't recursively observe through selected roots. This helps keep things sane.
 
 This uses `MutationObserver` with an appropriate mutation events fallback for IE (and falling back gracefully to doing nothing) to ensure that selectors do get rendered to when new elements are added matching them and have their trees removed when selectors no longer match an element.
 
@@ -80,12 +52,12 @@ It's also very declarative, and very CSS-like in how it binds views to selectors
 
 ```js
 select(root, {
-	".mithril-date-picker": m(DatePicker),
-	".widget .input": {placeholder: "Type away..."},
-	"#app-one": m(One),
-	"#app-two": m(Two),
-	"#app-three": m(Three),
-	// etc.
+    ".mithril-date-picker": m(DatePicker),
+    ".widget .input": {placeholder: "Type away..."},
+    "#app-one": m(One),
+    "#app-two": m(Two),
+    "#app-three": m(Three),
+    // etc.
 })
 ```
 
@@ -120,9 +92,9 @@ Also, rules based on [this accessibility plugin](https://github.com/evcohen/esli
 
 ## A simple app/library generator
 
-Many of us regular users have a set workflow and are just used to adding a bunch of crap to the `package.json` file and working accordingly. But setting up all that boilerplate gets tiring, and besides, we can provide a better workflow to get up to speed than writing to a bunch of files. We could instead provide a `@mithriljs/create-app` and `@mithriljs/create-lib` to generate those, and people would use `npm init @mithriljs/app`, `yarn create @mithriljs/app`, and similar to create it.
+Many of us regular users have a set workflow and are just used to adding a bunch of crap to the `package.json` file and working accordingly. But setting up all that boilerplate gets tiring, and besides, we can provide a better workflow to get up to speed than writing to a bunch of files. We could instead provide a `@mithriljs/create-app` and `@mithriljs/create-lib` to generate those, and people would use `npm init @mithriljs/app`, `yarn create @mithriljs/app`, and similar to create it. We could also curate it very well and provide a lot of super convenient, almost magical functionality to help people get up to speed in no time at all.
 
-It of course would walk people through the process, and set them up with safe defaults and a sane setup. It doesn't have to be too complicated, but we do want something that *empowers* users - it gets old having to rebuild apps all the time, and there are a lot of ways to get yourself stuck in a rut. Here's a few of them:
+It of course would walk people through the process, and set them up with safe defaults and a sane setup. It doesn't have to be too complicated to use, but we do want something that *empowers* users - it gets old having to rebuild apps all the time, and there are a lot of ways to get yourself stuck in a rut. Here's a few of them:
 
 - Getting DOM mocks set up correctly is deceptively easy to screw up, even for us experienced people.
 - Not configuring your linter properly is an easy way to run into a slew of gotchas - ESLint doesn't check JSX names for existence by default!
@@ -131,24 +103,126 @@ It of course would walk people through the process, and set them up with safe de
 
 This is what the generator is for.
 
-As for what it would *do*: it would walk the user through a simple process with a couple choices for user preference:
+As for what it would *do*: it would walk the user through a simple process with a couple choices for user preference, because this is Mithril and we know not all users have the same preferences. It would also install several useful modules to allow people to not have to fuss so much with dependency management and other concerns when it comes to dealing with assets and other things, and it'd just do the right thing in various circumstances like using `<script type="module">` + `<script nomodule>` with modern ES. Just in general getting out of the user's way while setting them up for success.
 
-- Testing: Mocha + Chai, ospec, Jest
-	- Mocha + Chai will be the default for familiarity.
-	- Each would be set up with Karma with sensible OS-specific defaults for easy cross-browser testing.
-	- ospec will *seriously* need to become more pluggable here for this to work, particularly with assertions.
-- Code style: Vanilla, JSX
-	- Vanilla sets up Rollup with Babel + `@babel/plugin-env` and calls it a day.
-	- JSX also sets up `@mithriljs/jsx-babel`.
-	- The production builds of those also enable `mopt` to optimize the heck out of them.
-	- Modern vanilla will be our default here, as that's what most of us regular users use.
+### Setup
+
+The first thing it'd do is prompt for a few things and then set up the various dependencies.
+
+- Name: any valid package string
+- Testing: Mocha + Chai
+    - This is chosen for familiarity, as both are already really popular, and [almost equally so](https://npm-stat.com/charts.html?package=mocha&package=chai&from=2018-09-14&to=2019-09-14).
+    - ospec is deliberately not chosen because [it's getting about 200-300 downloads a week](https://npm-stat.com/charts.html?package=ospec&from=2018-09-14&to=2019-09-14) compared to Mithril's 15-30K. Not nearly popular enough to justify inclusion here. (Sorry, ospec fans.)
+    - It would be set up with Karma with sensible OS-specific defaults for easy cross-browser testing as well as JSDOM for basic DOM tests. If a test requires a browser, define the file as `.browser.js` instead of `.js` (or `.browser.ts` instead of `.ts`, etc.).
+    - There's currently no other options available, but I'd look forward to this changing.
+- JS Language: "JavaScript", "JSX", "TypeScript", "TypeScript + JSX"
+    - "JavaScript" sets up Rollup with CommonJS + Node support and Babel + `@babel/plugin-env` and calls it a day. It just uses standard JS up to the latest spec, with fallback for IE as necessary.
+    - "JSX" also sets up `@mithriljs/jsx-babel`.
+    - "TypeScript" also sets up `typescript` + `@types/mithril`, targeting the latest ES version to send through the standard JS pipeline.
+    - "TypeScript + JSX" sets up modules required for both TypeScript and JSX, and configures TypeScript appropriately to preserve JSX so `@mithriljs/jsx-babel` can transpile it correctly.
+    - "CoffeeScript" sets up modules required for both CoffeeScript and JSX, and sends it through the standard JSX pipeline. (CoffeeScript v2 supports JSX natively, preserving it in its output.) Supports both `.coffee` and `.litcoffee`.
+    - In the future, other languages may be supported.
+    - "JavaScript" will be our default here, as that's what most of us regular users use.
+- CSS preprocessor: "CSS", "Less", "SCSS"
+    - "CSS" sets up PostCSS with `postcss-preset-env` and [CSS Modules](https://github.com/css-modules/css-modules), complete with JS/TS integration as applicable, so you can use all the latest CSS stuff, automatically prefixed and polyfilled, with no issue. Implicitly starting the app's and library's stylesheet before any further CSS is included is [Normalize.css](https://github.com/necolas/normalize.css), a slightly opinionated CSS reset.
+    - "Less" sets up Less and plugs the result into the same pipeline normal CSS is set up with, so you get to still have all the various polyfills and other benefits.
+    - "SCSS" sets up Sass (via [the `sass` npm module](https://www.npmjs.com/package/sass)) using the SCSS syntax and likewise plugs the result into the same pipeline normal CSS is set up with, so you get to still have all the various polyfills and other benefits. You can still use `.scss` for the CSS-like syntax, `.sass` for the indented syntax - it just generates `.scss` files for you by default.
+    - "Sass" works the same as "SCSS", just uses `.sass` by default instead and uses the original indented syntax.
+    - In the future, other preprocessors may be supported.
+    - "CSS" will be our default here for familiarity.
+    - Sorry, [`bss`](https://github.com/porsager/bss#readme) fans - [it's less popular than ospec](https://npm-stat.com/charts.html?package=bss&from=2018-09-14&to=2019-09-14), and that's a really low bar to hit.
+- These can be selected without prompt via `npm init @mithriljs/app -n name -c js -s css` and `npm init @mithriljs/lib -n name -c js -s css`:
+    - `-n name` - Set package name to `name`
+    - `-c js` - Select modern vanilla
+    - `-c jsx` - Select JSX
+    - `-c ts` - Select TypeScript
+    - `-c tsx` - Select TypeScript + JSX (TSX)
+    - `-s css` - Select CSS
+    - `-s less` - Select Less
+    - `-s scss` - Select Sass + SCSS syntax
+    - `-s sass` - Select Sass + indented syntax
 
 Then, it'd set up a Git repo at the specified location and install the following packages:
 
 - `mithril`
-- `@mithriljs/eslint-plugin-mithril`
-- `@mithriljs/scripts` or similar, housing all the logic for `@mithriljs/create-{app,library}`, the dev server, the build system, and the test framework
+- `@mithriljs/eslint-config-mithril`
+- `@mithriljs/scripts` or similar, housing all the logic for `@mithriljs/create-{app,lib}`, the dev server, the build system, and the test framework
+    - The flattened dependency structure will allow editors to do the right thing.
+    - This will also implement the glue code to resolve non-executables as assets, although this can be toggled per-library.
 
-And in `package.json` it'd save the choice of testing framework and code style.
+In `package.json` it'd save the type, choice of testing framework, and choice of code style in `"@mithriljs/create"`. It'd also install a few scripts:
 
-The end structure would end up being generally all around useful and although it'll be necessarily opinionated in project structure, it'll be so you don't have to think much about configuration just to get started.
+- `npm start`: Run the app in development mode, rebuilding on each change with `process.env.NODE_ENV = "development"`. Set the port via `-p PORT` or `--port=PORT`. This works in the background.
+- `npm test`: Run the tests, watching and re-running them on each change.
+- `npm test --once`: Run the tests once
+- `npm run build`: Build the app. Sets `process.env.NODE_ENV = "production"` to trigger various apps to optimize their bundles.
+- `npm run eject`: Eject the app by installing all the required dependencies such that you no longer need the usual scripts. This is only really necessary for fairly advanced use cases like multi-page apps and libraries with multiple modules as part of its public API. Build scripts are saved in `tasks/`.
+
+The end structure would end up being generally all around useful and although it'll be necessarily opinionated in project structure, it'll be so you don't have to think much about configuration just to get started. The two boilerplates create similar structures, but they're subtly different:
+
+- `@mithriljs/create-app`:
+    - `dist/` - Where your source code is compiled to.
+        - `-/` - Contains all the renamed and dynamically generated files
+            - `${id}.mjs` - Minified ESM dynamically loaded chunks
+            - `${id}.mjs.map` - Generated source map for the ESM dynamically loaded chunks
+            - `${id}.js` - Minified fallback JS dynamically loaded chunks
+            - `${id}.js.map` - Generated source map for the fallback JS dynamically loaded chunks
+            - `${id}.css` - Minified CSS dynamically loaded chunks
+            - `${id}.css.map` - Generated source map for the CSS dynamically loaded chunks
+            - `${id}.ext` - Imported assets in `src/` other than code and styles. This includes assets from dependencies. (Uses a similar process as [`rollup-plugin-rebase`](https://github.com/sebastian-software/rollup-plugin-rebase), but requires slightly different processing.)
+            - Each file name iterates from 0 using a base 64 numeral. The digits are represented via `['0'...'9', 'A'...'Z', 'a'...'z', '+', '-']`.
+            - This includes all script and CSS entry points, including the main ones.
+        - `index.html` - The compiled, minified HTML file
+        - All the stuff from `public/`
+        - The dynamically loaded chunks also include the common chunk, for ease of use.
+    - `node_modules/` - Where your dependencies live, including `@mithriljs/scripts`.
+    - `public/` - Public files
+        - `favicon.ico` - A generic favicon
+        - `index.html` - Your root HTML file, where `<!--% entry %-->` is substituted for your actual entry scripts and styles.
+        - Only stuff in this folder can be referenced globally.
+    - `src/` - Your source code, including both code and styles
+        - `index.{css,less,scss,sass}` - Your style entry point
+        - `index.{mjs,jsx,ts,tsx}` - Your script entry point
+        - `App.{css,less,scss,sass}` - Your main component
+        - `App.{mjs,jsx,ts,tsx}` - Your main component's styles
+    - `test/` - Your tests
+        - `App.{mjs,jsx,ts,tsx}` - Your main component's test file
+    - `.eslintrc.js` - Contains a minimal config delegating to `@mithriljs/eslint-preset-create`.
+    - `config.js` - Lets you customize the config for Babel, PostCSS, and such, so you don't have to unmount just to tweak basic settings. This is loaded as a CommonJS module.
+    - `package.json` - Contains the basic info on
+
+- `@mithriljs/create-lib`:
+    - `dist/` - Where your source code is compiled to.
+        - `umd.js` - The unminified UMD bundle, for consumers not using `@mithriljs/create-{app,lib}`, with CSS inlined and added on load
+        - `umd.js.map` - The generated source map for the UMD bundle
+        - `esm.mjs` - The unminified ESM bundle, for consumers not using `@mithriljs/create-{app,lib}`, with CSS inlined and added on load
+        - `esm.mjs.map` - The generated source map for the ESM bundle
+        - `create-lib.mjs` - The unminified library bundle targeting `@mithriljs/create-app`, with asset dependency links rewritten but other external dependencies intact.
+        - `create-lib.mjs.map` - The generated source map for the library bundle
+        - `assets/` - Imported assets in `src/` other than code. This includes the CSS and the assets the CSS depends on.
+            - `${id}.css` - Minified CSS dynamically loaded chunks
+            - `${id}.css.map` - Generated source map for the CSS dynamically loaded chunks
+            - `${id}.ext` - Imported assets in `src/` other than code and styles. This includes assets from dependencies. (Uses a similar process as [`rollup-plugin-rebase`](https://github.com/sebastian-software/rollup-plugin-rebase), but requires slightly different processing.)
+    - `node_modules/` - Where your dependencies live, including the scripts for `@mithriljs/create-lib`.
+    - `src/` - Your source code, including both code, styles, and possible images and similar.
+        - `index.{css,less,scss,sass}` - Your style entry point
+        - `index.{mjs,jsx,ts,tsx}` - Your script entry point
+        - `App.{css,less,scss,sass}` - Your main component
+        - `App.{mjs,jsx,ts,tsx}` - Your main component's styles
+        - Stylesheets can be deleted if necessary
+    - `test/` - Your tests
+        - `App.{mjs,jsx,ts,tsx}` - Your main component's test file
+    - `.eslintrc.js` - Contains a minimal config delegating to `@mithriljs/eslint-preset-create`.
+    - `config.js` - Lets you customize the config for Babel, PostCSS, and such, so you don't have to unmount just to tweak basic settings. This is loaded as a CommonJS module.
+    - `package.json` - Contains the basic info on
+
+During build, a few things will be applied so they have always-optimized builds.
+
+- Two bundles will be generated on build, a `<script type="module">` variant and a `<script nomodule>` variant.
+- Babel and TypeScript helpers will always be loaded from a shared helper module.
+- The production builds of those also use `mopt` and `html-minifier` to optimize the heck out of them.
+
+### Future nice-to-haves
+
+- I'd like to see if I can get multi-page apps supported, complete with easy isomorphic rendering and minification. It'll use Mithril's static renderer in Node to run it and it'll use Node's `--experimental-modules`. This is pending stabilization of [Node's ESM API](https://nodejs.org/api/esm.html), and I also need to write a custom loader for it to do proper resolution and cache invalidation. (It'll require native code until [this proposal](https://github.com/tc39/proposal-weakrefs) gets merged, sadly, because I'll need to know *when* it's collected so I can properly clear the cache.)
+    - Short-term, while I wait on this, I could just use worker threads for this, with each page run with `esm` in its own worker thread.

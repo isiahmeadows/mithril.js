@@ -85,61 +85,6 @@ Few reasons:
 1. We're one of few frameworks that provide that facility anywhere beyond `innerHTML`, and most everyone else who does that I'm aware of provide it only because their entire view layer is template-driven (like Ember).
 2. `.innerHTML` addresses nearly every use case I've ever heard of, and it's worth noting there hasn't been any significant demand for even React to implement it. For the few that actually need the ability to insert HTML/XML adjacent to a particular element, they can just use the native [`Element.insertAdjacentHTML`](https://developer.mozilla.org/en-US/docs/Web/API/Element/insertAdjacentHTML), which deceptively works for both.
 
-## Removing global redraws
-
-I killed this because in general, global redraws *do* frequently get in the way. You'll end up making a lot of unnecessary updates, and this *does* become a problem when you're managing mounted subtrees. It also just generally doesn't scale well, and it's already a common request to have subtree redraws.
-
-You can emulate Mithril's current API by adding a subscription mechanism that invokes redraws as necessary. The [TodoMVC example](https://github.com/isiahmeadows/mithril.js/blob/redesign/examples/todomvc/todomvc.mjs) does this indirectly by mapping over a global `state` stream in a proxy view, and you can still get a global redraw using this simple wrapper if absolutely necessary:
-
-```js
-import {config, render} from "mithril/core"
-const subtrees = new Map()
-
-export function mount(root, func) {
-	if (func != null) {
-		render(root, (o) => {
-			subtrees.set(root, {o, func})
-			o.next(config(func))
-			return () => subtrees.delete(root)
-		})
-	} else {
-		render(root)
-	}
-}
-
-export function redraw() {
-	for (const {o, func} of subtrees.values()) {
-		o.next(config(func))
-	}
-}
-```
-
-## Changing rendering to be active, not reactive
-
-Rather than Mithril choosing when trees are generated, components choose that and Mithril simply chooses when to commit the tree. Here's the main consequences of this:
-
-- Autoredraw by default is gone. [You can still wrap a component to provide this functionality local to a component](core/components.md#sugared-components), but it's not there by default.
-- There is no `view` method. When necessary, you can create your own complicated system, but a simple [`pure((attrs, prev) => view)`](core/components.md#sugared-components) is sufficient for most cases.
-- Instead of receiving attributes directly, you receive a stream of received attributes.
-
-The general concept behind this is that if you want to update the tree, update the tree. If you don't, just don't. Either way, you're not asking for permission - you're just doing what you want to do. The key difference here is that you're not *reacting to new attributes and state by generating a view*, but just *reacting to new attributes and state* and acting appropriately. Sometimes, that "acting appropriately" is firing a request, and other times, it's rendering a view. Sometimes, the new attributes match the old attributes and so you can react by just doing nothing.
-
-The main reason why I first made redraws explicit was performance, but the real wins came from making rendering active rather than reactive and giving components all the control over that. It let me shed a few more hooks in the process, so rendering optimizations come out and decompose much more naturally.
-
-A [recent Overreacted post](https://overreacted.io/writing-resilient-components/) (written after I had designed most of this) detailed a few principles about writing good components:
-
-1. Don’t stop the data flow
-2. Always be ready to render
-3. No component is a singleton
-4. Keep the local state isolated
-
-Each of these are very thoroughly addressed:
-
-1. In general, this isn't an area a framework can help you in. In practice, this is entirely up to the component author. However, making attributes streams that you can eventually plug into attributes and children *does* make it easier to keep the data flow going.
-2. By putting components in control of when they can render, it's only about being ready to receive updates. This is *much* simpler to do and it's something the framework can enforce by design. By actually separating the two concerns of receiving attributes and rendering at the framework level, it makes the related issues of blocking data flow much clearer and more readily apparent in most cases. (Note that the advice for also checking event handlers when diffing attributes still holds.) And of course, you can't just receive the first set of attributes - you either don't handle any attributes or you handle every single attributes object you get. There is no in-between and no exception for the first attributes received. (And no, `attrs(once(...))` doesn't count as not handling attributes - you're handling subsequent updates by ignoring them as they didn't come first.)
-3. This trap is easy to run into at any point, but the very hard abstraction nature of this redesign makes it much harder to do it without at least noticing that it shouldn't be so complicated. So the better way is also the more natural way, and so the easy route is almost *always* the best route. And of course, when possible, we should be optimizing for what people *naturally do* rather than just telling them what not to do.
-4. This is more or less the same as 3, just referring to accidentally global state rather than intentionally global state.
-
 ## Moving children into the attributes
 
 The vnode children have been moved into the attributes.
@@ -202,8 +147,8 @@ These are dependency-optional and have a variety of pros:
 But despite these, there are a variety of cons, some of which are pretty much deal breakers:
 
 - It's pull-based, meaning it's active, not reactive. Yes, I could skip rendering if the value isn't being polled, but as part of the previous section, I made a big point: always be able to receive updates.
-	- If attributes are pull-based, you *clearly* aren't always ready to receive updates, and that alone is enough to easily stop the data flow and end up with some pretty obscure state bugs in components.
-	- If rendered trees are pull-based, there's now a *lot* of overhead every time you want to render something.
+    - If attributes are pull-based, you *clearly* aren't always ready to receive updates, and that alone is enough to easily stop the data flow and end up with some pretty obscure state bugs in components.
+    - If rendered trees are pull-based, there's now a *lot* of overhead every time you want to render something.
 - Because it's promise-based and highly sequential, it's not very conducive towards reactive code. It's also easy to asynchronously block view updates by accident, which although that's not always a concern, it can be.
 - That "dependency-optional" excludes a need to transpile if you plan to support IE at all. So in practice for many apps, there goes your ability to just use untranspiled JS. It's worth noting that Mithril does have a significant user share in government apps from what I've heard (both in-person and on various places on the Internet), in part *because* it's small, compatible, and avoids the need to transpile.
 
@@ -223,24 +168,24 @@ And finally, a no-op "through" stream is this monstrosity:
 ```js
 // taken straight from their repo, with only formatting and nominal changes.
 function through(op, onEnd) {
-	var a = false
+    var a = false
 
-	function once(abort) {
-		if(a || !onEnd) return
-		a = true
-		onEnd(abort === true ? null : abort)
-	}
+    function once(abort) {
+        if(a || !onEnd) return
+        a = true
+        onEnd(abort === true ? null : abort)
+    }
 
-	return function (read) {
-		return function (end, cb) {
-			if(end) once(end)
-			return read(end, function (end, data) {
-				if(!end) op && op(data)
-				else once(end)
-				cb(end, data)
-			})
-		}
-	}
+    return function (read) {
+        return function (end, cb) {
+            if(end) once(end)
+            return read(end, function (end, data) {
+                if(!end) op && op(data)
+                else once(end)
+                cb(end, data)
+            })
+        }
+    }
 }
 ```
 
@@ -249,7 +194,7 @@ Compare this to streams:
 ```js
 // It's literally just the identity function
 function through(stream) {
-	return stream
+    return stream
 }
 ```
 
@@ -312,62 +257,62 @@ And in this section, I'm not just talking about classes - I'm talking about ever
 ```js
 // A class component with inherited explicit redraw
 class Counter extends Component {
-	constructor(initAttrs) { this.count = 1 }
-	view(next, prev) {
-		return [
-			m("button", {onclick: () => { this.count--; this.update() }}, "-"),
-			m("div.count", this.count),
-			m("button", {onclick: () => { this.count++; this.update() }}, "+"),
-		]
-	}
+    constructor(initAttrs) { this.count = 1 }
+    view(next, prev) {
+        return [
+            m("button", {onclick: () => { this.count--; this.update() }}, "-"),
+            m("div.count", this.count),
+            m("button", {onclick: () => { this.count++; this.update() }}, "+"),
+        ]
+    }
 }
 
 // A class component with implicit global redraw
 class Counter {
-	constructor(initAttrs) { this.count = 1 }
-	view(next, prev) {
-		return [
-			m("button", {onclick: () => this.count--}, "-"),
-			m("div.count", this.count),
-			m("button", {onclick: () => this.count++}, "+"),
-		]
-	}
+    constructor(initAttrs) { this.count = 1 }
+    view(next, prev) {
+        return [
+            m("button", {onclick: () => this.count--}, "-"),
+            m("div.count", this.count),
+            m("button", {onclick: () => this.count++}, "+"),
+        ]
+    }
 }
 
 // A closure component returning an object, with implicit global redraw
 function Counter(initAttrs) {
-	let count = 1
-	return {
-		view(next, prev) {
-			return [
-				m("button", {onclick: () => count--}, "-"),
-				m("div.count", count),
-				m("button", {onclick: () => count++}, "+"),
-			]
-		},
-	}
+    let count = 1
+    return {
+        view(next, prev) {
+            return [
+                m("button", {onclick: () => count--}, "-"),
+                m("div.count", count),
+                m("button", {onclick: () => count++}, "+"),
+            ]
+        },
+    }
 }
 
 // An object component with implicit global redraw
 const Counter = {
-	oninit(initAttrs) { this.count = 1 },
-	view(next, prev) {
-		return [
-			m("button", {onclick: () => this.count--}, "-"),
-			m("div.count", this.count),
-			m("button", {onclick: () => this.count++}, "+"),
-		]
-	},
+    oninit(initAttrs) { this.count = 1 },
+    view(next, prev) {
+        return [
+            m("button", {onclick: () => this.count--}, "-"),
+            m("div.count", this.count),
+            m("button", {onclick: () => this.count++}, "+"),
+        ]
+    },
 }
 
 // A closure component returning a view function, with implicit global redraw
 function Counter(initAttrs) {
-	let count = 1
-	return (next, prev) => [
-		m("button", {onclick: () => count--}, "-"),
-		m("div.count", count),
-		m("button", {onclick: () => count++}, "+"),
-	]
+    let count = 1
+    return (next, prev) => [
+        m("button", {onclick: () => count--}, "-"),
+        m("div.count", count),
+        m("button", {onclick: () => count++}, "+"),
+    ]
 }
 ```
 
@@ -426,14 +371,14 @@ For one example, a counter component would be as simple as this:
 
 ```js
 function Counter(attrs, count = 1, context) {
-	return {
-		next: count,
-		value: [
-			m("button", {onclick: () => context.update(count - 1)}, "-"),
-			m("div.count", count),
-			m("button", {onclick: () => context.update(count + 1)}, "+"),
-		]
-	}
+    return {
+        next: count,
+        value: [
+            m("button", {onclick: () => context.update(count - 1)}, "-"),
+            m("div.count", count),
+            m("button", {onclick: () => context.update(count + 1)}, "+"),
+        ]
+    }
 }
 ```
 
@@ -441,13 +386,13 @@ And pure components are simpler, almost maximally simple:
 
 ```js
 function ThreadNode({node}) {
-	return m("div.comment", [
-		m("p", {innerHTML: node.text}),
-		m("div.reply", m(Reply, {node})),
-		m("div.children", keyed(node.children, "id",
-			(child) => m(ThreadNode, {node: child})
-		)),
-	])
+    return m("div.comment", [
+        m("p", {innerHTML: node.text}),
+        m("div.reply", m(Reply, {node})),
+        m("div.children", keyed(node.children, "id",
+            (child) => m(ThreadNode, {node: child})
+        )),
+    ])
 }
 ```
 
@@ -465,26 +410,26 @@ Another idea I tried to do was use a concept I called "cells". It's a further re
 
 ```js
 function ThreadNode(attrs) {
-	return (render) => attrs(({node}) => {
-		render(m("div.comment", [
-			m("p", {innerHTML: node.text}),
-			m("div.reply", m(Reply, {node})),
-			m("div.children", keyed(node.children, "id",
-				(child) => m(ThreadNode, {node: child})
-			))
-		]))
-	})
+    return (render) => attrs(({node}) => {
+        render(m("div.comment", [
+            m("p", {innerHTML: node.text}),
+            m("div.reply", m(Reply, {node})),
+            m("div.children", keyed(node.children, "id",
+                (child) => m(ThreadNode, {node: child})
+            ))
+        ]))
+    })
 }
 
 // Or with a cell utility library
 function ThreadNode(attrs) {
-	return Cell.map(attrs, ({node}) => m("div.comment", [
-		m("p", {innerHTML: node.text}),
-		m("div.reply", m(Reply, {node})),
-		m("div.children", keyed(node.children, "id",
-			(child) => m(ThreadNode, {node: child})
-		))
-	]))
+    return Cell.map(attrs, ({node}) => m("div.comment", [
+        m("p", {innerHTML: node.text}),
+        m("div.reply", m(Reply, {node})),
+        m("div.children", keyed(node.children, "id",
+            (child) => m(ThreadNode, {node: child})
+        ))
+    ]))
 }
 ```
 

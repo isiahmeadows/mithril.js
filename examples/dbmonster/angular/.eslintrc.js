@@ -1,5 +1,5 @@
 module.exports = {
-	"globals": {
-		"ng": false,
-	}
+    "globals": {
+        "ng": false,
+    }
 };

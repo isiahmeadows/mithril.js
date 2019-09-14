@@ -1,54 +1,57 @@
 
 <!doctype html>
 <html>
-	<head>
-		<meta charset="utf-8">
-		<title>Mosaic</title>
-		<style>
+    <head>
+        <meta charset="utf-8">
+        <title>Mosaic</title>
+        <style>
 #root {margin:auto;max-width:600px;width:100%;}
 .slice {animation:enter 1s;animation-fill-mode:forwards;background-image:url(flowers.jpg);height:60px;float:left;opacity:0;width:60px;}
 .slice:nth-child(10n) {clear:right;}
 .exit {animation:exit 1s;}
 
 @keyframes enter {
-	from {opacity:0;transform:rotate(-90deg) scale(0);}
-	to {opacity:1;transform:rotate(0) scale(1);}
+    from {opacity:0;transform:rotate(-90deg) scale(0);}
+    to {opacity:1;transform:rotate(0) scale(1);}
 }
 @keyframes exit {
-	from {opacity:1;transform:rotate(0) scale(1);}
-	to {opacity:0;transform:rotate(90deg) scale(0);}
+    from {opacity:1;transform:rotate(0) scale(1);}
+    to {opacity:0;transform:rotate(90deg) scale(0);}
 }
-		</style>
-	</head>
-	<body>
-		<div id="root"></div>
-		<script src="../../mithril/core.js"></script>
-		<script>
+        </style>
+    </head>
+    <body>
+        <div id="root"></div>
+        <script src="../../mithril/core.js"></script>
+        <script>
 const backgroundPosition = (i, step) =>
-	// X% Y%
-	`${i % step * (step + 1)}% ${Math.floor(i / step) * (step + 1)}%`
+    // X% Y%
+    `${i % step * (step + 1)}% ${Math.floor(i / step) * (step + 1)}%`
 
 const cycle = (tag) =>
-	Array.from({length: 100}, (_, i) => Mithril.m("div.slice", {
-		style: {backgroundPosition: backgroundPosition(i, 10)},
-	}))
+    Array.from({length: 100}, (_, i) => m("div.slice", {
+        style: {backgroundPosition: backgroundPosition(i, 10)},
+    }))
 
 const cycles = [
-	cycle("div.slice"),
-	cycle("div.slice"),
-	cycle("div.slice.exit"),
-	undefined,
+    cycle("div.slice"),
+    cycle("div.slice"),
+    cycle("div.slice.exit"),
+    undefined,
 ]
 
-Mithril.render("#root", (o) => {
-	let state = 0
-	loop()
-	function loop() {
-		o.next(cycles[state])
-		state = (state + 1) % cycles.length
-		setTimeout(loop, 1000)
-	}
-})
-		</script>
-	</body>
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
+
+function Root(ctrl) {
+    let state = 0
+    setInterval(() => {
+        state = (state + 1) % cycles.length
+        ctrl.redraw()
+    }, 1000)
+    return () => cycles[state]
+}
+
+m.render("#root", () => m(Root))
+        </script>
+    </body>
 </html>

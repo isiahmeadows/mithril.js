@@ -1,5 +1,5 @@
 module.exports = {
-	"globals": {
-		"Vue": false,
-	}
+    "globals": {
+        "Vue": false,
+    }
 };

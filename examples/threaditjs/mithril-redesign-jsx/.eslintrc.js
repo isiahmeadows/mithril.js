@@ -1,7 +1,7 @@
 module.exports = {
-	"parserOptions": {
-		"ecmaFeatures": {
-			"jsx": true,
-		},
-	},
+    "parserOptions": {
+        "ecmaFeatures": {
+            "jsx": true,
+        },
+    },
 };

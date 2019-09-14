@@ -1,162 +1,162 @@
-import {
-	DOM, Router, abortable, distinct,
-	keyed, linkTo, m, map, p, pure, render,
-	replace, request, store,
-} from "mithril"
+import {DOM, Router, linkTo, m, p, render, request} from "mithril"
 
 // API calls
 T.time("Setup")
 
 const api = {
-	async home(opts) {
-		T.timeEnd("Setup")
-		return request("/threads", opts)
-	},
-	async thread(id, opts) {
-		T.timeEnd("Setup")
-		return T.transformResponse(
-			await request(p("/threads/:id", {id}), opts)
-		)
-	},
-	async newThread(text, opts) {
-		return request(p("/threads/create", {text}), {method: "POST", ...opts})
-	},
-	async newComment(text, id, opts) {
-		return request(
-			p("/threads/create", {text, parent}),
-			{method: "POST", ...opts}
-		)
-	},
+    async home(opts) {
+        T.timeEnd("Setup")
+        return request("/threads", opts)
+    },
+    async thread(id, opts) {
+        T.timeEnd("Setup")
+        return T.transformResponse(
+            await request(p("/threads/:id", {id}), opts)
+        )
+    },
+    async newThread(text, opts) {
+        return request(p("/threads/create", {text}), {method: "POST", ...opts})
+    },
+    async newComment(text, id, opts) {
+        return request(
+            p("/threads/create", {text, parent}),
+            {method: "POST", ...opts}
+        )
+    },
 }
 
 // shared
 const demoSource =
-	"https://github.com/isiahmeadows/mithril.js/tree/redesign/examples/" +
-	"threaditjs/mithril-redesign-vanilla"
+    "https://github.com/isiahmeadows/mithril.js/tree/redesign/examples/" +
+    "threaditjs/mithril-redesign-vanilla"
 
 function Header() {
-	return [
-		m("p.head_links", [
-			m("a", {href: demoSource}, "Source"), " | ",
-			m("a[href='http://threaditjs.com']", "ThreaditJS Home"),
-		]),
-		m("h2 > a", linkTo("/"), "ThreaditJS: Mithril"),
-	]
+    return [
+        m("p.head_links", [
+            m("a", {href: demoSource}, "Source"), " | ",
+            m("a[href='http://threaditjs.com']", "ThreaditJS Home"),
+        ]),
+        m("h2", m("a", linkTo("/"), "ThreaditJS: Mithril")),
+    ]
 }
 
-const Layout = pure(({load, children: [loaded]}) => [
-	m(Header),
-	m("div.main", abortable((signal, o) => {
-		o.next(m("h2", "Loading"))
-		return load(signal).then(
-			(response) => o.next(loaded(response)),
-			(e) => o.next(
-				e.status === 404
-					? m("h2", "Not found! Don't try refreshing!")
-					: m("h2", "Error! Try refreshing.")
-			)
-		)
-	}))
-])
+function Layout(ctrl, attrs) {
+    const current = ctrl.await((signal) =>
+        attrs.load(signal).then((value) => attrs.on.load(value))
+    )
+
+    function getChildren(nextAttrs) {
+        attrs = nextAttrs
+        switch (current.state) {
+            case "pending": return m("h2", "Loading")
+            case "ready": return [].concat(nextAttrs.view())
+            default:
+                return current.value.status === 404
+                    ? m("h2", "Not found! Don't try refreshing!")
+                    : m("h2", "Error! Try refreshing.")
+        }
+    }
+
+    return (nextAttrs) => [
+        m(Header),
+        m("div.main", getChildren(nextAttrs)),
+    ]
+}
 
 // home
 // eslint-disable-next-line camelcase
-const ThreadPreview = pure(({thread: {id, text, comment_count}}) => [
-	m("p > a", linkTo(`/thread/${id}`), {innerHTML: T.trimTitle(text)}),
-	m("p.comment_count", comment_count, " comment(s)"),
-	m("hr"),
-])
-
-function Home() {
-	const [threads, dispatch] = store([], (threads, action) => {
-		if (action.type === "set") return action.threads
-		if (action.type === "append") return [...threads, action.thread]
-	})
-
-	return m(Layout, {load: (s) => api.home({signal: s})}, (response) => {
-		document.title = "ThreaditJS: Mithril | Home"
-		dispatch({type: "set", threads: response.data})
-		return [
-			keyed(threads, "id", (thread) => m(ThreadPreview, {thread})),
-			m(NewThread, {onsave(ev) {
-				dispatch({type: "append", thread: ev.thread})
-			}}),
-		]
-	})
+function ThreadPreview(ctrl, {thread: {id, text, comment_count}}) {
+    return [
+        m("p", m("a", linkTo(`/thread/${id}`), {innerHTML: T.trimTitle(text)})),
+        m("p.comment_count", comment_count, " comment(s)"),
+        m("hr"),
+    ]
 }
 
-function NewThread(attrs, events) {
-	let textarea
-	return m("form", [
-		m("textarea", {afterCommit(elem) { textarea = elem }}),
-		m("input[type=submit][value='Post!']"),
-		{async onsubmit(_, capture) {
-			capture()
-			const {data: thread} = await api.newThread(textarea.value)
-			textarea.value = ""
-			events.emit("save", thread)
-		}},
-	])
+function Home() {
+    let threads
+
+    return () => m(Layout, {
+        load: (signal) => api.home({signal}),
+        on: {load: (response) => threads = response.data},
+        view: () => [
+            m.each(threads, "id", (thread) => m(ThreadPreview, {thread})),
+            m(NewThread, {on: {save(thread) { threads.push(thread) }}}),
+        ]
+    })
+}
+
+function NewThread() {
+    const textarea = m.ref()
+
+    return (attrs) => m("form", [
+        m("textarea", m.capture(textarea)),
+        m("input[type=submit][value='Post!']"),
+        {on: {async submit(_, capture) {
+            capture.event()
+            const {data: thread} = await api.newThread(textarea.get().value)
+            textarea.get().value = ""
+            attrs.on.save(thread)
+        }}},
+    ])
 }
 
 // thread
-function Thread(attrs) {
-	return map(distinct(attrs, "id"), ({id}) => {
-		T.time("Thread render")
-		return replace([
-			{afterCommit() { T.timeEnd("Thread render") }},
-			m(Layout, {load: (s) => api.thread(id, {signal: s})}, ({root}) => {
-				const title = T.trimTitle(root.text)
-				document.title = `ThreaditJS: Mithril | ${title}`
-				return m(ThreadNode, {node: root})
-			})
-		])
-	})
+function Thread(ctrl) {
+    T.time("Thread render")
+    ctrl.afterCommit(() => T.timeEnd("Thread render"))
+    let node
+
+    return ({id}) => m.link(id, m(Layout, {
+        load: (signal) => api.thread(id, {signal}),
+        on: {load({root}) {
+            node = root
+            document.title = `ThreaditJS: Mithril | ${T.trimTitle(root.text)}`
+        }},
+        view: () => m(ThreadNode, {node}),
+    }))
 }
 
-const ThreadNode = pure(({node}) => m("div.comment", [
-	m("p", {innerHTML: node.text}),
-	m("div.reply", m(Reply, {node})),
-	m("div.children", keyed(node.children, "id",
-		(child) => m(ThreadNode, {node: child})
-	)),
-]))
+function ThreadNode(ctrl, {node}) {
+    return m("div.comment", [
+        m("p", {innerHTML: node.text}),
+        m("div.reply", m(Reply, {node})),
+        m("div.children", m.each(node.children, "id",
+            (child) => m(ThreadNode, {node: child})
+        )),
+    ])
+}
 
-function Reply(attrs) {
-	return (o) => {
-		const [preview, setPreview] = store("")
-		let node
-		attrs({next: (curr) => node = curr.node})
-		renderReplyButton()
+function Reply() {
+    const textarea = m.ref()
+    let isOpen = false
+    let preview
 
-		function renderReplyForm() {
-			o.next(m("form", [
-				m("textarea", {oninput(ev) {
-					setPreview(T.previewComment(ev.currentTarget.value))
-				}}),
-				m("input[type=submit][value='Reply!']"),
-				m("div.preview", {innerHTML: preview}),
-				{async onsubmit(ev, capture) {
-					capture()
-					const value = ev.currentTarget.elements[0].value
-					const {data} = await api.newComment(value, node.id)
-					node.children.push(data)
-					renderReplyButton()
-				}}
-			]))
-		}
-
-		function renderReplyButton() {
-			o.next(m("a", "Reply!", {onclick() {
-				renderReplyForm()
-				return false
-			}}))
-		}
-	}
+    return ({node}) => isOpen
+        ? m("form", [
+            m("textarea", m.capture(textarea), {on: {input() {
+                preview = T.previewComment(textarea.value)
+            }}}),
+            m("input[type=submit][value='Reply!']"),
+            m("div.preview", {innerHTML: preview}),
+            {on: {async submit(_, capture) {
+                capture.event()
+                const value = textarea.value
+                const {data} = await api.newComment(value, node.id)
+                node.children.push(data)
+                isOpen = false
+            }}}
+        ])
+        : m("a", "Reply!", {on: {click(capture) {
+            capture.event()
+            isOpen = true
+        }}})
 }
 
 // router
-render("#app", new Router(DOM).match(
-	["/", () => m(Home)],
-	["/thread:id", ({id}) => m(Thread, {id})]
+const router = new Router(DOM)
+
+render("#app", () => router.match(
+    ["/", () => m(Home)],
+    ["/thread:id", ({id}) => m(Thread, {id})],
 ))

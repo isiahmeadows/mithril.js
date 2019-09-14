@@ -1,5 +1,5 @@
 module.exports = {
-	"globals": {
-		"T": false
-	}
+    "globals": {
+        "T": false
+    }
 };

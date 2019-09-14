@@ -12,13 +12,20 @@ If you have *any* feedback, questions, or concerns, please do feel free to [file
 
 ## Table of contents
 
-- [Core changes](core/README.md)
-- [Utilities added to `mithril/*`, part of the MVP](mvp-utils/README.md)
-- [Utilities added to `mithril/*`, not part of the MVP](future-utils.md)
+- [Vnodes](new/vnodes.md)
+- [Components](new/components.md)
+- [Streams](new/streams.md)
+- [Stream utilities](new/stream-utils.md)
+- [DOM renderer](new/dom.md)
+- [Static renderer](new/static.md)
+- [Paths via `p(url, {...params})`](new/path.md)
+- [Router](new/router.md)
+- [`m.request(url, options?)`](new/request.md)
+- [Transitions](new/transition.md)
 - [Rationale](rationale.md)
 - [App comparison](examples/threaditjs/README.md)
+- [Future utilities not part of the MVP](future-utils.md)
 - [Non-features](non-features.md)
-- [Vnode and IR structural changes](vnode-structure.md)
 - [Bitwise operations explainer](bitwise.md)
 - [Examples](../examples/README.md)
 
@@ -39,75 +46,60 @@ The code you thought you wrote should be the code you meant to write. There shou
 ```js
 // React
 class TextInput extends React.Component {
-	state = {
-		value: ""
-	}
-	componentWillReceiveProps(nextProps) {
-		// This resets local state every time a parent receives properties *and*
-		// it schedules a re-render.
-		this.setState({ value: nextProps.value })
-	}
-	render() {
-		return (
-			<input
-				value={this.state.value}
-				onChange={(ev) => {
-					this.setState({ value: ev.target.value })
-				}}
-			/>
-		)
-	}
+    state = {
+        value: ""
+    }
+    componentWillReceiveProps(nextProps) {
+        // This resets local state every time a parent receives properties *and*
+        // it schedules a re-render.
+        this.setState({ value: nextProps.value })
+    }
+    render() {
+        return (
+            <input
+                value={this.state.value}
+                onChange={(ev) => {
+                    this.setState({ value: ev.target.value })
+                }}
+            />
+        )
+    }
 }
 
-// Mithril v2
+// Mithril v2 - it's only marginally more verbose
 function TextInput() {
-	let value = ""
-	return {
-		onupdate(vnode, old) {
-			// This resets local state every time a parent receives properties
-			// *and* it schedules a re-render. It's done *after* the view is
-			// rendered to ensure the value isn't prematurely changed.
-			value = vnode.attrs.value
-			m.redraw()
-		},
-		view: () => [
-			m("input", {value, onchange: (ev) => value = ev.target.value}),
-		],
-	}
+    let value = ""
+    return {
+        onupdate(vnode, old) {
+            // This resets local state every time a parent receives properties
+            // *and* it schedules a re-render. It's done *after* the view is
+            // rendered to ensure the value isn't prematurely changed.
+            value = vnode.attrs.value
+            m.redraw()
+        },
+        view: () => [
+            m("input", {value, onchange(ev) { value = ev.target.value }}),
+        ],
+    }
 }
 
-// Direct equivalent in this redesign - it *certainly* raises questions, and
-// it's not only not idiomatic, but a little cumbersome to write and hard to
-// follow because the control flow is all over the place.
-function TextInput(attrs) {
-	let value = ""
-	return (o) => {
-		function update() {
-			o.next(m("input", {value, onchange(ev) {
-				value = ev.target.value
-				update()
-			}}))
-		}
-
-		return Stream.map(attrs, (nextAttrs) => {
-			value = nextAttrs.value || ""
-			update()
-		})
-	}
-}
-
-// Simplified equivalent in this redesign - it *still* raises questions, and
-// it's equally hard to follow correctly due to all the recursion.
-function TextInput(attrs) {
-	return (o) => {
-		function update(value) {
-			o.next(m("input", {value, onchange(ev) {
-				update(ev.target.value)
-			}}))
-		}
-
-		return Stream.map(attrs, ({value = ""}) => update(value))
-	}
+// Direct equivalent in this redesign - the code is a little more boilerplatey
+// and verbose, but it's intentionally a little bit of an eyesore. It doesn't
+// mesh as well with the redesign's otherwise increased conciseness.
+function TextInput(ctrl, attrs) {
+    let value = ""
+    return () => {
+        ctrl.afterCommit(() => {
+            // This resets local state every time a parent receives properties
+            // *and* it schedules a re-render. It's done *after* the view is
+            // rendered to ensure the value isn't prematurely changed.
+            value = attrs.value
+            m.redraw()
+        })
+        return [
+            m("input", {value, on: {change(ev) { value = ev.target.value }}}),
+        ]
+    }
 }
 ```
 
@@ -119,74 +111,87 @@ In that article, it offers two ways to fix it, both of which are equally simple.
 // React
 // Option 1: Fully controlled component.
 function TextInput({value, onChange}) {
-	return (
-		<input
-			value={value}
-			onChange={(ev) => onChange(ev.target.value)}
-		/>
-	)
+    return (
+        <input
+            value={value}
+            onChange={(ev) => onChange(ev.target.value)}
+        />
+    )
 }
 
 // Option 2: Fully uncontrolled component.
 class TextInput extends React.Component {
-	state = {
-		value: ""
-	}
-	render() {
-		return (
-			<input
-				value={this.state.value}
-				onChange={(ev) => {
-					this.setState({ value: ev.target.value })
-				}}
-			/>
-		)
-	}
+    state = {
+        value: ""
+    }
+    render() {
+        return (
+            <input
+                value={this.state.value}
+                onChange={(ev) => {
+                    this.setState({ value: ev.target.value })
+                }}
+            />
+        )
+    }
 }
 
 // We can reset its internal state later by putting it in a fragment as the only
 // element in it and changing the key:
-return <><TextInput key={formId} /></>
+class Parent {
+    state = {key: false}
+    reset() { this.setState({key: !this.state.key}) }
+    render() {
+        return <><TextInput key={state} /></>
+    }
+}
 
 // Mithril v2
 // Option 1: Fully controlled component.
 const TextInput = {
-	view: ({attrs: {value, onchange}}) =>
-		m("input", {value, onchange}),
+    view: ({attrs: {value, onchange}}) =>
+        m("input", {value, onchange}),
 }
 
 // Option 2: Fully uncontrolled component.
 function TextInput() {
-	let value = ""
-	return {
-		view: () =>
-			m("input", {value, onchange: (ev) => value = ev.target.value}),
-	}
+    let value = ""
+    return {
+        view: () =>
+            m("input", {value, onchange: (ev) => value = ev.target.value}),
+    }
 }
 
 // We can reset its internal state later by putting it in a fragment as the only
 // element in it and changing the key:
-return [m(TextInput, {key: formId})]
+function Parent() {
+    let state = false
+    function reset() { state = !state; m.redraw() }
+    return {view: () => [m(TextInput, {key: state})]}
+}
 
 // Direct equivalent in this redesign
 // Option 1: Fully controlled component.
-function TextInput(attrs, events) {
-	return m("input", {
-		value: Stream.map(attrs, "value"),
-		onchange(ev) { return events.emit("change", ev.target.value) },
-	})
+function TextInput(_, attrs) {
+    return m("input", {
+        value: attrs.value,
+        onchange(ev) { return attrs.on.change(ev.target.value) },
+    })
 }
 
 // Option 2: Fully uncontrolled component.
 function TextInput() {
-	const [value, setValue] = Stream.store("")
-	return m("input", {value, onchange(ev) { setValue(ev.target.value) }})
+    let value
+    return () =>
+        m("input", {value, on: {change(ev) { value = ev.target.value }}})
 }
 
-// We can reset its internal state later by creating a store to fire resets on
-// command.
-const [resetSignal, reset] = Stream.store()
-return map(resetSignal, () => replace(m(TextInput)))
+// We can reset its internal state later by just linking it.
+function Parent(ctrl) {
+    let state = false
+    function reset() { state = !state; ctrl.redraw() }
+    return () => m.link(state, m(TextInput))
+}
 ```
 
 If you have to focus on avoiding a gotcha in Mithril rather than writing logic, Mithril is clearly getting in your way of actually doing things, and this is what the redesign is aiming to avoid.
@@ -215,9 +220,10 @@ A good framework doesn't just stop at making the simple easy, but it should also
 
 And finally, the framework's job, as [Rich Harris explained fairly well](https://youtu.be/qqt6YxAZoOc), is not to organize code, but to organize your mind. They shouldn't have to have a major impact in your code size, and if anything, it should *reduce* how much overhead exists between your code and the user. Although this does still remain "just JavaScript", it does so without introducing nearly as much runtime overhead or mental overhead in the process:
 
-- Unlike literally every other tree reconciliation-based framework I've ever seen (and I've seen a lot more than I care to admit - have you heard of [Turbine](https://github.com/funkia/turbine), [Anvil](https://github.com/zserge/anvil), or [Miso](https://haskell-miso.org/)?), this makes trees static by default. This is useful for dramatically increasing performance and dramatically reducing retained memory. However, streams provide very simple, easy abstractions to use to make parts of them dynamic, and those themselves are fairly light. (This is among other numerous optimizations, of course.)
-- This tries to streamline and simplify the mental model as much as possible, even sometimes at the cost of implementation complexity. There is this saying in UX and design circles that goes "Don't make me think!" (and a book with [exactly that title](https://en.wikipedia.org/wiki/Don't_Make_Me_Think)), and my goal with this redesign is to work with the developer's first instinct of what's correct and not make them sweat the little details of their components like data.
+- Unlike literally every other tree reconciliation-based framework I've ever seen (and I've seen a lot more than I care to admit - have you heard of [Turbine](https://github.com/funkia/turbine), [Anvil](https://github.com/zserge/anvil), or [Miso](https://haskell-miso.org/)?), this separates keys from subtrees in loops. This is useful for not only enabling easier optimization of key reconciliation, but it also lets users more freely determine the contents that need displayed, with fewer hacks involved. You can literally return text strings as far as the framework cares.
+- This tries to streamline and simplify the mental model as much as possible, even sometimes at the cost of implementation complexity. There is this saying in UX and design circles that goes "Don't make me think!" (and a book with [exactly that title](https://en.wikipedia.org/wiki/Don't_Make_Me_Think)), and my goal with this redesign is to work with the developer's first instinct of what's correct and not make them sweat the little details of their components like data. One concrete example of this is `m.RETAIN` - if you want to not update, you don't need an entire lifecycle method to do it. It's also why I changed the names of several lifecycle methods to be way more explicit about their purpose. It's not about *what*, but *when*.
 - One of the overarching goals of this redesign is to get out of your way and let you actually *do* what you want to do. Most frameworks are concerned about *what* the current state is and *what* data is being shown, including React, Angular, and even Svelte. They're concerned about state, not functionality. Users care about functionality, and I want Mithril's goal here to be to enable you to *do* what is needed. (And yes, if/once this redesign becomes Mithril I plan to replace our current tagline of "A JavaScript Framework for Building Brilliant Applications" with something about "doing".)
+    - The end goal is to make this much more procedural and powerful, but this is just a midpoint. Think of this as Mithril Redesign 0.1 - I plan to eventually obsolete `ctrl.await` and `ctrl.each`, for example.
 
 ### Keeping it fast
 
@@ -228,8 +234,7 @@ Performance should be the last thing you care about. There's not a ton to improv
 Instead, effort should be taken to ensure the natural way is also fast. This includes designing the API for performance and making it easy to make things fast. For example:
 
 - Invoking functions [goes through a lot less ceremony than invoking methods](https://benediktmeurer.de/2018/03/23/impact-of-polymorphism-on-component-based-frameworks-like-react/).
-- Push-based rendering means updates can be hyper-localized with minimal effort, and it's sometimes easier.
-- There are intentionally very few entry points into the API, and that is so the framework operates more like a black box.
-- Having a single code path to receive attributes means local variables are much more often used to compare and initiate updates, something engines optimize better.
+- There are intentionally very few entry points into the API, and that is so the framework operates more like a black box. I can optimize this much better, avoiding a lot of internal overhead and ceremony by just scheduling updates directly.
+- Certain common operations like awaiting promises have special primitives that do things way faster than you'd likely write them.
 
 But above all, this ends up feeling natural and you end up doing the right thing without thinking about it. It *guides* you to write good code.

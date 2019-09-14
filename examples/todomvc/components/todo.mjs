@@ -1,43 +1,48 @@
-import {m, pure} from "../../../mithril/index.mjs"
-import {dispatch} from "./model.mjs"
+import * as Model from "./model.mjs"
+import {m} from "../../../mithril/index.mjs"
 
-export default pure(({state, todo}) => m("li", {
-	class: {
-		completed: todo.completed,
-		editing: todo === state.editing,
-	},
-}, [
-	m("div.view", [
-		m("input.toggle[type=checkbox]", {
-			checked: todo.completed,
-			onclick() {
-				dispatch("setStatus", {todo, completed: !todo.completed})
-			}
-		}),
-		m("label", todo.title, {ondblclick() { dispatch("edit", {todo}) }}),
-		m("button.destroy", {onclick() { dispatch("destroy", {todo}) }}),
-	]),
-	m("input.edit", {
-		onkeyup(ev) {
-			if (ev.keyCode === 13) {
-				dispatch("update", {title: ev.target.value})
-			} else if (ev.keyCode === 27) {
-				dispatch("reset")
-			}
-		},
-		onblur(ev) {
-			dispatch("update", {title: ev.target.value})
-		},
-		afterCommit(input) {
-			if (
-				todo === state.editing &&
-				input !== document.activeElement
-			) {
-				input.focus()
-				input.value = todo.title
-				input.selectionStart = todo.title.length
-				input.selectionEnd = todo.title.length
-			}
-		},
-	}),
-]))
+export default function Todo(ctrl, {todo: initialTodo}) {
+    const inputRef = m.ref()
+
+    ctrl.afterCommit(() => {
+        if (
+            initialTodo === Model.editing &&
+            inputRef.current !== document.activeElement
+        ) {
+            inputRef.current.focus()
+            inputRef.current.value = initialTodo.title
+            inputRef.current.selectionStart = initialTodo.title.length
+            inputRef.current.selectionEnd = initialTodo.title.length
+        }
+    })
+
+    return ({todo}) => m("li", {
+        class: {
+            completed: todo.completed,
+            editing: todo === Model.editing,
+        },
+    }, [
+        m("div.view", [
+            m("input.toggle[type=checkbox]", {
+                checked: todo.completed,
+                on: {click() { Model.setCompleted(todo, !todo.completed) }},
+            }),
+            m("label", todo.title, {on: {dblclick() { Model.edit(todo) }}}),
+            m("button.destroy", {on: {click() { Model.destroy(todo) }}}),
+        ]),
+        m("input.edit", m.capture(inputRef), {
+            on: {
+                keyup(ev) {
+                    if (ev.keyCode === 13) {
+                        Model.update(inputRef.current.value)
+                    } else if (ev.keyCode === 27) {
+                        Model.reset()
+                    }
+                },
+                blur() {
+                    Model.update(inputRef.current.value)
+                },
+            },
+        }),
+    ])
+}

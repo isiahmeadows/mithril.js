@@ -319,8 +319,8 @@ function map(stream, func) {
     if (NEVER === stream) return NEVER
     if (
         typeof func === "string" ||
-		typeof func === "number" ||
-		typeof func === "symbol"
+        typeof func === "number" ||
+        typeof func === "symbol"
     ) {
         func = mapKey(func)
     }
@@ -371,8 +371,8 @@ function distinct(stream, compare) {
         compare = sameValueZero
     } else if (
         typeof compare === "string" ||
-		typeof compare === "number" ||
-		typeof compare === "symbol"
+        typeof compare === "number" ||
+        typeof compare === "symbol"
     ) {
         compare = compareKey(compare)
     }

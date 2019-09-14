@@ -1,18 +1,6 @@
-import version from "./version.mjs"
-
-// Note: these are only allocated for config vnodes
-
-function getTarget(fallback, namespaceURI) {
-    if (namespaceURI === "http://www.w3.org/1999/xhtml") return "html"
-    if (namespaceURI === "http://www.w3.org/2000/svg") return "svg"
-    if (namespaceURI === "http://www.w3.org/1998/Math/MathML") return "mathml"
-    return fallback
-}
-
 // Note: the original document + the target namespace is retrieved from this.
 export function makeDOMMetadata(root, current) {
     var document = current.ownerDocument
-    var namespaceURI = current.namespaceURI
     var win = document.defaultView
 
     // Maybe the child isn't an HTML element?
@@ -37,12 +25,8 @@ export function makeDOMMetadata(root, current) {
     return {
         isStatic: false,
         type: "mithril/dom",
-        version: version,
-
         document: document,
         window: win,
-        target: getTarget("xml", namespaceURI),
-        xmlns: namespaceURI,
     }
 }
 
@@ -56,9 +40,6 @@ export function makeStringMetadata(target, win) {
     return {
         isStatic: true,
         type: "mithril/string",
-        version: version,
-        target: target,
-
         document: win != null ? win.document : undefined,
         window: win,
     }

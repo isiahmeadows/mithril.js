@@ -1,40 +1,38 @@
 <!doctype html>
 <html>
-	<head>
-		<title>Markdown Editor</title>
-		<style>
+    <head>
+        <title>Markdown Editor</title>
+        <style>
 html,body {height:100%;margin:0;}
 h1,h2,h3,h4,h5,h6,p {margin:0 0 10px;}
 #editor {display:flex;height:100%;}
 .input,.preview {box-sizing:border-box;height:100%;margin:0;padding:10px;width:50%;}
 .input {border:0;border-right:1px solid #ccc;outline:none;resize:none;}
-		</style>
-	</head>
-	<body>
-		<div id="editor"></div>
-		<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/0.3.2/marked.min.js"></script>
-		<script src="../../mithril/core.js"></script>
-		<script>
-const {m} = Mithril
-
+        </style>
+    </head>
+    <body>
+        <div id="editor"></div>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/0.3.2/marked.min.js"></script>
+        <script src="../../mithril/core.js"></script>
+        <script>
 //model
 const state = {
-	text: "# Markdown Editor\n\nType on the left panel and see the result on the right panel",
-	update(value) {
-		state.text = value
-	}
+    text: "# Markdown Editor\n\nType on the left panel and see the result on the right panel",
+    update(value) {
+        state.text = value
+    }
 }
 
 //view
-const Editor = Mithril.closure(() => () => [
-	m("textarea.input", {
-		value: state.text,
-		oninput(ev) { state.update(ev.target.value) },
-	}),
-	m("div.preview", trust(marked(state.text))),
-])
+const Editor = () => [
+    m("textarea.input", {
+        value: state.text,
+        on: {input(ev) { state.update(ev.target.value) }},
+    }),
+    m("div.preview", {innerHTML: marked(state.text)}),
+]
 
-Mithril.render("#editor", m(Editor))
-		</script>
-	</body>
+m.render("#editor", () => m(Editor))
+        </script>
+    </body>
 </html>

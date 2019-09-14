@@ -35,9 +35,9 @@ target["test"] = function () {
 
 target["test:mithril"] = function () {
     exec(
-        `${p("node_modules/.bin/_mocha")}\
-		  --require esm --require scripts/test-setup.js\
-			--color test/`,
+        `${p("node_modules/.bin/_mocha")}
+            --require esm --require scripts/test-setup.js
+            --color test/`,
         {cwd: p("packages/mithril")}
     )
 }

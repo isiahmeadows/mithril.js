@@ -1,6 +1,6 @@
 module.exports = {
-	"globals": {
-		"React": false,
-		"ReactDOM": false,
-	}
+    "globals": {
+        "React": false,
+        "ReactDOM": false,
+    }
 };
