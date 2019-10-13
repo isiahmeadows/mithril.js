@@ -4,12 +4,26 @@
 
 These are things I need to do at some point, but just haven't gotten to yet. Obviously, this is not exhaustive, but it should give some insight into my plans.
 
+- Benchmark `string.match(/\S+/g)` + iterating result vs `string.trim().split(/\s+/g)` + iterating result vs manual parsing + merged iteration for `class: "string"`
+    - The second is likely to be the slowest as it's potentially creating a temporary string in the process.
+    - Dodging the array allocation for the third might be beneficial since these are almost always small strings.
+
+- Allow `class: [...names]` and `class: {name: cond, ...}`
+    - Must be valid class names unto themselves - this directly uses `classList.add(name)`.
+    - This is partially for convenience, but it internally needs to do similar anyways.
+    - Note: classes are merged via `||`, not `&&`. It only takes one condition to return `true` for it to be added.
+
+- For `ctrl.catch`, have each factory do its own `try`/`finally` - it's simpler and [the difference is indiscernible in Chrome and Firefox, and the 25% speedup on the success path in Safari from merging them will still be almost a wash](http://jsben.ch/2mlaB).
+    - The catch target will also have to be stored on each event handler error.
+    - Also, only replace the handler and set up the `try`/`catch` for the children if `ctrl.catch` is actually called.
+    - Note: each handler list replaces all previous handler lists. And unlike attributes, handlers aren't inherited.
+
 - Fuse the corrections in `design/non-redux/` into the `redesign` branch.
     - This can be figured out just by doing `git checkout redesign-redux -- design/non-redux/` from the `redesign` branch and going from there.
     - Also, trusted vnodes are now a renderer concern.
     - `s/compatibile/compatible/` in `m.request`
     - Do other grammar/spell checks throughout it.
-    - Change spaces to tabs (`.eslintrc.js` didn't align with `.editorconfig`)
+    - Change spaces to tabs. (`.eslintrc.js` didn't align with `.editorconfig`)
 
 - Update the `src/` stuff to align with the current `design/`
     - `src/stream.mjs` is up to date
@@ -17,7 +31,7 @@ These are things I need to do at some point, but just haven't gotten to yet. Obv
     - `src/path.mjs` and `src/internal/query.mjs` are up to date.
     - Most of the rest are *not* up to date.
 
-- Ensure the minified source bundle is generated with Terser option `inline: 0`.
+- Ensure the minified source bundle is generated with Terser option `reduce_vars: 0`.
     - This can be dropped pending https://github.com/terser-js/terser/issues/350
 
 - Add component for carousels/slides/page transitions
