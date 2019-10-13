@@ -47,7 +47,7 @@ function Layout(ctrl, attrs) {
 
     function getChildren(nextAttrs) {
         attrs = nextAttrs
-        switch (current.state) {
+        switch (current.fetch().state) {
             case "pending": return m("h2", "Loading")
             case "ready": return [].concat(nextAttrs.view())
             default:
