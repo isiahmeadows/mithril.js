@@ -29,9 +29,9 @@ This is inherently *very* fast, as it doesn't have to worry about virtual dispat
 
 And of course, `oninit`, `onbeforeupdate`, and `view` are all merged into this model and are otherwise generally unnecessary.
 
-- `oninit` → first call, `i.isInit() === true`
+- `oninit` → first call, `ctrl.isInit() === true`
 - `view` → any call, return value of view function
-- `onbeforeupdate` → invoke generated `comparator` + return `i.retain()`
+- `onbeforeupdate` → invoke generated `comparator` + return `m.retain()`
 
 For convenience and consistency, `attrs.children` is set to a resolved children array, where attribute children and refs are resolved to holes. (They've already been addressed.)
 
@@ -110,7 +110,7 @@ The component controller (`ctrl` below) contains everything necessary for compon
     - This throws an error if this component is not currently rendering and the component view has already been initialized.
     - `result.state` is the current resolution state, either `"pending"`, `"ready"`, or `"error"`
     - `result.value` is `undefined` if pending, the resolution value if resolved, or the rejection value if rejected.
-    - `result.fetch(arg, compare = sameValueZero)` initiates the fetch. On first run or if `compare(prev, arg)` returns falsy, it re-fetches and cancels the previous fetch (in that order, if you want to detect it); otherwise, it does nothing.
+    - `result.fetch(arg, compare = sameValueZero)` initiates the fetch. On first run or if `compare(prev, arg)` returns falsy, it re-fetches and cancels the previous fetch (in that order, if you want to detect it); otherwise, it does nothing. For convenience, it returns the result.
     - This implicitly schedules a redraw on completion.
     - In the DOM renderer, it's basically sugar for `ctrl.afterRemove(() => abortController.cancel(), true)` + `ctrl.redraw()` with promises and an abort signal. If `AbortController` isn't supported, it's shimmed with a simple `addEventListener` + `removeEventListener` + `onabort`, enough to support basic usage + `m.request`. (As in, very loosely and not remotely close to spec.) The callback is removed after the promise resolves.
     - In the static renderer, this is also a primitive that schedules a redraw after the promise resolves. This is awaited recursively until no more `ctrl.await` calls are pending. It returns a dummy signal with no-ops for `addEventListener` + `removeEventListener` and it doesn't call `onabort`.
@@ -120,7 +120,7 @@ The component controller (`ctrl` below) contains everything necessary for compon
     - This throws an error if this component is not currently rendering and the component view has already been initialized.
     - `result.state` is the current resolution state, either `"pending"`, `"ready"`, or `"error"`
     - `result.value` is `undefined` if pending, the resolution value if resolved, or the rejection value if rejected.
-    - `result.fetch(arg, compare = sameValueZero)` initiates the fetch. On first run or if `compare(prev, arg)` returns falsy, it recreates the stream and closes the current one (in that order, if you want to detect it); otherwise, it does nothing.
+    - `result.fetch(arg, compare = sameValueZero)` initiates the fetch. On first run or if `compare(prev, arg)` returns falsy, it recreates the stream and closes the current one (in that order, if you want to detect it); otherwise, it does nothing. For convenience, it returns the result.
     - This implicitly schedules a redraw on each emit as well as on completion.
     - In the DOM renderer, it's basically sugar for `ctrl.afterRemove(close, true)` + `ctrl.redraw()`, where `close` is the stream close callback.
     - In the static renderer, this is also a primitive that schedules a redraw after the stream first emits a value. This is awaited recursively until no more `ctrl.connect` calls are pending.
