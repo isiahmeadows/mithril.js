@@ -4,6 +4,11 @@
 
 These are things I need to do at some point, but just haven't gotten to yet. Obviously, this is not exhaustive, but it should give some insight into my plans.
 
+- Consider adding a second path variant that uses `host.key` for object properties instead. (This is basically the same as the current one otherwise.)
+    - The goal here is to be interoperable with .NET Core's default behavior.
+    - Periods will need URL-escaped as well - those are *not* escaped by default by `encodeURIComponent`.
+    - See: https://gitter.im/mithriljs/mithril.js?at=5dd3b7ce52b73c7cb243eeb5
+
 - Benchmark `string.match(/\S+/g)` + iterating result vs `string.trim().split(/\s+/g)` + iterating result vs manual parsing + merged iteration for `class: "string"`
     - The second is likely to be the slowest as it's potentially creating a temporary string in the process.
     - Dodging the array allocation for the third might be beneficial since these are almost always small strings.
