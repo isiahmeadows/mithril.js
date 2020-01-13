@@ -1,15 +1,15 @@
+import {m} from "mithril"
 import Footer from "./footer.mjs"
 import Header from "./header.mjs"
-import Todos from "./todos.mjs"
-import {m} from "../../../mithril/index.mjs"
-import {todos} from "./model.mjs"
+import TodoList from "./todo-list.mjs"
+import * as Model from "../model.mjs"
 
-export default function View(ctrl, {showing}) {
+export default function View({model, showing}) {
     return [
         m(Header),
-        todos.length ? [
-            m(Todos, {showing}),
-            m(Footer, {showing}),
-        ] : null,
+        Model.todoCount(model) > 0 && [
+            m(TodoList, {model, showing}),
+            m(Footer, {model, showing}),
+        ],
     ]
 }

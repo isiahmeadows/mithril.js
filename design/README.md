@@ -12,21 +12,19 @@ If you have *any* feedback, questions, or concerns, please do feel free to [file
 
 ## Table of contents
 
-- [Vnodes](new/vnodes.md)
-- [Components](new/components.md)
-- [Streams](new/streams.md)
-- [Stream utilities](new/stream-utils.md)
-- [DOM renderer](new/dom.md)
-- [Static renderer](new/static.md)
-- [Paths via `p(url, {...params})`](new/path.md)
-- [Router](new/router.md)
-- [`m.request(url, options?)`](new/request.md)
-- [Transitions](new/transition.md)
+- [Vnodes](vnodes.md)
+- [Components](components.md)
+- [Component DSL](component-dsl.md)
+- [DOM renderer](dom.md)
+- [Static renderer](static.md)
+- [Paths via `p(url, {...params})`](path.md)
+- [Router](router.md)
+- [Requests](request.md)
+- [Transitions](transition.md)
 - [Rationale](rationale.md)
 - [App comparison](examples/threaditjs/README.md)
 - [Future utilities not part of the MVP](future-utils.md)
-- [Non-features](non-features.md)
-- [Bitwise operations explainer](bitwise.md)
+- [Internal architecture](architecture/README.md)
 - [Examples](../examples/README.md)
 
 ## Summary
@@ -44,153 +42,97 @@ My general goal is this:
 The code you thought you wrote should be the code you meant to write. There should *not* be any subtle behavior that changes this. In the case of a virtual DOM framework, subtle behavior like this (snippet taken from [this blog post](https://overreacted.io/writing-resilient-components/#principle-2-always-be-ready-to-render)) should not exist.
 
 ```js
-// React
-class TextInput extends React.Component {
-    state = {
-        value: ""
-    }
-    componentWillReceiveProps(nextProps) {
-        // This resets local state every time a parent receives properties *and*
-        // it schedules a re-render.
-        this.setState({ value: nextProps.value })
-    }
-    render() {
-        return (
-            <input
-                value={this.state.value}
-                onChange={(ev) => {
-                    this.setState({ value: ev.target.value })
-                }}
-            />
+// Example actually taken from Mithril v2's component documentation with minor
+// modifications
+let Counter = {
+    state: {count: 0},
+    view() {
+        return m("div",
+            m("p", "Count: ", this.state.count),
+            m("button", {onclick: () => { this.state.count++ }}, "Increment")
         )
-    }
+    },
 }
 
-// Mithril v2 - it's only marginally more verbose
-function TextInput() {
-    let value = ""
-    return {
-        onupdate(vnode, old) {
-            // This resets local state every time a parent receives properties
-            // *and* it schedules a re-render. It's done *after* the view is
-            // rendered to ensure the value isn't prematurely changed.
-            value = vnode.attrs.value
-            m.redraw()
-        },
-        view: () => [
-            m("input", {value, onchange(ev) { value = ev.target.value }}),
-        ],
-    }
-}
+m.render(document.body, [
+    m(Counter),
+    m(Counter),
+])
+```
 
-// Direct equivalent in this redesign - the code is a little more boilerplatey
-// and verbose, but it's intentionally a little bit of an eyesore. It doesn't
-// mesh as well with the redesign's otherwise increased conciseness.
-function TextInput(ctrl, attrs) {
-    let value = ""
-    return () => {
-        ctrl.afterCommit(() => {
-            // This resets local state every time a parent receives properties
-            // *and* it schedules a re-render. It's done *after* the view is
-            // rendered to ensure the value isn't prematurely changed.
-            value = attrs.value
-            m.redraw()
-        })
-        return [
-            m("input", {value, on: {change(ev) { value = ev.target.value }}}),
-        ]
-    }
+If you were to run that and increment the first counter, the second would also increment, and it's not obvious why just by looking at it. In fact, it's become a common source of questions in the Mithril community in the last couple years.
+
+> If you're lost, the above `Counter` component could be rewritten equivalently as this:
+>
+>
+> ```js
+> let CounterState = {count: 0}
+> let Counter = {
+>     state: CounterState,
+>     view() {
+>         return m("div",
+>             m("p", "Count: ", this.state.count),
+>             m("button", {onclick: () => { this.state.count++ }}, "Increment")
+>         )
+>     },
+> }
+> ```
+>
+> Mithril creates object component state as a prototype clone that inherits from the component itself, so you'll end up with both of these returning true for both instances, and you can reason that `this.state === CounterState` as a consequence of this.
+>
+> ```js
+> Counter.state === CounterState
+> this.state === Counter.state
+> ```
+>
+> Since `CounterState` is global and shared between both instances, it's pretty obvious now why modifying `this.state.count` ends up updating the same data in both instances.
+
+My redesign here does *not* allow this to happen, as you can't create state like that at all. The direct equivalent to the above `Counter` component would look like this in this redesign.
+
+```js
+let CounterState = {count: 0}
+
+function Counter() {
+    let [state] = ctrl.link(() => CounterState)
+    return m("div",
+        m("p", "Count: ", state.count),
+        m("button", "Increment", {onclick() { state.count++ }})
+    )
 }
 ```
 
-You can tell right away something about that redesign code just doesn't *feel* right. It feels awfully complicated for what it is, and it actually took a bit of thought for me to actually port it to replicate the issue detailed in that blog post.
+You can tell right away something about that redesign code just doesn't *feel* right. It feels awfully complicated for what it is, and I had to actually think about the scoping to replicate this issue in the redesign.
 
-In that article, it offers two ways to fix it, both of which are equally simple. In both cases, the redesign's explicitness makes it clear you *have* to handle dependencies and how they interact. It forces you to actually think about the logic, so you're less likely to run into subtle state bugs.
+In contrast, here's the *correct* implementation of the `Counter` component in both v2 and the redesign:
 
 ```js
-// React
-// Option 1: Fully controlled component.
-function TextInput({value, onChange}) {
-    return (
-        <input
-            value={value}
-            onChange={(ev) => onChange(ev.target.value)}
-        />
+// Mithril v2
+let Counter = {
+    oninit(vnode) { vnode.state = {count: 0} },
+    view({state}) {
+        return m("div",
+            m("p", "Count: ", state.count),
+            m("button", {onclick: () => { state.count++ }}, "Increment")
+        )
+    },
+}
+
+// This redesign
+function Counter() {
+    let [state] = ctrl.link(() => ({count: 0}))
+    return m("div",
+        m("p", "Count: ", state.count),
+        m("button", "Increment", {onclick() { state.count++ }})
     )
 }
 
-// Option 2: Fully uncontrolled component.
-class TextInput extends React.Component {
-    state = {
-        value: ""
-    }
-    render() {
-        return (
-            <input
-                value={this.state.value}
-                onChange={(ev) => {
-                    this.setState({ value: ev.target.value })
-                }}
-            />
-        )
-    }
-}
-
-// We can reset its internal state later by putting it in a fragment as the only
-// element in it and changing the key:
-class Parent {
-    state = {key: false}
-    reset() { this.setState({key: !this.state.key}) }
-    render() {
-        return <><TextInput key={state} /></>
-    }
-}
-
-// Mithril v2
-// Option 1: Fully controlled component.
-const TextInput = {
-    view: ({attrs: {value, onchange}}) =>
-        m("input", {value, onchange}),
-}
-
-// Option 2: Fully uncontrolled component.
-function TextInput() {
-    let value = ""
-    return {
-        view: () =>
-            m("input", {value, onchange: (ev) => value = ev.target.value}),
-    }
-}
-
-// We can reset its internal state later by putting it in a fragment as the only
-// element in it and changing the key:
-function Parent() {
-    let state = false
-    function reset() { state = !state; m.redraw() }
-    return {view: () => [m(TextInput, {key: state})]}
-}
-
-// Direct equivalent in this redesign
-// Option 1: Fully controlled component.
-function TextInput(_, attrs) {
-    return m("input", {
-        value: attrs.value,
-        onchange(ev) { return attrs.on.change(ev.target.value) },
-    })
-}
-
-// Option 2: Fully uncontrolled component.
-function TextInput() {
-    let value
-    return () =>
-        m("input", {value, on: {change(ev) { value = ev.target.value }}})
-}
-
-// We can reset its internal state later by just linking it.
-function Parent(ctrl) {
-    let state = false
-    function reset() { state = !state; ctrl.redraw() }
-    return () => m.link(state, m(TextInput))
+// Alternative in this redesign
+function Counter() {
+    let [count, setCount] = ctrl.link(() => 0)
+    return m("div",
+        m("p", "Count: ", count),
+        m("button", "Increment", {onclick() { setCount(count + 1) }})
+    )
 }
 ```
 

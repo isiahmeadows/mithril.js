@@ -3,6 +3,14 @@ module.exports = {
         "ecmaFeatures": {
             "jsx": true,
         },
+        "sourceType": "module"
     },
-    // "extends": ["plugin:@mithriljs/mithril/recommended"]
+    "env": {
+        "browser": true
+    },
+    "rules": {
+        // Until I can get a plugin that auto-uses `m` from Mithril.
+        "no-unused-vars": "off",
+        "max-len": ["error", 100]
+    }
 };

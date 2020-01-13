@@ -1,48 +1,65 @@
-import * as Model from "./model.mjs"
-import {m} from "../../../mithril/index.mjs"
+import {m} from "mithril"
+import * as Model from "../model.mjs"
 
-export default function Todo(ctrl, {todo: initialTodo}) {
-    const inputRef = m.ref()
+const ENTER_KEY = 13
+const ESCAPE_KEY = 27
 
-    ctrl.afterCommit(() => {
-        if (
-            initialTodo === Model.editing &&
-            inputRef.current !== document.activeElement
-        ) {
-            inputRef.current.focus()
-            inputRef.current.value = initialTodo.title
-            inputRef.current.selectionStart = initialTodo.title.length
-            inputRef.current.selectionEnd = initialTodo.title.length
-        }
-    })
+export default function Todo({model, todo}, info, {dispatch}) {
+    function toggleCompleted() {
+        dispatch(Model.setCompleted(todo, !todo.isCompleted))
+    }
 
-    return ({todo}) => m("li", {
-        class: {
-            completed: todo.completed,
-            editing: todo === Model.editing,
-        },
-    }, [
-        m("div.view", [
-            m("input.toggle[type=checkbox]", {
-                checked: todo.completed,
-                on: {click() { Model.setCompleted(todo, !todo.completed) }},
-            }),
-            m("label", todo.title, {on: {dblclick() { Model.edit(todo) }}}),
-            m("button.destroy", {on: {click() { Model.destroy(todo) }}}),
-        ]),
-        m("input.edit", m.capture(inputRef), {
-            on: {
-                keyup(ev) {
-                    if (ev.keyCode === 13) {
-                        Model.update(inputRef.current.value)
-                    } else if (ev.keyCode === 27) {
-                        Model.reset()
+    function edit() {
+        dispatch(Model.edit(todo))
+    }
+
+    function destroy() {
+        dispatch(Model.destroy(todo))
+    }
+
+    function setTitle(title) {
+        dispatch(Model.setTitle(todo, title))
+    }
+
+    function stopEditing() {
+        dispatch(Model.stopEditing(todo))
+    }
+
+    return [
+        m("li",
+            {class: {
+                completed: todo.isCompleted,
+                editing: Model.isEditing(model, todo),
+            }},
+            m("div.view",
+                m("input.toggle", {
+                    type: "checkbox",
+                    checked: todo.isCompleted,
+                    onclick: toggleCompleted,
+                }),
+                m("label", todo.title, {ondblclick: edit}),
+                m("button.destroy", {onclick: destroy}),
+            ),
+            m("input.edit", {
+                onkeyup(ev) {
+                    if (ev.keyCode === ENTER_KEY) {
+                        setTitle(todo, ev.target.value)
+                    } else if (ev.keyCode === ESCAPE_KEY) {
+                        stopEditing()
                     }
                 },
-                blur() {
-                    Model.update(inputRef.current.value)
+                onblur(ev) {
+                    setTitle(todo, ev.target.value)
+                    stopEditing()
                 },
-            },
-        }),
-    ])
+            }, info.isInit() && m.capture((input) => {
+                if (todo.isEditing && input !== document.activeElement) {
+                    input.focus()
+                    input.value = todo.title
+                    input.selectionStart = todo.title.length
+                    input.selectionEnd = todo.title.length
+                }
+            })),
+        ),
+    ]
 }

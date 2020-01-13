@@ -1,13 +1,1 @@
-module.exports = {
-    "plugins": ["no-esnext"],
-    "globals": {
-        "Promise": false,
-    },
-    "parserOptions": {
-        "sourceType": "module",
-        "ecmaVersion": 2018
-    },
-    "rules": {
-        "no-esnext/no-esnext": ["error", {"ecmaVersion": 5}],
-    }
-};
+module.exports = require("../../scripts/eslint-config.js")("ts")

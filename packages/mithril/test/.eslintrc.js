@@ -1,7 +1,1 @@
-module.exports = {
-    "globals": {
-        "describe": false,
-        "it": false,
-        "assert": false,
-    }
-}
+module.exports = require("../../../scripts/eslint-config.js")("ts")

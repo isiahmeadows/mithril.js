@@ -4,6 +4,10 @@
 
 These are things I need to do at some point, but just haven't gotten to yet. Obviously, this is not exhaustive, but it should give some insight into my plans.
 
+- Update `packages/mithril` to be updated with the current design
+
+- Resolve the various TODOs inline in the markdown itself. (These are generally higher-priority than the rest of these.)
+
 - Consider adding a second path variant that uses `host.key` for object properties instead. (This is basically the same as the current one otherwise.)
     - The goal here is to be interoperable with .NET Core's default behavior.
     - Periods will need URL-escaped as well - those are *not* escaped by default by `encodeURIComponent`.
@@ -13,31 +17,23 @@ These are things I need to do at some point, but just haven't gotten to yet. Obv
     - The second is likely to be the slowest as it's potentially creating a temporary string in the process.
     - Dodging the array allocation for the third might be beneficial since these are almost always small strings.
 
-- Allow `class: [...names]` and `class: {name: cond, ...}`
+- Allow ~~`class: [...names]` and~~ `class: {name: cond, ...}`
     - Must be valid class names unto themselves - this directly uses `classList.add(name)`.
     - This is partially for convenience, but it internally needs to do similar anyways.
     - Note: classes are merged via `||`, not `&&`. It only takes one condition to return `true` for it to be added.
+    - **Note: done for first, decided against for second.**
 
-- For `ctrl.catch`, have each factory do its own `try`/`finally` - it's simpler and [the difference is indiscernible in Chrome and Firefox, and the 25% speedup on the success path in Safari from merging them will still be almost a wash](http://jsben.ch/2mlaB).
+- For `m.catch`, have each factory do its own `try`/`finally` - it's simpler and [the difference is indiscernible in Chrome and Firefox, and the 25% speedup on the success path in Safari from merging them will still be almost a wash](http://jsben.ch/2mlaB).
     - The catch target will also have to be stored on each event handler error.
     - Also, only replace the handler and set up the `try`/`catch` for the children if `ctrl.catch` is actually called.
     - Note: each handler list replaces all previous handler lists. And unlike attributes, handlers aren't inherited.
 
-- Fuse the corrections in `design/non-redux/` into the `redesign` branch.
-    - This can be figured out just by doing `git checkout redesign-redux -- design/non-redux/` from the `redesign` branch and going from there.
+- Fuse the corrections in `design/old/` into the `redesign` branch.
+    - This can be figured out just by doing `git checkout redesign-redux -- design/old/` from the `redesign` branch and going from there.
     - Also, trusted vnodes are now a renderer concern.
     - `s/compatibile/compatible/` in `m.request`
     - Do other grammar/spell checks throughout it.
     - Change spaces to tabs. (`.eslintrc.js` didn't align with `.editorconfig`)
-
-- Update the `src/` stuff to align with the current `design/`
-    - `src/stream.mjs` is up to date
-    - `src/internal/abortable.mjs` is up to date, move to `ctrl.async`.
-    - `src/path.mjs` and `src/internal/query.mjs` are up to date.
-    - Most of the rest are *not* up to date.
-
-- Ensure the minified source bundle is generated with Terser option `reduce_vars: 0`.
-    - This can be dropped pending https://github.com/terser-js/terser/issues/350
 
 - Add component for carousels/slides/page transitions
     - Will require keeping both pages live during the transition
@@ -55,23 +51,33 @@ These are things I need to do at some point, but just haven't gotten to yet. Obv
 
 - Benchmark streams vs other alternatives detailed in [the rationale](rationale.md#creating-the-cell-abstraction), especially the other stream libraries.
     - This will likely be among the fastest, but it might not be *the* fastest.
+    - Note: streams are at-risk.
 
-- Move all this design documentation to a `design/` subfolder and prototype this.
+- Prototype this.
 
 - Draft a tested migration utility from v2 to this, prior to filing any sort of pull request.
 
-- Document what my inspirations were
+- Document what my inspirations and significant (known) influences were
     - Similar inspirations to that of state reducers, like Redux and React Hooks
     - Also: https://cycle.js.org/
     - Also: Glimmer VM and [Imba](https://medium.freecodecamp.org/the-virtual-dom-is-slow-meet-the-memoized-dom-bb19f546cc52) in spirit
     - Also: React Flare
+    - Also: React Hooks
     - Also: HDL languages like Verilog (which only have explicit input and output parameters)
     - Also: actors and continuation-passing style somewhat directly
     - Also: dataflow programming and stream processing in general
     - Also: functional programming in general. This is truly functional and reactive, at a deeper level than even Elm in places. (Really, this is closer to Scheme/OCaml territory.)
+    - Note: some of these inspirations are more for the non-redux redesign than the redux redesign, but they hold for all of it.
 
 - Run a poll to see what browsers Mithril actually runs in, so I can get a better picture of how popular it really is and what the baseline actually needs to be.
     - I would like to know actual analytics numbers/estimates per browser as well as what app/company so I can ensure responses can be accurately deduplicated.
+
+- Conceptualize a compiler for the component DSL that performs some very deep optimizations:
+    - Reduce trees to a single static render + child element renders where possible.
+    - Transform primitives to optimized component, attempt to elide unused state where possible.
+    - The `use` initializer will have to use a factored-out library call if `result` is passed anywhere.
+    - Integers should be used for states in finite state machines, and they should be merged where possible to reduce memory.
+    - It could also optimize the tree a *lot*, removing useless fragments and the like.
 
 - Maybe later show how this API is more easily interfaced with languages other than JS.
     - It'd certainly be interesting to have a serious and decent interop story with languages that aren't JS.

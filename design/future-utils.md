@@ -14,22 +14,6 @@ This is exposed under `mithril/query` and provides the ability to render a tree,
 
 This would mostly amount to bringing `mithril-query` into core, but just the core logic of it, not the integration with Should or Chai.
 
-## Advanced stream operators
-
-This is exposed under `mithril/stream-extras`, and contains several various more advanced stream operators. Some of these also have runtime dependencies, and `mithril/stream` intentionally contains *zero* by design.
-
-- `newStream = StreamExtras.debounce(stream, ms)` - Emit the latest value only if it's been at least `ms` milliseconds since the last value has been received from `stream`.
-- `newStream = StreamExtras.throttle(stream, ms)` - Emit the latest value only if it's been at least `ms` milliseconds since the last value has been sent from the returned stream.
-- `newStream = StreamExtras.cycle(ms, [...values])` - Cycle through `values`, emitting a value every `ms` milliseconds.
-- `newStream = StreamExtras.zip([...streams])` - Zip an array of streams into a stream of arrays, buffering values as necessary.
-    - Note: this does *not* drop values.
-- `newStream = StreamExtras.from(object)` - Create a stream that wraps an iterable or an object with a `.subscribe` method.
-- `newStream = StreamExtras.range(start = 0, end, step = 1)` - Create a stream that emits a range of values.
-- `newStream = StreamExtras.toStream(value)` - Converts `value` to a stream if it's either an observable, a promise, an observable-like object (including Mithril streams with the redesign), a thenable, or just about anything else that could be considered async emitting from a single channel.
-    - Note that only some things can be ended - notably promises and thenables can't.
-
-This can eventually include others, too, and is meant to be the catch-all kitchen sink of stream operators as long as they're reasonably useful and not too niche. It's not the main module because you generally don't need these (for example, `on` - event handlers are usually good enough, and attributes), but it's there in case you need at least some of them.
-
 ## Selector binding
 
 This is exposed under `mithril/select` and depends on `mithril/render`.

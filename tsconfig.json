@@ -1,0 +1,20 @@
+{
+    "compilerOptions": {
+        "allowJs": true,
+        "checkJs": false,
+        "lib": ["es5"],
+        "module": "es2015",
+        "moduleResolution": "node",
+        "skipLibCheck": true,
+        "sourceMap": true,
+        "strict": true,
+        "alwaysStrict": true,
+        "noImplicitReturns": true,
+        "target": "es5",
+        "noEmitOnError": true
+    },
+    "include": [
+        "scripts/globals.d.ts",
+        "**/*.ts"
+    ]
+}

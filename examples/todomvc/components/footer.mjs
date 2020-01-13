@@ -1,8 +1,8 @@
-import * as Model from "./model.mjs"
-import {linkTo, m} from "../../../mithril/index.mjs"
+import {linkTo, m} from "mithril"
+import * as Model from "../model.mjs"
 
-export default function Footer(ctrl, {showing}) {
-    const remaining = Model.countRemaining()
+export default function Footer({model, showing}, info, {dispatch}) {
+    const remaining = Model.remainingCount(model)
 
     function filter(href, label, children) {
         return m("li", m("a", linkTo(href), children, {
@@ -11,17 +11,18 @@ export default function Footer(ctrl, {showing}) {
     }
 
     return [
-        m("span#todo-count", [
+        m("span", {id: "todo-count"}, [
             m("strong", remaining),
             remaining === 1 ? " item left" : " items left",
         ]),
-        m("ul#filters", [
+        m("ul", {id: "filters"}, [
             filter("/", "all", "All"),
             filter("/active", "active", "Active"),
             filter("/completed", "completed", "Completed"),
         ]),
-        m("button#clear-completed", "Clear completed", {
-            on: {click() { Model.clear() }},
+        m("button", "Clear completed", {
+            id: "clear-completed",
+            onclick() { dispatch(Model.clearCompleted()) },
         }),
     ]
 }

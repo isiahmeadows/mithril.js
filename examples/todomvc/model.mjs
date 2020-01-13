@@ -1,77 +1,112 @@
-export const todos = JSON.parse(localStorage["todos-mithril"] || "[]")
-export let editing
+export function create(key, onUpdate) {
+    const serialized = localStorage.getItem(key)
+    if (!serialized) localStorage.setItem(key, "[]")
+    let id = 0
+    const todos = []
 
-let id = Math.max(-1, ...todos.map((t) => t.id)) + 1
+    if (serialized != null) {
+        for (const todo of JSON.parse(serialized)) {
+            todos.push(todo)
+            if (todo.id >= id) id = todo.id
+        }
+    }
 
-let awaitingFrame = false
-function persist() {
-    if (awaitingFrame) return
-    awaitingFrame = true
-    requestIdleCallback(() => {
-        localStorage["todos-mithril"] = JSON.stringify(todos)
-        awaitingFrame = false
+    let model = {editing: null, todos, id}
+    let saveRequested = false
+
+    return [model, (updater) => {
+        model = updater(model)
+        if (!saveRequested) {
+            saveRequested = true
+            requestIdleCallback(() => {
+                localStorage.setItem(key, JSON.stringify(model.todos))
+                saveRequested = false
+            })
+        }
+        onUpdate(model)
+    }]
+}
+
+export function addTodo(title) {
+    return ({id, todos, ...rest}) =>
+        ({...rest, id: id + 1, todos: [...todos, {
+            id,
+            title: title.trim(),
+            isCompleted: false,
+        }]})
+}
+
+export function setAllCompleted(isCompleted) {
+    return ({todos, ...rest}) => ({
+        ...rest,
+        todos: todos.map((todo) => ({...todo, isCompleted}))
     })
 }
 
-export function createTodo(title) {
-    todos.push({id, title: title.trim(), completed: false})
-    id++
-    persist()
-}
-
-export function setAllCompleted(completed) {
-    for (const t of todos) t.completed = completed
-    persist()
-}
-
-export function setCompleted(todo, completed) {
-    todo.completed = completed
-    persist()
-}
-
-export function destroy(todo) {
-    todos.splice(todos.indexOf(todo), 1)
-    persist()
-}
-
-export function clear() {
-    let count = 0
-    for (const todo of todos) if (!todo.completed) todos[count++] = todo
-    todos.length = count
-    persist()
-}
-
-export function edit(todo) {
-    editing = todo
-}
-
-export function update(todo, title) {
-    if (editing != null) {
-        editing.title = title.trim()
-        if (editing.title === "") todos.splice(todos.indexOf(todo), 1)
-        editing = null
-    }
-    persist()
+export function clearCompleted() {
+    return ({todos, ...rest}) => ({
+        ...rest,
+        todos: todos.filter((todo) => !todo.isCompleted),
+    })
 }
 
 export function reset() {
-    editing = null
+    return (model) => ({...model, editing: null})
 }
 
-export function countRemaining() {
-    let count = 0
-    for (const todo of todos) count += !todo.completed
-    return count
+export function todoCount(state) {
+    return state.todos.length
 }
 
-export function hasRemaining() {
-    return todos.some((todo) => !todo.completed)
+export function remainingCount(state) {
+    return state.todos.filter((todo) => todo.isCompleted).length
 }
 
-export function getTodosByStatus(showing) {
-    switch (showing) {
-        case "all": return todos
-        case "active": return todos.filter((todo) => !todo.completed)
-        case "completed": return todos.filter((todo) => todo.completed)
+export function hasRemaining(state) {
+    return state.todos.some((todo) => !todo.isCompleted)
+}
+
+export function getTodosByStatus(state, showing) {
+    if (showing === "all") {
+        return state.todos
+    } else if (showing === "active") {
+        return state.todos.filter((todo) => !todo.isCompleted)
+    } else /* if (showing === "completed") */ {
+        return state.todos.filter((todo) => todo.isCompleted)
     }
+}
+
+function setKey(todo, key, value) {
+    return ({todos, ...rest}) => ({...rest, todos: todos.map((found) =>
+        found.id !== todo.id ? found : {...found, [key]: value}
+    )})
+}
+
+export function destroy(todo) {
+    return ({todos, ...rest}) => ({
+        ...rest,
+        todos: todos.filter((found) => found.id !== todo.id)
+    })
+}
+
+export function setTitle(todo, title) {
+    title = title.trim()
+    if (title === "") return destroy(todo)
+    return setKey(todo, "title", title)
+}
+
+export function setCompleted(todo, isCompleted) {
+    return setKey(todo, "isCompleted", isCompleted)
+}
+
+export function isEditing(state, todo) {
+    return state.editing.id === todo.id
+}
+
+export function edit(todo) {
+    return (model) => ({...model, editing: todo})
+}
+
+export function stopEditing(todo) {
+    return (model) => isEditing(model, todo) ? {...model, editing: null} : model
 }

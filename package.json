@@ -12,27 +12,31 @@
     "test": "node make test"
   },
   "devDependencies": {
+    "@babel/plugin-proposal-class-properties": "^7.5.5",
+    "@rollup/plugin-typescript": "^4.0.0",
+    "@types/mocha": "^7.0.2",
+    "@typescript-eslint/eslint-plugin": "^2.26.0",
+    "@typescript-eslint/parser": "^2.26.0",
     "babel-eslint": "^10.0.2",
     "clean-assert": "^3.0.0",
-    "eslint": "^5.13.0",
+    "eslint": "^6.8.0",
     "eslint-plugin-babel": "^5.3.0",
     "eslint-plugin-no-esnext": "github:isiahmeadows/eslint-plugin-no-esnext",
     "eslint-plugin-react": "^7.12.4",
     "eslint-plugin-react-hooks": "^1.6.0",
     "esm": "^3.2.22",
     "lint-staged": "^8.1.3",
-    "mocha": "^6.1.4",
+    "mocha": "^7.1.1",
     "rollup": "^1.10.0",
     "shelljs": "^0.8.3",
-    "terser": "^3.17.0"
+    "terser": "^4.6.10",
+    "tslib": "^1.10.0",
+    "typescript": "^3.8.3"
   },
   "lint-staged": {
     "*.js": [
       "eslint . --fix",
       "git add"
     ]
-  },
-  "dependencies": {
-    "@babel/plugin-proposal-class-properties": "^7.5.5"
   }
 }
