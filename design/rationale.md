@@ -525,6 +525,54 @@ This came very close to the ideal, and it compressed *very* well, but it came wi
 
 So because of these growing pains, I found I couldn't stick with this abstraction.
 
+### Generators
+
+One idea I briefly entertained was using generators, yielding for attributes and yielding views.
+
+```js
+function *Counter() {
+    let count = 0
+    let attrs = yield
+    while (true) {
+        attrs = yield [
+            m("button", {onclick() { count-- }}, "-"),
+            m("div.count", count),
+            m("button", {onclick() { count++ }}, "+"),
+        ]
+    }
+}
+```
+
+It looks like it fits perfectly with JS here, and it does share most of the benefits of using streams and related, but there's two major issues:
+
+1. That's a lot of boilerplate.
+2. Generators have an "end", but components don't know when they're going to end, and it's unclear what should happen when a component "terminates", whether it should remove itself or if it should just freeze and become static, and whether "on remove" callbacks should be fired immediately after it "terminates", after the underlying node is removed (well after "termination" if it's static), or never. It's also unclear how to handle generator return values. (Components are plugins, not complete programs, contrary to popular belief.)
+
+### Async Generators
+
+Someone pointed out to me [a new (at the time of writing) framework](https://crank.js.org/blog/introducing-crank) based on async generators. Here's a simplified version of that:
+
+```js
+async function *Counter(updates) {
+    let count = 0
+    for await (const attrs of updates) {
+        yield [
+            m("button", {onclick() { count-- }}, "-"),
+            m("div.count", count),
+            m("button", {onclick() { count++ }}, "+"),
+        ]
+    }
+}
+```
+
+It's a similar story to using standard generators with similar benefits, but it still carries its issues + an additional one unique to async generators:
+
+1. That's a lot of boilerplate. It's not as bad as with standard generators.
+2. Async generators also have an "end", with the same problematic edge cases.
+3. Async generators are pull-based, incurring a lot of overhead. It's not possible to render everything in a single pass, and batching these for efficient processing will be nearly impossible. Global redraws would also be necessary to drive this unless you want the (in my honest opinion) counterintuitive event handling model that [Dear IMGUI](https://github.com/ocornut/imgui#usage) uses for handling clicks and such.
+
+Before I was told about that framework, I also considered using normal generators but yielding with `{await: ...}`, `{view: ...}`, and similar, effectively a blend of this + the previous section, but it only came out *very* boilerplatey and just overall not worth the complexity. I'll leave it up to the reader to synthesize that into a code example - it's not pretty.
+
 ### Others
 
 There's of course other things I've considered, too, even if just briefly, so I'm not going to go into too much detail:
