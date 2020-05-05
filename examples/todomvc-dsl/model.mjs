@@ -1,4 +1,4 @@
-import {lazy, ref} from "mithril"
+import {lazy, ref, setEnv} from "mithril"
 
 export function useModel(key) {
     const [model, updateModel] = lazy(() => {
@@ -19,7 +19,7 @@ export function useModel(key) {
 
     const saveRequested = ref(false)
 
-    return [model, (updater) => {
+    setEnv("dispatch", (updater) => {
         updateModel(updater)
         if (!saveRequested.current) {
             saveRequested.current = true
@@ -28,7 +28,9 @@ export function useModel(key) {
                 saveRequested.current = false
             })
         }
-    }]
+    })
+
+    return model
 }
 
 export function addTodo(title) {

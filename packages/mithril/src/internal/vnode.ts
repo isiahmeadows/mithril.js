@@ -30,6 +30,7 @@ export const enum Type {
     Static,
     Catch,
     Trust,
+    Component,
 }
 
 export type __TestTypeEnumIsMinimal = Assert<Type, VnodeNonPrimitive["%"]>
@@ -155,6 +156,10 @@ export interface ComponentInfo<S> {
     window?: Window
 }
 
+export type StateInit<
+    S, E extends Environment = Environment
+> = (info: ComponentInfo<S>, env: E) => Vnode
+
 export type Component<
     A extends VnodeAttributes, S, E extends Environment = Environment
 > = (attrs: A, info: ComponentInfo<S>, env: E) => Vnode
@@ -180,7 +185,7 @@ export type VnodeElement = object & {
 
 export type VnodeState = object & {
     "%": Type.State
-    _: [Component<VnodeAttributes, StateValue>, ...Vnode[]]
+    _: StateInit<StateValue>
 }
 
 export type VnodeLink = object & {
@@ -209,6 +214,11 @@ export type VnodeTrust = object & {
     _: TrustedString
 }
 
+export type VnodeComponent = object & {
+    "%": Type.Component
+    _: [Component<VnodeAttributes, StateValue>, ...Vnode[]]
+}
+
 export type Vnode =
     | VnodeHole
     | VnodeAttributes
@@ -225,18 +235,14 @@ export type VnodeNonPrimitive =
     | VnodeStatic
     | VnodeCatch
     | VnodeTrust
+    | VnodeComponent
 
 // Strictly for vnodes whose children are arrays
 export type NonPrimitiveParentVnode =
     | VnodeElement
-    | VnodeState
     | VnodeLink
     | VnodeCatch
-
-// Strictly for vnodes whose children are simple values
-export type NonPrimitiveDecoratorVnode =
-    | VnodeStatic
-    | VnodeKeyed
+    | VnodeComponent
 
 // The one and only function exported from this
 export function create<T extends VnodeNonPrimitive>(

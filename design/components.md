@@ -71,7 +71,7 @@ The component info object (`info` below) contains all the necessary bits for com
             - You can set things like the `lang` attribute accordingly.
             - Extra nodes can be added for things like modals and alerts.
     - Note: when you invoke `info.render(target)`, this only clears resets attributes it tracks.
-    - When called in `m.capture` or `info.whenRemoved`, it's *highly* recommended to await it before returning.
+    - When called in `info.whenReady` or `info.whenRemoved`, it's *highly* recommended to await it before returning.
     - This makes stuff like userland modals trivial.
     - You can also usefully render to captured refs this way.
 
@@ -95,7 +95,7 @@ The component info object (`info` below) contains all the necessary bits for com
     - This gets the render type. For the DOM renderer, it returns `"dom"`, and for the static renderer, it returns `"static"`. Other renderers are encouraged to return their own values for these.
 
 - Set component ref: `info.ref = ref`
-    - This may be called at any point in time, but only the latest value set before `info.whenReady` callbacks are invoked is used as the argument to them.
+    - This may be called at any point in time, but `info.whenReady` callbacks are just invoked as `callback(info.ref)` where `info` is the parent `info` for that callback.
     - The initial `ref` is `undefined`, and previous refs are persisted. It can also be set to any value.
     - This is different from React's `useImperativeHandle` in that it lets you set the ref at any time.
 
@@ -129,11 +129,24 @@ The component info object (`info` below) contains all the necessary bits for com
         - Useful in JSDOM
     - Render root: `info.root`
 
+### Design points for performance
+
+You may be wondering why a few of these are defined on `info` and why this `info` object even exists. That's a valid question. Here's some answers:
+
+- "On ready" callbacks are generally scheduled at the global level. In v2, this is done via reading and binding `oncreate`/`onupdate` callbacks, but with `info.whenReady(callback)`, you don't need to feature-detect at all - you can just do it directly whenever that method is invoked.
+- "On remove" callbacks are generally scheduled as the component is visited. Reducing that to an inner array means no type checks are required, just an `array != null` or `array.length !== 0`.
+- `info.ref` as a settable property trivializes that process, and it's just read whenever it's ready. There's literally no extra overhead involved.
+- Using a single `info` object injected means we aren't doing polymorphic code accesses. The only polymorphic invocation involved is invoking the component.
+- Setting keys via `info.set("key", value)` is for similar reasons to `info.whenReady(...)` - the environment object can just be tracked globally, and `set` can just assign directly to it, creating it if necessary and setting a bit so it doesn't get recreated again (and to pre-allocate it on subsequent runs to avoid a branch prediction penalty).
+- Stuff like `info.isInitial()` and `info.isParentMoving()` can just test a bit - they don't need to have a whole property dedicated to themselves.
+
+> Also, in general, everything that *could* be a getter, setter, or proxy is a function, so those stuck developing against IE (and Edge's IE Mode) can shim as appropriate.
+
 ## Lifecycles
 
 Lifecycles are much more streamlined, and there's fewer of them. It's bound to inline vnodes, so you can use them literally anywhere without them polluting element or component attributes. You capture refs just by capturing the return value of a component It consists of a hyperscript call you use to capture the parent vnode's ref + a few instance hooks:
 
-- `callback` in `m.capture(callback)` is called with the ref after all changes or movement have been committed with this vnode, provided it wasn't removed.
+- `callback` in `info.whenReady(callback)` is called with the ref after all changes or movement have been committed with this vnode, provided it wasn't removed.
     - Useful for DOM initialization and updating.
 
 - `callback` in `info.whenRemoved(callback)` is called after all changes or movement have been committed with this vnode, provided it wasn't removed. It may return a promise to block removal. This is also called on parent error but not self or child error.

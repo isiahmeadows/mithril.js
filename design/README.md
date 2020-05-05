@@ -22,6 +22,7 @@ If you have *any* feedback, questions, or concerns, please do feel free to [file
 - [Requests](request.md)
 - [Transitions](transition.md)
 - [Rationale](rationale.md)
+- [Why not X?](rationale.md)
 - [App comparison](examples/threaditjs/README.md)
 - [Future utilities not part of the MVP](future-utils.md)
 - [Internal architecture](architecture/README.md)

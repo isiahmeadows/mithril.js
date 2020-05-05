@@ -14,7 +14,7 @@ export function create(key, onUpdate) {
     let model = {editing: null, todos, id}
     let saveRequested = false
 
-    return [model, (updater) => {
+    return {model, dispatch: (updater) => {
         model = updater(model)
         if (!saveRequested) {
             saveRequested = true
@@ -24,7 +24,7 @@ export function create(key, onUpdate) {
             })
         }
         onUpdate(model)
-    }]
+    }}
 }
 
 export function addTodo(title) {

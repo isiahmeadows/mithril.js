@@ -43,7 +43,9 @@ export type SentinelValue = object & {
     [SentinelValueMarker]: void
 }
 
-export const sentinel = {} as SentinelValue
+export const SENTINEL = {} as SentinelValue
+
+export function noop() { return void 0 }
 
 // For things that need to run async but don't need scheduled
 export const promise = Promise.resolve()

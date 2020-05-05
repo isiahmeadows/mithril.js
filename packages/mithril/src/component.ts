@@ -5,15 +5,20 @@
 // prefer array allocation and avoiding object allocation where possible/
 // practical. Everything here is perf-sensitive for the user.
 //
+// One optimization in particular is that everything here uses global variables
+// for its lifecycle management. Also, almost every implementation here uses
+// minimal state to do everything.
+//
 // If I had dependent types + induction, this would be so much easier to verify.
 
+import {noop} from "./internal/util"
 import {isEqual} from "./internal/is-equal"
 import {AbortSignal, AbortController} from "./internal/dom"
 import {
     VnodeAttributes,
     ComponentInfo, Environment, EnvironmentValue,
     WhenRemovedResult, WhenRemovedCallback, Vnode, Component,
-    ErrorValue, RenderTarget, StateValue, CloseCallback
+    ErrorValue, RenderTarget, StateValue
 } from "./internal/vnode"
 
 /*************************************/
@@ -48,10 +53,19 @@ const enum Bits {
 }
 
 let currentMask: number = Bits.NotActive
-let currentInfo: Maybe<Info>
-let currentEnv: Maybe<Environment>
-let currentCells: Maybe<CellList>
-let currentRemoveTarget: Maybe<RemoveTarget>
+let currentInfo: Info
+let currentEnv: Environment
+let currentCells: CellList
+let currentRemoveTarget: RemoveTarget
+
+// Note: this should only be called in dev mode.
+function validateContext() {
+    if (!currentMask) {
+        throw new TypeError(
+            "This must only be used inside a component context."
+        )
+    }
+}
 
 function runClose(
     info: Info,
@@ -59,16 +73,14 @@ function runClose(
 ): Maybe<Promise<WhenRemovedResult>> {
     // Wait for all to settle - doesn't matter what the result is.
     let open = 1
-    let resolve: Maybe<() => void>
+    let resolve: () => void
 
     function onResolve() {
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        if (!--open) resolve!()
+        if (!--open) resolve()
     }
 
     function onReject(e: ErrorValue) {
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        if (!--open) resolve!()
+        if (!--open) resolve()
         // Report rejections inline, so they get properly accounted for.
         info.throw(e, false)
     }
@@ -100,157 +112,161 @@ function runClose(
     return void 0
 }
 
-function bindBranchCleanup(
-    cells: CellList, index: number, info: Info
-): WhenRemovedCallback {
-    return () => {
-        cells[index + 5] = void 0
-        const removes = cells[index + 2] as WhenRemovedCallback[]
-        return (
-            removes.length ? runClose(info, removes) : void 0
-        ) as Any as WhenRemovedResult
+// Note: this is a very perf-critical function, as many other functions depend
+// on it. It also goes to great lengths to minimize stack usage, it only
+// allocates the remove closure if child remove callbacks exist, and it attempts
+// to reuse the same closure context where possible/practical.
+export function guard<T>(cond: Any, block: () => T): T {
+    if (__DEV__) validateContext()
+    const prevMask = currentMask
+    const cells = currentCells
+    const prevRemoveTarget = currentRemoveTarget
+
+    if (prevMask & Bits.IsFirstRun) {
+        currentMask = Bits.IsActive | Bits.IsNestedRemove
+        cells.push(
+            1, // close open count
+            currentCells = [], // child cells on run, close resolve after closed
+            currentRemoveTarget = [],
+            void 0 // onRemove
+        )
+    } else {
+        currentMask = Bits.IsActive | Bits.IsNestedRemove |
+            // Intentionally using an implicit coercion here.
+            (!!cond as Any as number) << Bits.IsFirstRunOffset
+        currentRemoveTarget = cells[(prevMask >>> Bits.IndexOffset) + 1] as
+            WhenRemovedCallback[]
+        currentCells = cells[(prevMask >>> Bits.IndexOffset) + 2] as CellList
+        if (currentRemoveTarget.length) {
+            currentRemoveTarget = cells[(prevMask >>> Bits.IndexOffset) + 1] =
+                []
+        }
+        if (currentMask & Bits.IsFirstRun) currentCells.length = 0
     }
-}
-
-function performBranchCreate<T>(
-    cells: CellList, prevMask: number, block: () => T
-) {
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const info = currentInfo!
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const prevRemoveTarget = currentRemoveTarget!
-
-    cells.push(
-        currentCells = [],
-        currentRemoveTarget = [],
-        1, // close open count
-        void 0, // close resolve
-        void 0, // onRemove
-        bindBranchCleanup(cells, prevMask >>> Bits.IndexOffset, info)
-    )
-    currentMask = Bits.IsNestedRemove | Bits.IsActive
 
     try {
         return block()
     } finally {
-        resolveProxyRemove(cells, prevMask, prevRemoveTarget)
-    }
-}
+        const childMask = currentMask
+        const info = currentInfo
+        const index = prevMask >>> Bits.IndexOffset
+        currentCells = cells
+        currentRemoveTarget = prevRemoveTarget
+        currentMask = prevMask + (4 << Bits.IndexOffset)
 
-function addToCloseList<T>(
-    cells: CellList,
-    info: Info,
-    index: number,
-    value: Await<T>
-) {
-    if (value != null) {
-        // Add it, then remove it once it resolves.
-        (cells[index] as number)++
-        ;(value as PromiseLike<T>).then(() => {
-            if (!--(cells[index] as number)) {
-                (cells[index + 1] as () => void)()
-            }
-        }, (e: ErrorValue) => {
-            if (!--(cells[index] as number)) {
-                (cells[index + 1] as () => void)()
-            }
-            info.throw(e, false)
-        })
-    }
-}
+        if (childMask & Bits.IsFirstRun) {
+            const childRemoves = cells[index + 1] as WhenRemovedCallback[]
 
-function scheduleCloseRemove(cells: CellList, index: number) {
-    if ((cells[index] as number) > 1) {
-        let onRemove = cells[index + 2] as Maybe<WhenRemovedCallback>
-        if (onRemove == null) {
-            cells[index + 2] = onRemove = () => {
-                cells[index + 2] = void 0
-                // If there's nothing to await, let's just skip the ceremony.
-                if (!--(cells[index] as number)) {
-                    return void 0 as Any as WhenRemovedResult
+            if (childRemoves.length) {
+                const result = runClose(info, childRemoves)
+                if (result != null) {
+                    // Add it, then remove it once it resolves.
+                    (cells[index] as number)++
+                    ;(result as PromiseLike<WhenRemovedResult>).then(() => {
+                        if (!--(cells[index] as number)) {
+                            (cells[index + 2] as () => void)()
+                        }
+                    }, (e: ErrorValue) => {
+                        if (!--(cells[index] as number)) {
+                            (cells[index + 2] as () => void)()
+                        }
+                        info.throw(e, false)
+                    })
                 }
-                return new Promise<WhenRemovedResult>((resolve) => {
-                    cells[index + 1] = resolve
-                })
             }
         }
 
-        const mask = currentMask
-        currentMask = mask | Bits.HasRemoveCallback
-        if (mask & Bits.IsNestedRemove) {
-            (currentRemoveTarget as WhenRemovedCallback[]).push(onRemove)
-        } else {
-            (currentRemoveTarget as Info).whenRemoved(onRemove)
+        // Run this after, so any applicable pending child removes are also
+        // handled.
+        if (
+            childMask & Bits.HasRemoveCallback ||
+            (cells[index + 2] as number) > 1
+        ) {
+            currentMask |= Bits.HasRemoveCallback
+            let onRemove = cells[index + 3] as Maybe<WhenRemovedCallback>
+            if (onRemove == null) {
+                cells[index + 3] = onRemove = () => {
+                    const removes = cells[index + 2] as WhenRemovedCallback[]
+                    // Clear out unneeded memory references.
+                    cells[index + 1] = cells[index + 2] = cells[index + 3] =
+                        void 0
+                    // If there's nothing to await, let's just skip the
+                    // ceremony.
+                    if (--(cells[index] as number)) {
+                        const p = new Promise<WhenRemovedResult>((resolve) => {
+                            cells[index + 2] = resolve
+                        })
+                        if (!removes.length) return p
+                        removes.push(() => p)
+                    } else if (!removes.length) {
+                        return void 0 as Any as WhenRemovedResult
+                    }
+                    return runClose(info, removes) as Any as WhenRemovedResult
+                }
+            }
+
+            if (childMask & Bits.IsNestedRemove) {
+                (currentRemoveTarget as WhenRemovedCallback[]).push(onRemove)
+            } else {
+                (currentRemoveTarget as Info).whenRemoved(onRemove)
+            }
         }
     }
 }
 
-function resolveBranch(
-    prevCells: CellList, index: number, changed: boolean
-) {
-    if (changed) {
-        const childRemoves = prevCells[index + 1] as WhenRemovedCallback[]
-
-        if (childRemoves.length) {
-            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            const info = currentInfo!
-            addToCloseList(prevCells, info, index + 2,
-                runClose(info, childRemoves)
-            )
-        }
-    }
-
-    scheduleCloseRemove(prevCells, index)
-}
-
-function performBranchUpdate<T>(
-    prevCells: CellList, prevMask: number, changed: boolean, block: () => T
-) {
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const prevRemoveTarget = currentRemoveTarget!
+export function useEffect(block: () => Maybe<WhenRemovedCallback>): void
+export function useEffect<D extends Any>(
+    dependency: D,
+    block: () => Maybe<WhenRemovedCallback>
+): void
+export function useEffect<D extends Any>(
+    dependency: D | (() => Maybe<WhenRemovedCallback>),
+    block?: () => Maybe<WhenRemovedCallback>
+): void {
+    if (__DEV__) validateContext()
+    const prevMask = currentMask
+    const cells = currentCells
     const index = prevMask >>> Bits.IndexOffset
-    const childCells = currentCells = prevCells[index] as CellList
-    const childRemoves = prevCells[index + 1] as WhenRemovedCallback[]
-    currentMask = Bits.IsActive | Bits.IsNestedRemove |
-        // Intentionally using an implicit coercion here.
-        (changed as Any as number) << Bits.IsFirstRunOffset
+    let callback: Maybe<WhenRemovedCallback>
 
-    if (changed) childCells.length = 0
-    currentRemoveTarget = childRemoves.length ? [] : childRemoves
-
-    try {
-        return block()
-    } finally {
-        resolveProxyRemove(prevCells, prevMask, prevRemoveTarget)
-        resolveBranch(prevCells, index, changed)
+    if (arguments.length < 2) {
+        currentMask = prevMask + (1 << Bits.IndexOffset)
+        if (prevMask & Bits.IsFirstRun) {
+            callback = (dependency as () => Maybe<WhenRemovedCallback>)()
+            if (typeof callback !== "function") callback = void 0
+            cells.push(callback)
+        } else {
+            callback = cells[index] as Maybe<WhenRemovedCallback>
+        }
+    } else {
+        currentMask = prevMask + (2 << Bits.IndexOffset)
+        if (prevMask & Bits.IsFirstRun) {
+            callback = (block as () => WhenRemovedCallback)()
+            if (typeof callback !== "function") callback = void 0
+            cells.push(dependency, callback)
+        } else {
+            const prev = cells[index] as D
+            cells[index] = dependency
+            if (isEqual(prev, dependency as D)) {
+                callback = cells[index + 1] as Maybe<WhenRemovedCallback>
+            } else {
+                callback = (block as () => WhenRemovedCallback)()
+                if (typeof callback !== "function") callback = void 0
+                cells[index + 1] = callback
+            }
+        }
     }
+
+    if (callback != null) whenRemoved(callback)
 }
 
-function resolveProxyRemove(
-    prevCells: CellList,
-    prevMask: number,
-    prevRemoveTarget: RemoveTarget
-) {
-    const childMask = currentMask
-    currentCells = prevCells
-    currentRemoveTarget = prevRemoveTarget
-    currentMask = (prevMask + (6 << Bits.IndexOffset)) |
-        childMask & Bits.HasRemoveCallback
-
-    if (childMask & Bits.HasRemoveCallback) {
-        if (childMask & Bits.IsNestedRemove) {
-            (prevRemoveTarget as WhenRemovedCallback[]).push(
-                prevCells[
-                    (prevMask >>> Bits.IndexOffset) + 5
-                ] as WhenRemovedCallback
-            )
-        } else {
-            (prevRemoveTarget as Info).whenRemoved(
-                prevCells[
-                    (prevMask >>> Bits.IndexOffset) + 5
-                ] as WhenRemovedCallback
-            )
-        }
+export function whenRemoved(callback: () => Await<WhenRemovedResult>) {
+    if (__DEV__) validateContext()
+    currentMask |= Bits.HasRemoveCallback
+    if (currentMask & Bits.IsNestedRemove) {
+        (currentRemoveTarget as WhenRemovedCallback[]).push(callback)
+    } else {
+        (currentRemoveTarget as Info).whenRemoved(callback)
     }
 }
 
@@ -259,6 +275,7 @@ interface IfElseOpts<T> {
     else(): T
 }
 
+// Implemented mostly in userland as it's basically just duplicating `guard`.
 export function when<T>(cond: Any, opts: () => T): T
 export function when<T>(cond: Any, opts: IfElseOpts<T>): T
 export function when<T>(
@@ -268,7 +285,9 @@ export function when<T>(
     cond: Any,
     opts: Partial<IfElseOpts<T>> | (() => T)
 ): Maybe<T> {
+    if (__DEV__) validateContext()
     const coerced = !!cond
+    let changed = true
     let block: Maybe<() => T>
 
     if (typeof opts === "function") {
@@ -277,255 +296,84 @@ export function when<T>(
         block = coerced ? opts.then : opts.else
     }
 
-    const prevMask = currentMask
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const prevCells = currentCells!
-
-    if (!prevMask) {
-        throw new TypeError("This must be called inside a component context.")
-    }
-
-    if (typeof block === "function") {
-        if (prevMask & Bits.IsFirstRun) {
-            prevCells.push(coerced)
-            return performBranchCreate(
-                prevCells, prevMask + (1 << Bits.IndexOffset), block
-            )
-        } else {
-            const index = prevMask >>> Bits.IndexOffset
-            const prevCond = prevCells[index]
-            prevCells[index] = coerced
-            return performBranchUpdate(
-                prevCells, prevMask + (1 << Bits.IndexOffset),
-                prevCond !== coerced, block
-            )
-        }
+    if (currentMask & Bits.IsFirstRun) {
+        currentCells.push(true)
     } else {
-        // If no branch needs taken, let's avoid most of the excess boilerplate
-        // by skipping the usual try/catch block and such.
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        const info = currentInfo!
-        const index = prevMask >>> Bits.IndexOffset
-
-        currentMask = prevMask + (7 << Bits.IndexOffset)
-        if (prevMask & Bits.IsFirstRun) {
-            prevCells.push(
-                coerced,
-                [], // current cells
-                [], // current remove target
-                1, // close open count
-                void 0, // close resolve
-                void 0, // onRemove
-                bindBranchCleanup(prevCells, index + 1, info)
-            )
-        } else {
-            const prevCond = prevCells[index + 6]
-            prevCells[index + 6] = coerced
-            const changed = prevCond !== coerced
-            ;(prevCells[index] as CellList).length = 0
-            resolveBranch(prevCells, index + 1, changed)
-        }
-
-        return void 0
-    }
-}
-
-export function guard<T>(cond: Any, block: () => T): T {
-    const prevMask = currentMask
-
-    if (!prevMask) {
-        throw new TypeError("This must be called inside a component context.")
+        changed =
+            (currentCells[currentMask >>> Bits.IndexOffset] as boolean) !==
+            (currentCells[currentMask >>> Bits.IndexOffset] = coerced)
     }
 
-    if (prevMask & Bits.IsFirstRun) {
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        return performBranchCreate(currentCells!, prevMask, block)
-    } else {
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        return performBranchUpdate(currentCells!, prevMask, !!cond, block)
-    }
-}
+    currentMask += 1 << Bits.IndexOffset
 
-// TODO: lower this to primitives
-export function useEffect(block: () => WhenRemovedCallback): void
-export function useEffect(
-    dependency: Any,
-    block: () => WhenRemovedCallback
-): void
-export function useEffect(
-    dependency: Any,
-    block?: () => WhenRemovedCallback
-): void {
-    const prevMask = currentMask
-
-    if (!prevMask) {
-        throw new TypeError("This must be called inside a component context.")
-    }
-
-    if (block == null) {
-        whenRemoved(memo(dependency as () => WhenRemovedCallback))
-    } else {
-        guard(dependency, () => { whenRemoved(memo(block)) })
-    }
-}
-
-export function whenRemoved(callback: () => Await<WhenRemovedResult>) {
-    const mask = currentMask
-
-    if (!mask) {
-        throw new TypeError("This must be called inside a component context.")
-    }
-
-    currentMask = mask | Bits.HasRemoveCallback
-    if (mask & Bits.IsNestedRemove) {
-        (currentRemoveTarget as WhenRemovedCallback[]).push(callback)
-    } else {
-        (currentRemoveTarget as Info).whenRemoved(callback)
-    }
-}
-
-function initializePortal(
-    cells: CellList, index: number, info: Info, target: RenderTarget
-) {
-    info.render<StateValue>(target, (info) => {
-        cells[index + 2] = info
-        return cells[index + 1] as Vnode
-    }).then(
-        (close) => {
-            if (cells[index] === target) {
-                cells[index + 3] = close
-            } else {
-                close().catch((e) => { info.throw(e as ErrorValue, false) })
-            }
-        },
-        (e) => { info.throw(e as ErrorValue, true) }
+    return guard(
+        changed,
+        typeof block === "function" ? block : noop
     )
 }
 
+// Not a common need, so it's implemented in userland.
 export function usePortal(
     target: RenderTarget,
     ...children: Vnode[]
-): void
-export function usePortal(target: RenderTarget): void {
-    const mask = currentMask
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const cells = currentCells!
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const info = currentInfo!
-    const index = mask >>> Bits.IndexOffset
+): Use<void> {
+    const info = useInfo()
+    const childrenRef = ref<Vnode[]>()
+    const infoRef = ref<ComponentInfo<StateValue>>()
 
-    if (!mask) {
-        throw new TypeError("This must be called inside a component context.")
-    }
+    childrenRef.current = children
 
-    currentMask = (mask + (8 << Bits.IndexOffset)) | Bits.HasRemoveCallback
-    if (mask & Bits.IsFirstRun) {
-        cells.push(
-            void 0, // target
-            void 0, // children
-            void 0, // child info
-            // eslint-disable-next-line @typescript-eslint/ban-ts-ignore
-            // @ts-ignore https://github.com/microsoft/TypeScript/issues/35866
-            () => {
-                const closeCallback = cells[index + 3] as Maybe<CloseCallback>
-                cells[index + 4] = undefined
-                return closeCallback != null ? closeCallback() : void 0
-            },
-            void 0, // child close
-            1, // close open count
-            void 0, // close resolve
-            void 0 // onRemove
-        )
-    }
+    // This is intentionally before the `useEffect` as `useEffect` runs on
+    // first run and there's no redraw handle on first run.
+    infoRef.current?.redraw().catch((e) => {
+        info.throw(e as ErrorValue, true)
+    })
 
-    if (currentMask & Bits.IsNestedRemove) {
-        (currentRemoveTarget as WhenRemovedCallback[]).push(
-            cells[index + 4] as WhenRemovedCallback
-        )
-    } else {
-        (currentRemoveTarget as Info).whenRemoved(
-            cells[index + 4] as WhenRemovedCallback
-        )
-    }
-
-    const children = [] as Vnode[]
-    for (let i = 1; i < arguments.length; i++) {
-        children.push(arguments[i] as Vnode)
-    }
-
-    const prevTarget = cells[index] as RemoveTarget
-    cells[index] = target
-    cells[index + 1] = children
-
-    if (mask & Bits.IsFirstRun) {
-        initializePortal(cells, index, info, target)
-    } else {
-        if (prevTarget !== target) {
-            const closeCallback = cells[index + 3] as Maybe<CloseCallback>
-            initializePortal(cells, index, info, target)
-            if (closeCallback) {
-                addToCloseList(cells, info, index + 5, closeCallback())
-            }
-        }
-
-        scheduleCloseRemove(cells, index + 5)
-        const childInfo = cells[index + 2] as Maybe<ComponentInfo<StateValue>>
-        if (childInfo != null) {
-            childInfo.redraw().catch((e) => {
-                info.throw(e as ErrorValue, true)
-            })
-        }
-    }
+    return use(target, (target, signal) => {
+        infoRef.current = void 0
+        return info.render<StateValue>(target, (childInfo) => {
+            infoRef.current = childInfo
+            return childrenRef.current
+        }).then((close) => {
+            if (signal.aborted) return close()
+            signal.onabort = close
+            return void 0
+        })
+    })
 }
 
 export type Ref<T> = object & {
     current: T
 }
 
-export function ref<T>(initialValue: T): Ref<T> {
+export function ref<T>(): Ref<T | undefined>
+export function ref<T>(initialValue: T): Ref<T>
+export function ref<T>(initialValue?: T): Ref<T | undefined> {
+    if (__DEV__) validateContext()
     const prevMask = currentMask
-
-    if (!prevMask) {
-        throw new TypeError("This must be called inside a component context.")
-    }
-
     currentMask = prevMask + (1 << Bits.IndexOffset)
     if (prevMask & Bits.IsFirstRun) {
         const value = {current: initialValue}
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        currentCells!.push(value)
+        currentCells.push(value)
         return value
     } else {
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        return currentCells![prevMask >>> Bits.IndexOffset] as Ref<T>
+        return currentCells[prevMask >>> Bits.IndexOffset] as Ref<T>
     }
 }
 
 export function useInfo(): Info {
-    if (!currentMask) {
-        throw new TypeError("This must be called inside a component context.")
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    return currentInfo!
+    if (__DEV__) validateContext()
+    return currentInfo
 }
 
 export function useEnv(): Environment {
-    if (!currentMask) {
-        throw new TypeError("This must be called inside a component context.")
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    return currentEnv!
+    if (__DEV__) validateContext()
+    return currentEnv
 }
 
 export function setEnv(key: PropertyKey, value: EnvironmentValue): void {
-    if (!currentMask) {
-        throw new TypeError("This must be called inside a component context.")
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    currentInfo!.set(key, value)
+    if (__DEV__) validateContext()
+    currentInfo.set(key, value)
 }
 
 /*******************************************/
@@ -564,17 +412,19 @@ export function component<
         const prevEnv = currentEnv
         const prevCells = currentCells
         const prevRemoveTarget = currentRemoveTarget
+        const cells = info.state
 
+        // Fast path: always set everything.
+        currentMask = Bits.IsActive
         currentInfo = info
         currentEnv = env
+        currentCells = cells as CellList[]
         currentRemoveTarget = info
 
-        if (info.state == null) {
+        // Slow path: set another variable and allocate the array.
+        if (cells == null) {
             currentMask = Bits.IsActive | Bits.IsFirstRun
             currentCells = info.state = []
-        } else {
-            currentMask = Bits.IsActive
-            currentCells = info.state
         }
 
         try {
@@ -607,23 +457,18 @@ export function isInitial(): boolean {
 export function slot<T extends Any>(
     initialValue: T
 ): [T, (value: T) => Promise<void>] {
-    const prevMask = currentMask
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const cells = currentCells!
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const info = currentInfo!
-    const index = prevMask >>> Bits.IndexOffset
+    if (__DEV__) validateContext()
+    const cells = currentCells
+    const info = currentInfo
+    const index = currentMask >>> Bits.IndexOffset
 
-    if (!prevMask) {
-        throw new TypeError("This must be called inside a component context.")
-    }
-
-    currentMask = prevMask + (1 << Bits.IndexOffset)
-    if (prevMask & Bits.IsFirstRun) {
-        cells.push(initialValue)
+    if (currentMask & Bits.IsFirstRun) {
+        currentCells.push(initialValue)
     } else {
-        initialValue = cells[index] as T
+        initialValue = currentCells[index] as T
     }
+
+    currentMask += 1 << Bits.IndexOffset
 
     return [initialValue, (next: T): Promise<void> => {
         cells[index] = next
@@ -635,24 +480,19 @@ export function useReducer<T extends Any, A extends Any>(
     init: () => T,
     reducer: (prev: T, action: A) => T
 ): [T, (action: A) => Promise<void>] {
-    const prevMask = currentMask
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const cells = currentCells!
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const info = currentInfo!
-    const index = prevMask >>> Bits.IndexOffset
+    if (__DEV__) validateContext()
+    const cells = currentCells
+    const info = currentInfo
+    const index = currentMask >>> Bits.IndexOffset
     let value: T
 
-    if (!prevMask) {
-        throw new TypeError("This must be called inside a component context.")
-    }
-
-    currentMask = prevMask + (1 << Bits.IndexOffset)
-    if (prevMask & Bits.IsFirstRun) {
-        cells.push(value = init())
+    if (currentMask & Bits.IsFirstRun) {
+        currentCells.push(value = init())
     } else {
         value = cells[index] as T
     }
+
+    currentMask += 1 << Bits.IndexOffset
 
     return [value, (next: A): Promise<void> => {
         cells[index] = reducer(cells[index] as T, next)
@@ -664,24 +504,19 @@ export function useReducer<T extends Any, A extends Any>(
 export function lazy<T extends Any>(
     init: () => T
 ): [T, (updater: (value: T) => T) => Promise<void>] {
-    const prevMask = currentMask
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const cells = currentCells!
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const info = currentInfo!
-    const index = prevMask >>> Bits.IndexOffset
+    if (__DEV__) validateContext()
+    const cells = currentCells
+    const info = currentInfo
+    const index = currentMask >>> Bits.IndexOffset
     let value: T
 
-    if (!prevMask) {
-        throw new TypeError("This must be called inside a component context.")
-    }
-
-    currentMask = prevMask + (1 << Bits.IndexOffset)
-    if (prevMask & Bits.IsFirstRun) {
-        cells.push(value = init())
+    if (currentMask & Bits.IsFirstRun) {
+        currentCells.push(value = init())
     } else {
         value = cells[index] as T
     }
+
+    currentMask += 1 << Bits.IndexOffset
 
     return [value, (update: (value: T) => T): Promise<void> => {
         cells[index] = update(cells[index] as T)
@@ -698,83 +533,67 @@ export function memo<T extends Any, D extends Any>(
     dependency: D | (() => T),
     init?: (value: D) => T
 ): T {
+    if (__DEV__) validateContext()
     const prevMask = currentMask
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const cells = currentCells!
-    const index = prevMask >>> Bits.IndexOffset
 
-    if (!prevMask) {
-        throw new TypeError("This must be called inside a component context.")
-    }
-
-    if (init == null) {
+    if (arguments.length < 2) {
         currentMask = prevMask + (1 << Bits.IndexOffset)
         if (prevMask & Bits.IsFirstRun) {
             const value = (dependency as () => T)()
-            cells.push(value)
+            currentCells.push(value)
             return value
         } else {
-            return cells[index] as T
+            return currentCells[prevMask >>> Bits.IndexOffset] as T
         }
     } else {
         currentMask = prevMask + (2 << Bits.IndexOffset)
         if (prevMask & Bits.IsFirstRun) {
-            const value = init(dependency as D)
-            cells.push(dependency)
-            cells.push(value)
+            const value = (init as (v: D) => T)(dependency as D)
+            currentCells.push(dependency, value)
             return value
         } else {
-            const prev = cells[index] as D
-            cells[index] = dependency
-            if (isEqual(prev, dependency as D)) {
-                return cells[index + 1] as T
+            const index = prevMask >>> Bits.IndexOffset
+            const prev = currentCells[index] as D
+            currentCells[index] = dependency
+            if (isEqual(prev, dependency)) {
+                return currentCells[index + 1] as T
             } else {
-                return cells[index + 1] = init(dependency as D)
+                return currentCells[index + 1] =
+                    (init as (v: D) => T)(dependency as D)
             }
         }
     }
 }
 
 export function usePrevious<T extends Any>(value: T, initial: T): T {
-    const prevMask = currentMask
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const cells = currentCells!
+    if (__DEV__) validateContext()
 
-    if (!prevMask) {
-        throw new TypeError("This must be called inside a component context.")
-    }
-
-    currentMask = prevMask + (1 << Bits.IndexOffset)
-    if (prevMask & Bits.IsFirstRun) {
-        cells.push(value)
+    if (currentMask & Bits.IsFirstRun) {
+        currentCells.push(value)
     } else {
-        const index = prevMask >>> Bits.IndexOffset
-        initial = cells[index] as T
-        cells[index] = value
+        const index = currentMask >>> Bits.IndexOffset
+        initial = currentCells[index] as T
+        currentCells[index] = value
     }
+
+    currentMask += 1 << Bits.IndexOffset
 
     return initial
 }
 
 export function useToggle(): [boolean, () => Promise<void>] {
-    const prevMask = currentMask
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const cells = currentCells!
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const info = currentInfo!
-    const index = prevMask >>> Bits.IndexOffset
+    if (__DEV__) validateContext()
+    const info = currentInfo
+    const cells = currentCells
+    const index = currentMask >>> Bits.IndexOffset
     let toggle = false
 
-    if (!prevMask) {
-        throw new TypeError("This must be called inside a component context.")
-    }
-
-    currentMask = prevMask + (1 << Bits.IndexOffset)
-    if (prevMask & Bits.IsFirstRun) {
+    currentMask += 1 << Bits.IndexOffset
+    if (currentMask & Bits.IsFirstRun) {
         cells.push(false)
     } else {
-        toggle = cells[index] as boolean
-        cells[index] = true
+        toggle = currentCells[index] as boolean
+        currentCells[index] = true
     }
 
     return [toggle, (): Promise<void> => {
@@ -798,70 +617,33 @@ interface UseMatchers<T, R> {
     error(value: ErrorValue): R
 }
 
-type UseValue<S extends UseState, T> =
-    S extends UseState.Ready ? T :
-        S extends UseState.Error ? ErrorValue :
-            undefined
+type Use<T> =
+    | {$: UseState.Pending, _: void} & _UseCommon<T>
+    | {$: UseState.Ready, _: T} & _UseCommon<T>
+    | {$: UseState.Error, _: ErrorValue} & _UseCommon<T>
 
-class Use<S extends UseState, T> {
-    constructor(private $: S, private _: UseValue<S, T>) {}
-    state(): UseStateKeys[S] { return StateLookup[this.$] }
-    value(): UseValue<S, T> { return this._ }
-    match<R>(matchers: UseMatchers<T, R>): R {
-        switch (this.$) {
-        case UseState.Pending: return matchers.pending()
-        case UseState.Ready: return matchers.ready(this._ as T)
-        /* case UseState.Error: */
-        default: return matchers.error(this._ as ErrorValue)
-        }
-    }
+type _UseCommon<T> = {
+    state(this: Use<T>): UseStateKeys[(typeof this)["$"]]
+    value(this: Use<T>): (typeof this)["_"]
+    match<R>(this: Use<T>, matchers: UseMatchers<T, R>): R
 }
 
-// `use` is pretty complicated to begin with. Let's not blow this module up
-// further by super-optimizing an inherently moderately expensive operation to
-// begin with.
-export function use<T extends Any>(
-    init: (signal: AbortSignal) => T | Promise<T>
-): Use<UseState, T>
-export function use<T extends Any, D extends Any>(
-    dependency: D,
-    init: (value: D, signal: AbortSignal) => T | Promise<T>
-): Use<UseState, T>
-export function use<T extends Any, D extends Any>(
-    dependency: D | ((signal: AbortSignal) => T | Promise<T>),
-    init?: (value: D, signal: AbortSignal) => T | Promise<T>
-): Use<UseState, T> {
-    if (init == null) {
-        return _use(dependency as (signal: AbortSignal) => T | Promise<T>)
-    } else {
-        return guard(hasChangedBy(dependency, isEqual), () =>
-            _use((signal) => init(dependency as D, signal))
-        )
-    }
-}
+const Use: {
+    new<T>(init: (signal: AbortSignal) => Await<T>): Use<T>
+    prototype: _UseCommon<Any>
+} = /*@__PURE__*/ (() => {
+function Use<T>(this: Use<T>, init: (signal: AbortSignal) => Await<T>) {
+    const index = currentMask >>> Bits.IndexOffset
+    const cells = currentCells
+    const info = currentInfo
 
-function _use<T extends Any>(
-    init: (signal: AbortSignal) => T | Promise<T>
-): Use<UseState, T> {
-    const prevMask = currentMask
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const cells = currentCells!
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const info = currentInfo!
-    const index = prevMask >>> Bits.IndexOffset
-
-    if (!prevMask) {
-        throw new TypeError("This must be called inside a component context.")
-    }
-
-    currentMask = prevMask + (3 << Bits.IndexOffset)
-    if (prevMask & Bits.IsFirstRun) {
+    if (currentMask & Bits.IsFirstRun) {
         let controller: Maybe<AbortController> =
-            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            new info.window!.AbortController()
-        cells.push(
-            UseState.Pending, // state
-            void 0, // value
+                // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+                new info.window!.AbortController()
+        currentCells.push(
+            this.$ = UseState.Pending, // state
+            this._ = void 0, // value
             () => {
                 cells[index + 2] = void 0
                 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -872,11 +654,11 @@ function _use<T extends Any>(
         )
 
         // I'm creating a synthetic promise because it's cheaper than adding
-        // `init` to the closure *and* creating a second closure.
+        // `init` to the closure *and* creating a second function.
         Promise.resolve(controller.signal).then(init).then(
             (v) => {
                 cells[index] = UseState.Ready
-                cells[index + 1] = v
+                cells[index + 1] = v as Any
                 info.redraw()
             },
             (e) => {
@@ -885,23 +667,64 @@ function _use<T extends Any>(
                 info.redraw()
             }
         )
-    }
-
-    currentMask = prevMask | Bits.HasRemoveCallback
-    if (prevMask & Bits.IsNestedRemove) {
-        (currentRemoveTarget as WhenRemovedCallback[]).push(
-            cells[index + 2] as WhenRemovedCallback
-        )
     } else {
-        (currentRemoveTarget as Info).whenRemoved(
-            cells[index + 2] as WhenRemovedCallback
-        )
+        this.$ = currentCells[index] as UseState
+        this._ = currentCells[index + 1] as Maybe<T | ErrorValue>
     }
 
-    return new Use<UseState, T>(
-        cells[index] as UseState,
-        cells[index + 1] as UseValue<UseState, T>
-    )
+    currentMask += 3 << Bits.IndexOffset
+    whenRemoved(currentCells[index + 2] as WhenRemovedCallback)
+}
+
+(Use.prototype as _UseCommon<Any>).state = function () {
+    return StateLookup[this.$]
+}
+
+;(Use.prototype as _UseCommon<Any>).value = function () {
+    return this._
+}
+
+;(Use.prototype as _UseCommon<Any>).match = function (matchers) {
+    if (this.$ === UseState.Pending) {
+        return matchers.pending()
+    } else if (this.$ === UseState.Ready) {
+        return matchers.ready(this._)
+    } else /* if (this.$ === UseState.Error) */ {
+        return matchers.error(this._)
+    }
+}
+
+return Use as Any as {
+    new<T>(init: (signal: AbortSignal) => Await<T>): Use<T>
+    prototype: _UseCommon<Any>
+}
+})()
+
+// `use` is pretty complicated to begin with. Let's not blow this module up
+// further by super-optimizing an inherently moderately expensive operation to
+// begin with.
+export function use<T>(
+    init: (signal: AbortSignal) => Await<T>
+): Use<T>
+export function use<T, D extends Any>(
+    dependency: D,
+    init: (value: D, signal: AbortSignal) => Await<T>
+): Use<T>
+export function use<T, D extends Any>(
+    dependency: D | ((signal: AbortSignal) => Await<T>),
+    init?: (value: D, signal: AbortSignal) => Await<T>
+): Use<T> {
+    if (__DEV__) validateContext()
+    if (arguments.length < 2) {
+        return new Use(dependency as (signal: AbortSignal) => Await<T>)
+    } else {
+        return guard(hasChanged(dependency), () => new Use((signal) =>
+            (init as ((value: D, signal: AbortSignal) => Await<T>))(
+                dependency as D,
+                signal
+            )
+        ))
+    }
 }
 
 export function and(...values: Any[]): boolean
@@ -931,26 +754,21 @@ export function isIdentical(a: Any, b: Any) {
 
 export function hasChanged(...values: Any[]): boolean
 export function hasChanged(): boolean {
-    const prevMask = currentMask
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const cells = currentCells!
-
-    if (!prevMask) {
-        throw new TypeError("This must be called inside a component context.")
-    }
-
-    currentMask = prevMask + (arguments.length << Bits.IndexOffset)
-    if (prevMask & Bits.IsFirstRun) {
-        cells.push.apply(cells, arguments)
+    if (__DEV__) validateContext()
+    if (currentMask & Bits.IsFirstRun) {
+        currentCells.push.apply(currentCells, arguments)
+        currentMask += arguments.length << Bits.IndexOffset
         return true
     } else {
-        let index = prevMask >>> Bits.IndexOffset
+        let index = currentMask >>> Bits.IndexOffset
         let result = 1
         for (let i = 0; i < arguments.length; i++, index++) {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-            result &= isEqual(cells[index], arguments[i]) as Any as number
-            cells[index] = arguments[i]
+            result &=
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+                isEqual(currentCells[index], arguments[i]) as Any as number
+            currentCells[index] = arguments[i]
         }
+        currentMask += arguments.length << Bits.IndexOffset
         return !!result
     }
 }
@@ -959,40 +777,15 @@ export function hasChangedBy<T extends Any>(
     value: T,
     comparator: (prev: T, next: T) => boolean
 ): boolean {
-    const prevMask = currentMask
-
-    if (!prevMask) {
-        throw new TypeError("This must be called inside a component context.")
-    }
-
-    currentMask = prevMask + (1 << Bits.IndexOffset)
-    if (prevMask & Bits.IsFirstRun) {
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        currentCells!.push(value)
+    if (__DEV__) validateContext()
+    if (currentMask & Bits.IsFirstRun) {
+        currentCells.push(value)
+        currentMask += 1 << Bits.IndexOffset
         return true
     } else {
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        const cells = currentCells!
-        const index = prevMask >>> Bits.IndexOffset
-        const prev = cells[index] as T
-        cells[index] = value
+        const prev = currentCells[currentMask >>> Bits.IndexOffset] as T
+        currentCells[currentMask >>> Bits.IndexOffset] = value
+        currentMask += 1 << Bits.IndexOffset
         return comparator(prev, value)
     }
-}
-
-const p = Promise.resolve()
-
-export function defer(func: () => Await<void>): void {
-    const prevMask = currentMask
-
-    if (!prevMask) {
-        throw new TypeError("This must be called inside a component context.")
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const info = currentInfo!
-
-    p.then(() => func()).catch((e) => {
-        info.throw(e as ErrorValue, true)
-    })
 }

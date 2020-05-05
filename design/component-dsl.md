@@ -333,7 +333,7 @@ Note: if you need to manually reset a component, you can use `let [isToggled, to
 
 ## Render state
 
-You can check if this is the current render via calling `isInitial()` in the body. If you want to set the ref captured via `m.capture(ref)`, you can use `setRef(ref)`. For more advanced uses, like `info.render(target, vnode)` or `info.throw(error)`, you can get the [`info` object](components.md#component-info) itself via `info = useInfo()`.
+You can check if this is the current render via calling `isInitial()` in the body. If you want to set the ref captured via `whenReady(callback)`, you can use `setRef(ref)`. For more advanced uses, like `info.render(target, vnode)` or `info.throw(error)`, you can get the [`info` object](components.md#component-info) itself via `info = useInfo()`.
 
 You can also get keys from the [`env` value passed](components.md) via `let {key} = useEnv()` and set them via `setEnv("key", value)`, for things like routing.
 
@@ -514,11 +514,11 @@ function _initState(info) {
     }
 }
 
-function whenRemoved(callback) {
+export function whenRemoved(callback) {
     _getState().removes.push(callback)
 }
 
-function ref(initialValue) {
+export function ref(initialValue) {
     let state = _getState()
     let index = state.index++
     if (!state.info.isInitial()) return state.refs[index]
@@ -527,15 +527,15 @@ function ref(initialValue) {
     return value
 }
 
-function useInfo() {
+export function useInfo() {
     return _getState().info
 }
 
-function useEnv() {
+export function useEnv() {
     return _getState().env
 }
 
-function component(name, body) {
+export function component(name, body) {
     function Comp(attrs, info, env) {
         let {run, close} = info.state != null
             ? info.state
@@ -546,7 +546,7 @@ function component(name, body) {
     return Object.defineProperty(Comp, "name", {value: name})
 }
 
-function guard(reinit, body) {
+export function guard(reinit, body) {
     let info = useInfo()
     let env = useEnv()
     let state = ref()
@@ -582,19 +582,19 @@ function guard(reinit, body) {
 /*                                         */
 /*******************************************/
 
-function isInitial() {
+export function isInitial() {
     return useInfo().isInitial()
 }
 
-function whenReady(callback) {
+export function whenReady(callback) {
     useInfo().whenReady(callback)
 }
 
-function setEnv(key, value) {
+export function setEnv(key, value) {
     useInfo().set(key, value)
 }
 
-function useReducer(init, reducer) {
+export function useReducer(init, reducer) {
     let cell = ref()
 
     if (isInitial()) cell.current = init()
@@ -605,19 +605,19 @@ function useReducer(init, reducer) {
     }]
 }
 
-function slot(value) {
+export function slot(value) {
     return useReducer(() => value, (prev, next) => next)
 }
 
-function lazy(init) {
+export function lazy(init) {
     return useReducer(init, (prev, func) => func(prev))
 }
 
-function memo(init) {
+export function memo(init) {
     return lazy(init)[0]
 }
 
-function useToggle() {
+export function useToggle() {
     let info = useInfo()
     let cell = ref(false)
     let prev = cell.current
@@ -628,14 +628,14 @@ function useToggle() {
     }]
 }
 
-function usePrevious(value, initial) {
+export function usePrevious(value, initial) {
     let cell = ref()
     let previous = isInitial() ? initial : cell.current
     cell.current = value
     return previous
 }
 
-function use(init) {
+export function use(init) {
     let [[state, value], setState] = slot(["pending"])
     let [ctrl, promise] = memo(() => {
         let ctrl = new AbortController()
@@ -655,38 +655,38 @@ function use(init) {
     }
 }
 
-function and(...args) {
+export function and(...args) {
     for (let arg of args) {
         if (!arg) return false
     }
     return true
 }
 
-function or(...args) {
+export function or(...args) {
     for (let arg of args) {
         if (arg) return true
     }
     return false
 }
 
-function isEqual(a, b, {tolerance = 1e-8} = {}) {
+export function isEqual(a, b, {tolerance = 1e-8} = {}) {
     // Implementation omitted for brevity
 }
 
-function isIdentical(a, b) {
+export function isIdentical(a, b) {
     return a === b || a !== a && b !== b
 }
 
-function hasChanged(...values) {
+export function hasChanged(...values) {
     return or(...values.map(v => hasChangedBy(v, isEqual)))
 }
 
-function hasChangedBy(value, comparator) {
+export function hasChangedBy(value, comparator) {
     let prev = usePrevious(value)
     return isInitial() || comparator(prev, value)
 }
 
-function when(cond, opts) {
+export function when(cond, opts) {
     cond = Boolean(cond)
     let block
 
@@ -703,7 +703,7 @@ function when(cond, opts) {
     })
 }
 
-function usePortal(target, ...children) {
+export function usePortal(target, ...children) {
     return guard(hasChanged(target), () => {
         let info = useInfo()
         let child = ref()
@@ -715,15 +715,6 @@ function usePortal(target, ...children) {
         whenRemoved(() => promiseToClose.then((close) => close()))
         child.current = children
         if (handle.current != null) handle.current.redraw()
-    })
-}
-
-const _p = Promise.resolve()
-
-function defer(func) {
-    const info = useInfo()
-    p.then(() => func()).catch((e) => {
-        info.throw(e, true)
     })
 }
 ```

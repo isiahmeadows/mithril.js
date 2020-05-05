@@ -1,5 +1,5 @@
 import * as V from "./internal/vnode"
-import {eachKeyOrSymbol, arrayify} from "./internal/util"
+import {arrayify} from "./internal/util"
 import {TrustedString} from "./internal/dom"
 
 interface IfElseBlocks {
@@ -17,12 +17,11 @@ type _KeySelector<T> =
 
 interface Hyperscript {
     (tag: string, ...children: V.Vnode[]): V.VnodeElement
-    (tag: Component, ...children: V.Vnode[]): V.VnodeLink
+    (tag: Component, ...children: V.Vnode[]): V.VnodeComponent
     RETAIN: V.VnodeRetain
-    whenReady(callback: V.WhenReadyCallback): V.VnodeState
     catch(callback: V.CatchCallback, ...children: V.Vnode[]): V.VnodeCatch
     link(id: V.LinkValue, ...children: V.Vnode[]): V.VnodeLink
-    state(initializer: Component, ...children: V.Vnode[]): V.VnodeState
+    state(initializer: V.StateInit<V.StateValue>): V.VnodeState
     trust(text: Any): V.VnodeTrust
     if(cond: boolean, blocks: IfElseBlocks): V.VnodeLink
     each<T>(
@@ -30,8 +29,6 @@ interface Hyperscript {
         keySelector: _KeyFrom<T> | _KeySelector<T>,
         view: (value: T, index: number) => V.Vnode
     ): V.VnodeLink
-    set(env: V.Environment, ...children: V.Vnode[]): V.Vnode
-    whenRemoved(callback: V.WhenRemovedCallback): V.Vnode
     Fragment: V.Component<V.VnodeAttributes, Any>
     Attrs: V.Component<V.VnodeAttributes, Any>
     create<T extends V.VnodeNonPrimitive>(type: T["%"], value: T["_"]): T
@@ -101,18 +98,14 @@ function m(tag: string | Component, attrs: V.Vnode): V.Vnode {
         )
     }
 
-    if (typeof tag === "string") {
-        return createFromArgs.apply<V.Type.Element, V.VnodeElement>(
-            V.Type.Element, arguments
-        )
-    }
-
-    return V.create(V.Type.Link, [
-        tag as Any as V.LinkValue,
-        createFromArgs.apply<V.Type.State, V.VnodeState>(
-            V.Type.State, arguments
-        )
-    ])
+    return createFromArgs.apply<
+        typeof tag extends string ? V.Type.Element : V.Type.Component,
+        typeof tag extends string ? V.VnodeElement : V.VnodeComponent
+    >(
+        (typeof tag === "string" ? V.Type.Element : V.Type.Component) as
+            typeof tag extends string ? V.Type.Element : V.Type.Component,
+        arguments
+    )
 }
 
 m.create = V.create
@@ -120,7 +113,8 @@ m.RETAIN = V.create<V.VnodeRetain>(V.Type.Retain, void 0)
 
 m.catch = createFromArgs.bind(V.Type.Catch)
 m.link = createFromArgs.bind(V.Type.Link)
-m.state = createFromArgs.bind(V.Type.State)
+m.state = (init: V.StateInit<V.StateValue>): V.VnodeState =>
+    V.create(V.Type.State, init)
 
 m.trust = (text: Exclude<Any, symbol>): V.VnodeTrust =>
     // Extremely unsafe typing: we're taking an arbitrary value and turning it
@@ -129,66 +123,13 @@ m.trust = (text: Exclude<Any, symbol>): V.VnodeTrust =>
     // eslint-disable-next-line @typescript-eslint/restrict-plus-operands
     V.create(V.Type.Trust, ("" + text) as Any as TrustedString)
 
-function componentProxy<V>(
-    C: (
-        attrs: {v: V},
-        info: V.ComponentInfo<Any>
-    ) => V.Vnode
-): (v: V) => V.Vnode {
-    return (v: V) => V.create(V.Type.Link, [
-        C as Any as V.LinkValue,
-        V.create(V.Type.State, [
-            C as V.Component<V.VnodeAttributes, V.StateValue>,
-            {v} as V.VnodeAttributes
-        ])
-    ])
-}
-
-m.whenReady = componentProxy<V.WhenReadyCallback>(({v}, info) => {
-    info.whenReady(v)
-    return void 0
-})
-
-m.whenRemoved = componentProxy<V.WhenRemovedCallback>(({v}, info) => {
-    info.whenRemoved(v)
-    return void 0
-})
-
-type SetEnvMap = Record<PropertyKey, V.EnvironmentValue>
-
-interface SetEnvAttrs {
-    e: SetEnvMap
-    c: V.Vnode[]
-}
-
-function SetEnv(
-    {e, c}: SetEnvAttrs,
-    info: V.ComponentInfo<Any>
-) {
-    eachKeyOrSymbol(e, (value, key) => {
-        info.set(key, value)
-    })
-
-    return c
-}
-
-m.set = function (env: SetEnvMap): V.Vnode {
-    return V.create(V.Type.Link, [
-        SetEnv as Any as V.LinkValue,
-        V.create(V.Type.State, [
-            SetEnv as V.Component<V.VnodeAttributes, V.StateValue>,
-            {e: env, c: arrayify.apply(1, arguments)} as V.VnodeAttributes
-        ])
-    ])
-}
-
 m.if = (cond: boolean, blocks: IfElseBlocks): V.Vnode => {
     cond = !!cond
     const block = cond ? blocks.then : blocks.else
-    if (block == null) return null
-    const value = block.call(blocks)
-    if (value == null || typeof value === "boolean") return null
-    return V.create(V.Type.Link, [cond as Any as V.LinkValue, value])
+    return block == null ? null : V.create(V.Type.Link, [
+        cond as Any as V.LinkValue,
+        block.call(blocks)
+    ])
 }
 
 function compilePropertySelector<T>(keySelector: _KeyFrom<T>): _KeySelector<T> {

@@ -4,6 +4,10 @@
 
 These are all various utilities I'm considering including in the redesign library later, but none of them are guaranteed and none of them will be included in the core bundle unless otherwise noted.
 
+## Optimizer for the component DSL
+
+The idea is to lower the component DSL into raw components, to compile away all the overhead. There will be complexity around custom hooks and similar, and I may have to create a synthetic runtime for cases where I can't statically inline everything (like with code splitting and such, if a function winds up separated from one of its call sites).
+
 ## Create custom element from component
 
 Basically, handles everything you need for hooking a component up and tying it to a custom element. Handles revival, attributes, children, and events equally, but you have to specify which events could be listened for.

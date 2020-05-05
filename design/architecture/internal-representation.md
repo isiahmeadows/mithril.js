@@ -33,6 +33,12 @@ The vnode tree is tracked in an array. There are two separate "old" and "new" ar
 - Catch error in subtree: `m.catch(callback, ...children)`
     - Type: `6`
     - Data: `[callback, ...children]`
+- Trust: `m.trust(string)`
+    - Type: `7`
+    - Data: `[Comp, ...children]`
+- Component: `m(Comp, ...children)`
+    - Type: `8`
+    - Data: `[Comp, ...children]`
 
 Their internal storage is considerably different, however. The internal representation uses constant-size blocks of the following structure, in the following order:
 
@@ -71,39 +77,39 @@ There are 11 internal types, and these do *not* align one-to-one with received t
     - Node count: number of encapsulated nodes
     - Reference: `undefined`
 
-- Static:
+- Element:
     - Type: `1`
+    - Child count: number of children
+    - Value: tag name
+    - Node count: `1`
+    - Reference: element reference
+
+- State:
+    - Type: `2`
     - Child count: `1`
     - Value: `undefined`
     - Node count: number of encapsulated nodes
-    - Reference: `undefined`
-
-- Attributes:
-    - Type: `2`
-    - Child count: `0`
-    - Value: attributes
-    - Node count: `0`
-    - Reference: `undefined`
-
-- Keyed:
-    - Type: `3`
-    - Child count: number of children
-    - Value: map of key -> index computed from the last set of keys
-    - Node count: number of encapsulated nodes
-    - Reference: `undefined`
+    - Reference: component info object
 
 - Link:
-    - Type: `4`
+    - Type: `3`
     - Child count: number of children
     - Value: current identity
     - Node count: number of encapsulated nodes
     - Reference: `undefined`
 
-- Removed callback:
+- Keyed:
+    - Type: `4`
+    - Child count: number of children
+    - Value: map of key -> index computed from the last set of keys
+    - Node count: number of encapsulated nodes
+    - Reference: `undefined`
+
+- Static:
     - Type: `5`
-    - Child count: `0`
-    - Value: callback reference
-    - Node count: `0`
+    - Child count: `1`
+    - Value: `undefined`
+    - Node count: number of encapsulated nodes
     - Reference: `undefined`
 
 - Catch:
@@ -113,47 +119,140 @@ There are 11 internal types, and these do *not* align one-to-one with received t
     - Node count: number of encapsulated nodes
     - Reference: `undefined`
 
-- Text:
+- Trust:
     - Type: `7`
+    - Child count: `0`
+    - Value: text string
+    - Node count: number of encapsulated nodes
+    - Reference: `undefined`
+
+- Component:
+    - Type: `8`
+    - Child count: number of children + `1`
+    - Value: component reference
+    - Node count: number of encapsulated nodes
+    - Reference: component info object
+
+- Text:
+    - Type: `9`
     - Child count: `0`
     - Value: text string
     - Node count: `1`
     - Reference: text node
 
-- Element:
-    - Type: `8`
-    - Child count: number of children
-    - Value: text string
-    - Node count: `1`
-    - Reference: element reference
+- Removed callback:
+    - Type: `10`
+    - Child count: `0`
+    - Value: callback reference
+    - Node count: `0`
+    - Reference: `undefined`
 
-- State:
-    - Type: `9`
-    - Child count: number of children + `1`
-    - Value: text string
-    - Node count: number of encapsulated nodes
-    - Reference: Element reference
+- Attributes:
+    - Type: `11`
+    - Child count: `0`
+    - Value: attributes
+    - Node count: `0`
+    - Reference: `undefined`
 
-The type and child count can be extracted from vnodes via the following algorithm:
+The type/child count mask and initial value can be derived from vnodes using the following algorithm:
 
 ```js
-function extractTypeInfo(vnode) {
+const info = (mask, value) => ({mask, value})
+
+function extractVnodeInfo(vnode) {
     if (vnode == null || typeof vnode === "boolean") {
-        return 0 /* fragment */ | 0 << 8
-    } else if (typeof vnode === "object") {
-        if (Array.isArray(vnode)) return 0 /* fragment */ | vnode.length << 8
-        switch (vnode["%"]) {
-        case 0: return -1 // retain
-        case 1: return 8 /* element */ | (vnode._.length - 1) << 8
-        case 2: return 9 /* state */ | (vnode._.length - 1) << 8
-        case 3: return 4 /* link */ | (vnode._.length - 1) << 8
-        case 4: return 3 /* keyed */ | vnode._.length << 7
-        case 5: return 3 /* static */ | 1 << 8
-        case 6: return 6 /* catch */ | (vnode._.length - 1) << 8
-        default: return 2 /* attributes */ | 0 << 8
+        return info(0 /* fragment */ | 0 << 8)
+    }
+
+    if (typeof vnode !== "object") {
+        return info(9 /* text */ | 1 << 8, String(vnode))
+    }
+
+    if (Array.isArray(vnode)) {
+        return info(0 /* fragment */ | vnode.length << 8)
+    }
+
+    switch (vnode["%"]) {
+    case 0:
+        return null /* retain */
+
+    case 1:
+        return info(1 /* element */ | (vnode._.length - 1) << 8, vnode._[0])
+
+    case 2:
+        return info(2 /* state */ | 1 << 8)
+
+    case 3:
+        return info(3 /* link */ | (vnode._.length - 1) << 8, vnode._[0])
+
+    case 4:
+        return info(4 /* keyed */ | vnode._.length << 7,
+            new Map(Array.from({length: vnode._.length / 2}, (_, i) =>
+                [vnode._[i * 2], i]
+            ))
+        )
+
+    case 5:
+        return info(5 /* static */ | 1 << 8)
+
+    case 6:
+        return info(6 /* catch */ | (vnode._.length - 1) << 8, vnode._[0])
+
+    case 7:
+        return info(7 /* trust */ | 0 << 8, vnode._)
+
+    case 8:
+        return info(8 /* component */ | vnode._.length << 8, vnode._[0])
+
+    default:
+        return info(11 /* attributes */ | 0 << 8, vnode)
+    }
+}
+
+// Optimized
+const info = (mask, value) => ({mask, value})
+
+function extractVnodeInfo(vnode) {
+    if (vnode == null || typeof vnode === "boolean") {
+        return info(0 /* fragment */ | 0 << 8)
+    }
+
+    if (typeof vnode !== "object") {
+        return info(9 /* text */ | 1 << 8, String(vnode))
+    }
+
+    if (Array.isArray(vnode)) {
+        return info(0 /* fragment */ | vnode.length << 8)
+    }
+
+    let type = vnode["%"]
+
+    if (type == null) {
+        return info(11 /* attributes */ | 0 << 8, vnode)
+    }
+
+    switch (type) {
+    case 0:
+        return null /* retain */
+
+    case 1: case 3: case 6: case 8:
+        return info(type | (vnode._.length - (type !== 8)) << 8, vnode._[0])
+
+    case 2: case 5:
+        return info(type | 1 << 8, undefined)
+
+    case 4:
+        const map = new Map()
+        for (let i = 0, j = 0; i < vnode._.length; i += 2, j++) {
+            map.set(vnode._[i], j)
         }
-    } else {
-        return 7 /* text */ | 0 << 8
+        return info(4 /* keyed */ | vnode._.length << 7, map)
+
+    case 7:
+        return info(7 /* trust */ | 0 << 8, vnode._)
+
+    default:
+        throw new TypeError(`Invalid vnode type: ${vnode["%"]}`)
     }
 }
 ```

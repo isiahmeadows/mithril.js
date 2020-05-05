@@ -10,14 +10,15 @@ function App(_, info) {
         })
     }
 
-    const [model, dispatch] = info.state
+    const {model, dispatch} = info.state
+    info.set("dispatch", dispatch)
 
-    return route(DOM, ({router}) => m.set({dispatch},
+    return route(DOM, ({router}) => [
         route("/all", () => m(View, {model, showing: "all"})),
         route("/active", () => m(View, {model, showing: "active"})),
         route("/completed", () => m(View, {model, showing: "completed"})),
         route(null, () => router.set("/"))
-    ))
+    ])
 }
 
 mount("#todoapp").render(m(App))
