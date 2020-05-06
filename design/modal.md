@@ -4,9 +4,9 @@
 
 This is exposed under `mithril/modal`.
 
-- `m(Modal, ...children)` - Render the modal dialog
+- `modal(...children)` - Render the modal dialog
     - Set the `mithril/modal:target` context key to set the modal target. By default, this is `info.document.body`, but you can set it in context to change it globally or locally.
-    - Top-level children represent the overlay, and inner children represent the modal contents
+    - Top-level `children` represent the overlay, and inner children of it represent the modal's contents
     - Children represent additional attributes for the overlay itself, and they may contain one or more elements for the modal itself.
     - Pass `m.state((_, info) => info.whenReady(func))` to observe when the modal is first shown.
     - Pass `m.state((_, info) => info.whenRemoved(func))` to observe when the modal is removed.
@@ -26,4 +26,4 @@ A lot of the more advanced configuration can be done directly:
 - To hide the modal (like on close), simply don't render the element.
 - To show from the accessibility tree, just use `"aria-hidden": "false"` in `attrs.content`.
 - To set a close transition, use a `transition(...)` in the modal child element - that blocks closure as necessary so the transition can run, and it blocks even the overlay from going away.
-    - You can set this both on the overlay *and* the
+    - You can set this both on the overlay *and* the inner modal box.

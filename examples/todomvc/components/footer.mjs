@@ -22,7 +22,7 @@ export default function Footer({model, showing}, info, {dispatch}) {
         ]),
         m("button", "Clear completed", {
             id: "clear-completed",
-            onclick() { dispatch(Model.clearCompleted()) },
+            on: {click() { dispatch(Model.clearCompleted()) }},
         }),
     ]
 }

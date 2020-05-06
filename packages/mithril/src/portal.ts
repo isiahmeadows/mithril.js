@@ -1,55 +1,57 @@
 import * as V from "./internal/vnode"
-import {arrayify} from "./internal/util"
 
-// Yes, efficient and correct portaling is this non-trivial.
-type SchedulePortalAttrs = V.VnodeAttributes & {
-    v: [V.RenderTarget, ...V.Vnode[]]
-}
+// There's enough non-null assertions here it might as well have a `.js`
+// extension. But I need them all, and there's no real way to avoid it without
+// bloating the helper.
+/* eslint-disable @typescript-eslint/no-non-null-assertion */
 
-interface SchedulePortalState {
-    c: V.Vnode
+type Target = V.RenderTarget | (() => V.RenderTarget)
+
+interface PortalState {
+    t: Maybe<Target>
+    c: Maybe<V.Vnode[]>
     i: Maybe<V.ComponentInfo<V.StateValue>>
+    r: Maybe<Promise<V.CloseCallback>>
     f: V.WhenRemovedCallback
-    p: (value: Error) => void
 }
 
-function SchedulePortal(
-    {v: [target, ...vnodes]}: SchedulePortalAttrs,
-    info: V.ComponentInfo<SchedulePortalState>
-) {
-    if (info.state == null) {
-        info.state = {
-            c: void 0,
-            i: void 0,
-            f: () => promise.then((close) => close()) as Any as
-                Await<V.WhenRemovedResult>,
-            p: (e) => { info.throw(e as Any as V.ErrorValue, true) },
+export default function portal(target: Target, ...children: V.Vnode[]) {
+    return V.create(V.Type.State, ((info: V.ComponentInfo<PortalState>) => {
+        if (info.state == null) {
+            info.state = {
+                t: void 0,
+                c: void 0,
+                i: void 0,
+                r: void 0,
+                f: () => (
+                    info.state!.r!.then((close) => close())
+                ) as Any as Await<V.WhenRemovedResult>,
+            }
         }
 
-        const promise = info.render<V.StateValue>(target, (childInfo) => {
-            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            info.state!.i = childInfo
-            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            return info.state!.c
+        info.state.c = children
+        info.whenRemoved(info.state.f)
+
+        // Defer the update, so things get queued correctly and so in the event
+        // a ref needs rendered to, this can still be up to the task.
+        info.whenReady((): Await<V.WhenReadyResult> => {
+            const resolved = typeof target === "function"
+                ? target()
+                : target
+
+            if (info.state!.t === resolved) {
+                return info.state!.i?.redraw() as Any as V.WhenReadyResult
+            }
+
+            return (
+                info.state!.r = info.render<V.StateValue>(
+                    info.state!.t = resolved,
+                    (childInfo) => {
+                        info.state!.i = childInfo
+                        return info.state!.c
+                    }
+                )
+            ) as Any as Promise<V.WhenReadyResult>
         })
-    }
-
-    info.state.c = vnodes
-    info.whenRemoved(info.state.f)
-    if (info.state.i != null) {
-        info.state.i.redraw().catch(info.state.p)
-    }
-}
-
-export default function portal(
-    target: V.RenderTarget, ...children: V.Vnode[]
-): V.Vnode
-export default function portal(target: V.RenderTarget) {
-    return V.create(V.Type.Link, [
-        target as Any as V.LinkValue,
-        V.create(V.Type.State, [
-            SchedulePortal as Any as V.Component<V.VnodeAttributes, Any>,
-            {v: arrayify.apply(0, arguments)}
-        ])
-    ])
+    }) as Any as V.StateInit<V.StateValue>)
 }

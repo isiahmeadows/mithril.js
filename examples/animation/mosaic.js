@@ -17,15 +17,16 @@ const cycles = [
 ]
 
 function Root(_, info) {
-    if (info.state == null) {
-        info.state = 0
+    const index = info.init(() => {
+        const index = {current: 0}
         setInterval(() => {
-            info.state = (info.state + 1) % cycles.length
+            index.current = (index.current + 1) % cycles.length
             info.redraw()
         }, 1000)
-    }
+        return index
+    })
 
-    const [state, cells] = cycles[info.state]
+    const [state, cells] = cycles[index.current]
 
     return cells.map((i) => m("div.slice", {
         class: {exit: state === "hide"},

@@ -3,14 +3,14 @@ import View from "./components/view.mjs"
 import * as Model from "./model.mjs"
 
 function App(_, info) {
-    if (info.isInitial()) {
-        info.state = Model.create("todos-mithril", (next) => {
-            info.state.model = next
+    const state = info.init(() =>
+        Model.create("todos-mithril", (next) => {
+            state.model = next
             info.redraw()
         })
-    }
+    )
 
-    const {model, dispatch} = info.state
+    const {model, dispatch} = state
     info.set("dispatch", dispatch)
 
     return route(DOM, ({router}) => [

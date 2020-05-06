@@ -14,7 +14,7 @@ export const TodoList = component(({showing, model}) => {
             id: "toggle-all",
             type: "checkbox",
             checked: !Model.hasRemaining(model),
-            onchange(ev) { setAllCompleted(ev.target.checked) },
+            on: {change(ev) { setAllCompleted(ev.target.checked) }},
         }),
         m("label", {for: "toggle-all"}, "Mark all as complete"),
         m("ul", {id: "todo-list"}, m.each(

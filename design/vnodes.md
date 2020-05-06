@@ -143,9 +143,9 @@ Attribute vnodes represent attributes, and you can use them literally. They're m
 
 Note that attribute vnodes cannot be returned from keyed fragments except nested in elements or components, and an error will be thrown from that vnode if such an attempt is made. (In general, it doesn't make sense anyways.) However, lifecycle vnodes can still be used in them.
 
-`class:` and `style:` attributes would support an object of booleans, merged with previous class names/style properties instead of simply overwritten. (A class is rendered if it's present and all conditions on it are truthy.) Class strings are sugar for just `class: [classString]: true`.
+`class:` and `style:` attributes would support an object of booleans, merged with previous class names/style properties instead of simply overwritten. (A class is rendered if it's present and all conditions on it are truthy.) Class strings are sugar for just `class: {[classString]: true}` and style strings are parsed into style objects.
 
-`on*` members are either functions or `[key, func]` pairs. Their propery name represents the event name, and for DOM events, you can specify `capture: true` by using `onevent$capture` instead. They're called as `onevent(value, capture)`, where `value` is the received event value (a DOM event for DOM vnodes) and `capture` is a capture object. If a promise is returned and it rejects, this catches that and reports it as the usual component error.
+The `on:` attribute specify event handlers. Keys are event names, and values are either functions or `[key, func]` pairs. For DOM events, you can specify `capture: true` by using `event@capture` instead. They're called as `on.event(value, capture)`, where `value` is the received event value (a DOM event for DOM vnodes) and `capture` is a capture object. If a promise is returned and it rejects, this catches that and reports it as the usual component error.
 
 The `[key, func]` variant is spiritually similar to `m.withAttr`, but takes advantage of its primitive nature to be context-dependent:
 
@@ -167,49 +167,3 @@ The `[key, func]` variant is spiritually similar to `m.withAttr`, but takes adva
 The `vnode.dom` from v1/v2 is replaced with refs here, which capture via the vnode `m.capture(ref)`. Refs are simple `{current}` objects you can create via `m.ref(init)` that let you pull out a given vnode into a given scope, and they're useful for DOM manipulation. `m.capture(ref)` captures the ref of the parent it's used as a child of, and inside components at the top level, it works as if it were just substituted there at that parent position.
 
 It may sound like it's bound to get unwieldy, but it actually simplifies and streamlines some things. It's pretty easy to get right, and pretty simple to understand, especially since functions aren't involved aside from the various controller lifecycle hooks.
-
-## Why are keys different?
-
-Well, keys are currently used in one of two ways in nearly every virtual DOM library:
-
-- A list of entries you need to iterate, where you need to track their identity even if they move.
-- As a means to manually force a subtree to be replaced.
-
-I decided to separate these out, because of two issues:
-
-1. People have a habit of overusing keys, and `m.link(id, ...children)` makes it much clearer it's about linking an identity to a subtree. Been fighting this a lot lately in the Gitter chat room as well as in a few recent issues.
-2. It's generally the wrong thing to do to key *some* but not *all* of a keyed list, and me adding that check in Mithril has caught a *lot* more problems than it caused based on all the feedback I got. If you really intend to have separators, you can figure that out manually using an index, but it's such a niche use case to want to interleave keyed and unkeyed subtrees it shouldn't be supported in Mithril itself. If you really need that, fork Mithril to do what you need.
-
-And in addition, [this loop](https://github.com/mithrilJS/mithril.js/blob/db277217f88d293aa14154c8f0017675ffe94a9c/render/vnode.js#L16-L23) is not something I want to keep around in a framework. It's ugly, it's slow, and it's just a band-aid to protect users against a common user bug. By splitting these two out and changing how keyed fragments are built, it solves several problems:
-
-- Instead of having to check for all keyed/unkeyed, it's literally impossible by design to make that mistake.
-- `m.link` makes it easy and clear when you're binding a state to a subtree, so it's easy to simply swap that out for something else.
-- There's nothing to check to see if it's a keyed fragment or an unkeyed one besides just testing a simple integer ID, mitigating most of the performance cliff and complexity associated with it.
-- It's much less of a footgun to just `m.link` everything than it is to add `key:`s to v2 fragments, meaning I'll end up with a lot fewer people confused about it.
-
-## Why are attributes a type of vnode?
-
-The benefits of this aren't immediately obvious, I know. But it does lead to some radical new paradigms:
-
-- You want to include move transitions? Just add a `transition("list")` to it with appropriate CSS for `.list-in`, `.list-out`, and `.list-move`.
-- You want an `m("a")` or `m("button")` to route to a link on click? Use a simple `linkTo("/route")`.
-- You want an `m("a")` or `m("button")` to act as a back button? Just drop in a `linkBack()` or `linkTo(-1)`. It's literally that simple.
-
-## Open questions
-
-I've been floating back and forth on whether to use `onevent: ...` or `on: {event: ...}`. There's pros and cons to each.
-
-- Reasons to stick with `onevent: ...`:
-    - It's easier to type.
-    - It aligns better with HTML and is thus more familiar.
-    - It's easier to scan for individual listeners.
-
-- Reasons to switch to `on: {event: ...}`:
-    - It's easier to develop types for. [TypeScript doesn't currently provide a way to match type keys starting with `on`](https://github.com/Microsoft/TypeScript/issues/6579), and Flow also lacks similar functionality.
-    - It's easier to scan for internally, and doesn't require any string manipulation to iterate or invoke in. It also requires less branching for similar reasons.
-
-I'm *thinking* of a middle ground here:
-
-1. Accept both `on: ...` and `onevent: ...` in the front-end API (but not both together) for both JSX and hyperscript.
-2. Translate `onevent` to `on: {event: ...}` when reading the attributes.
-3. `mopt` can convert this accordingly for known attribute vnodes.

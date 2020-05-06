@@ -135,9 +135,9 @@ let [count, dispatch] = useReducer(() => 0, action => {
 })
 
 return m("div.counter",
-    m("button", "▲", {onclick: () => dispatch("increment")}),
+    m("button", "▲", {on: {click: () => dispatch("increment")}}),
     m("span", "Count: ", count)
-    m("button", "▼", {onclick: () => dispatch("decrement")})
+    m("button", "▼", {on: {click: () => dispatch("decrement")}})
 )
 ```
 
@@ -537,9 +537,7 @@ export function useEnv() {
 
 export function component(name, body) {
     function Comp(attrs, info, env) {
-        let {run, close} = info.state != null
-            ? info.state
-            : (info.state = _initState(info))
+        let {run, close} = info.init(() => _initState(info))
         info.whenRemoved(close)
         return run(() => body(attrs), env)
     }

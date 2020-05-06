@@ -34,10 +34,8 @@ export function component<
     }
 
     function Comp(attrs: A, info: ComponentInfo<ClosureBody<A>>, env: E) {
-        if (info.state == null) {
-            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            info.state = body(info)
-        }
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        if (info.state == null) info.state = body!(info)
 
         // eslint-disable-next-line @typescript-eslint/ban-ts-ignore
         // @ts-ignore https://github.com/microsoft/TypeScript/issues/35866

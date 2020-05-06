@@ -23,7 +23,7 @@ export const Footer = component(({model, showing}) => {
         ]),
         m("button", "Clear completed", {
             id: "clear-completed",
-            onclick() { dispatch(Model.clearCompleted()) },
+            on: {click() { dispatch(Model.clearCompleted()) }},
         }),
     ]
 })

@@ -69,11 +69,10 @@ If you were to run that and increment the first counter, the second would also i
 > ```js
 > let CounterState = {count: 0}
 > let Counter = {
->     state: CounterState,
 >     view() {
 >         return m("div",
->             m("p", "Count: ", this.state.count),
->             m("button", {onclick: () => { this.state.count++ }}, "Increment")
+>             m("p", "Count: ", CounterState.count),
+>             m("button", {onclick: () => { CounterState.count++ }}, "Increment")
 >         )
 >     },
 > }
@@ -93,16 +92,16 @@ My redesign here does *not* allow this to happen, as you can't create state like
 ```js
 let CounterState = {count: 0}
 
-function Counter() {
-    let [state] = ctrl.link(() => CounterState)
+function Counter(attrs, info) {
+    const state = info.init(() => CounterState)
     return m("div",
         m("p", "Count: ", state.count),
-        m("button", "Increment", {onclick() { state.count++ }})
+        m("button", "Increment", {on: {click() { state.count++ }}})
     )
 }
 ```
 
-You can tell right away something about that redesign code just doesn't *feel* right. It feels awfully complicated for what it is, and I had to actually think about the scoping to replicate this issue in the redesign.
+You can tell right away something about that redesign code just doesn't *feel* right. The fact you're explicitly assigning an outside reference just to replicate the issue makes it way clearer what's actually going on. In fact, you probably wouldn't have written that, anyways - you would've likely avoided it by doing `info.init(() => ({count: 0}))` instead.
 
 In contrast, here's the *correct* implementation of the `Counter` component in both v2 and the redesign:
 
@@ -119,22 +118,22 @@ let Counter = {
 }
 
 // This redesign
-function Counter() {
-    let [state] = ctrl.link(() => ({count: 0}))
+function Counter(attrs, info) {
+    let state = info.init(() => ({count: 0}))
     return m("div",
         m("p", "Count: ", state.count),
-        m("button", "Increment", {onclick() { state.count++ }})
+        m("button", "Increment", {on: {click() { state.count++ }}})
     )
 }
 
-// Alternative in this redesign
-function Counter() {
-    let [count, setCount] = ctrl.link(() => 0)
+// Alternative in this redesign, using the DSL
+const Counter = component(() => {
+    let [count, setCount] = slot(0)
     return m("div",
         m("p", "Count: ", count),
-        m("button", "Increment", {onclick() { setCount(count + 1) }})
+        m("button", "Increment", {on: {click() { setCount(count + 1) }}})
     )
-}
+})
 ```
 
 If you have to focus on avoiding a gotcha in Mithril rather than writing logic, Mithril is clearly getting in your way of actually doing things, and this is what the redesign is aiming to avoid.

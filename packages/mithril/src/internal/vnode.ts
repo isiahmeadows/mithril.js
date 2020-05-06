@@ -152,6 +152,7 @@ export interface ComponentInfo<S> {
     whenRemoved(callback: WhenRemovedCallback): void
     set(key: PropertyKey, value: EnvironmentValue): void
     state: S | undefined
+    init(initializer: () => S): S
     ref: RefValue
     window?: Window
 }

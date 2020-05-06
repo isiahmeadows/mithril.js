@@ -35,24 +35,24 @@ export default function Todo({model, todo}, info, {dispatch}) {
                 m("input.toggle", {
                     type: "checkbox",
                     checked: todo.isCompleted,
-                    onclick: toggleCompleted,
+                    on: {click: toggleCompleted},
                 }),
-                m("label", todo.title, {ondblclick: edit}),
-                m("button.destroy", {onclick: destroy}),
+                m("label", todo.title, {on: {dblclick: edit}}),
+                m("button.destroy", {on: {click: destroy}}),
             ),
-            m("input.edit", {
-                onkeyup(ev) {
+            m("input.edit", {on: {
+                keyup(ev) {
                     if (ev.keyCode === ENTER_KEY) {
                         setTitle(todo, ev.target.value)
                     } else if (ev.keyCode === ESCAPE_KEY) {
                         stopEditing()
                     }
                 },
-                onblur(ev) {
+                blur(ev) {
                     setTitle(todo, ev.target.value)
                     stopEditing()
                 },
-            }, info.isInit() && m.capture((input) => {
+            }}, info.isInit() && m.whenReady((input) => {
                 if (todo.isEditing && input !== document.activeElement) {
                     input.focus()
                     input.value = todo.title

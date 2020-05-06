@@ -1,17 +1,17 @@
 import {m, component, slot} from "mithril"
 import * as api from "../api.mjs"
 
-export const NewThread = component(({onsave}) => {
+export const NewThread = component(({on}) => {
     const [text, setText] = slot("")
 
     return m("form",
-        m("textarea", {value: text, oninput: ["value", setText]}),
+        m("textarea", {value: text, on: {input: ["value", setText]}}),
         m("input", {type: "submit", value: "Post!"}),
-        {async onsubmit(ev, capture) {
+        {on: {async submit(ev, capture) {
             capture.event()
             const {data: thread} = await api.newThread(text)
-            onsave(thread)
+            on.save(thread)
             setText("")
-        }}
+        }}}
     )
 })

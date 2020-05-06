@@ -4,11 +4,44 @@
 
 There's a lot of big decisions here that require some explanation.
 
+## ES5 syntactic compatibility + runtime polyfillability
+
+As many of Mithril's users are in enterprise, IE compatibility is still a must. And even after IE itself is phased out in 2023, [there's still IE Mode in Edge](https://docs.microsoft.com/en-us/deployedge/edge-ie-mode) that Microsoft's been trying to move enterprise to as a compromise (so they can shut down support for the separate IE binary once and for all).
+
+This doesn't mean much to most users, as increasingly they're able to just use modern browsers. Frameworks, especially remotely major ones like Mithril, don't have this luxury - we're shorting out a *lot* of developers if we drop IE support. [In a world where Internet Explorer 11 still has a greater market share than Safari](https://www.netmarketshare.com/browser-market-share.aspx?options=%7B%22filter%22%3A%7B%22%24and%22%3A%5B%7B%22deviceType%22%3A%7B%22%24in%22%3A%5B%22Desktop%2Flaptop%22%5D%7D%7D%5D%7D%2C%22dateLabel%22%3A%22Trend%22%2C%22attributes%22%3A%22share%22%2C%22group%22%3A%22browserVersion%22%2C%22sort%22%3A%7B%22share%22%3A-1%7D%2C%22id%22%3A%22browsersDesktopVersions%22%2C%22dateInterval%22%3A%22Monthly%22%2C%22dateStart%22%3A%222019-05%22%2C%22dateEnd%22%3A%222020-04%22%2C%22plotKeys%22%3A%5B%7B%22browserVersion%22%3A%22Internet%20Explorer%2011%22%7D%2C%7B%22browserVersion%22%3A%22Safari%22%7D%2C%7B%22browserVersion%22%3A%22Edge%22%7D%2C%7B%22browserVersion%22%3A%22Firefox%22%7D%5D%2C%22hiddenSeries%22%3A%7B%7D%2C%22segments%22%3A%22-1000%22%7D), not everyone can just assume all their users are using a modern browser. Yes, some companies (like SaaS companies) can get away with it as most their users are tech-literate and understand the risks and other issues with IE, but in education, smaller banks, governments, and other places that actively avoid upgrading their tech where they can help it, there's a lot of places that flat out can't avoid it. And yes, psychology is almost certainly at play here.
+
+- Many of them [don't see the immediate need or business justification for upgrading their systems](https://en.wikipedia.org/wiki/Present_bias).
+- Many of them [feel too married to their current setup to want to upgrade their systems](https://en.wikipedia.org/wiki/Normalcy_bias).
+- Many of them [have poured enough money to feel they've become committed to their current setup, and that upgrading their systems renders their investment worthless](https://en.wikipedia.org/wiki/Sunk_cost).
+
 ## ES3 syntactic compatibility
 
 I don't plan to actively test against ES3 engines unless I'm alerted that there's a enough of a user base *still* using IE8 that I need to ignore Microsoft's dropping of support, but I will attempt to keep at least syntactic compatibility so users stuck on severely outdated systems can at least cope with this through sufficient polyfills. Pressure by the OS developer (99% of the time it's Microsoft) and lack of support by them should generally be sufficient.
 
-This is per request by a few people developing for projects on relatively ancient operating systems. (There's still a few enterprises and government organizations working on migrating away from IE to modern web technologies. These are the places I feel sorry for those cursed with that kind of job, but I respect and understand their situation.)
+This is per request by a few people developing for projects on relatively ancient operating systems, who've accepted the need for extra tooling and such. (There's still a few enterprises and government organizations working on migrating away from IE to modern web technologies. These are the places I feel sorry for those cursed with that kind of job, but I respect and understand their situation.)
+
+Also, ES3 syntax is just ES5 minus getters and setters. I've found getters to only be a convenience feature, one I can largely live without. Since most of the library additions for ES5 can be shimmed, and for the few parts that can't, [the failure mode from es5-sham with the parts needed for this redesign](https://github.com/es-shims/es5-shim#may-fail) is acceptable, I don't really need to take any further steps beyond compiling to ES5 and not using getters or setters.
+
+> TL;DR: If you want to use this in an ES3 environment, you'll need to load the following before Mithril:
+>
+> - [es5-shim](https://github.com/es-shims/es5-shim#shims)
+> - [es5-sham](https://github.com/es-shims/es5-shim#shams)
+> - [json3](https://bestiejs.github.io/json3/) (safer) or [json2](https://github.com/douglascrockford/JSON-js) (faster)
+> - [request-frame](https://github.com/julienetie/request-frame) (invoke `requestFrame("native")` immediately after)
+> - An ES6-compatible `Promise` polyfill of your choice
+>
+> You'll likely also want to load the [HTML5 Shiv](https://github.com/aFarkas/html5shiv) and/or [Modernizr](https://github.com/Modernizr/Modernizr) (which has it bundled in) if you want to use any remotely recent features.
+
+As for reasoning, see above in the ES5, though the biases at play are typically more extreme and once said organizations break free of them, it's often the case that migration equals a complete redesign, something those organizations often couldn't economically support even if they wanted to.
+
+## Why are attributes a type of vnode?
+
+The benefits of this aren't immediately obvious, I know. But it does lead to some radical new paradigms:
+
+- You want to include move transitions? Just add a `transition("list")` to it with appropriate CSS for `.list-in`, `.list-out`, and `.list-move`.
+- You want an `m("a")` or `m("button")` to route to a link on click? Use a simple `linkTo("/route")`.
+- You want an `m("a")` or `m("button")` to act as a back button? Just drop in a `linkBack()` or `linkTo(-1)`. It's literally that simple.
+- You want to set overlay attributes appropriately on a modal, listening to clicks outside it and such? Just drop an `overlay(...)` as a child of your overlay element.
 
 ## Removing arbitrary selector support in the hyperscript DSL
 
@@ -276,7 +309,7 @@ function useLocalStorage(key) {
     ))
 
     const info = useInfo()
-    usePortal(window, {onstorage: () => info.redraw()})
+    usePortal(window, {on: {storage: () => info.redraw()}})
 
     return [parsed, (value) => {
         window.localStorage.setItem(key, JSON.stringify(value))
@@ -383,7 +416,7 @@ function useLocalStorage(key) {
     const parsed = memo(value, () => value ? JSON.parse(value) : undefined)
 
     const info = useInfo()
-    usePortal(window, {onstorage: () => info.redraw()})
+    usePortal(window, {on: {storage: () => info.redraw()}})
 
     return [parsed, (value) => {
         window.localStorage.setItem(key, JSON.stringify(value))
@@ -437,7 +470,7 @@ m(TrackMouse, {
 })
 ```
 
-```jsx
+```js
 // JSX
 <TrackMouse view={
     (x, y) => <>...</>
@@ -455,7 +488,7 @@ If using attributes is too boilerplatey, there *are* alternate idioms to use, pa
 trackMouse((x, y) => ...)
 ```
 
-```jsx
+```js
 // JSX
 <>{trackMouse((x, y) => <>...</>)}</>
 ```
@@ -501,3 +534,51 @@ The mental model of children includes attributes as a type of child, and attribu
 - There's some other issues I'm not going to detail here for brevity.
 
 As you can tell, that request is much more difficult to pull off in this mental model than it is with, say, the traditional model with attributes separated from children. And the more I've thought about this particular feature, the less I feel it's valuable enough to justify its cost adding it to the mental model and modifying it accordingly.
+
+## Why were keys changed so drastically?
+
+Well, keys are currently used in one of two ways in nearly every virtual DOM library:
+
+- A list of entries you need to iterate, where you need to track their identity even if they move.
+- As a means to manually force a subtree to be replaced.
+
+I decided to separate these two concerns, because of three reasons:
+
+1. People have a habit of overusing keys, and `m.link(id, ...children)` makes it much clearer it's about linking an identity to a subtree. Been fighting this regularly in the Gitter chat room as well as in multiple issues filed against Mithril.
+2. It's generally the wrong thing to do to key *some* but not *all* of a keyed list, and me adding that check in Mithril has caught a *lot* more problems than it caused based on all the feedback I got. If you really intend to have separators, you can figure that out manually using an index, but it's such a niche use case to want to interleave keyed and unkeyed subtrees it shouldn't be supported in Mithril itself. If you really need that, fork Mithril to do what you need.
+3. The first is a complicated mess that requires very complex, specialized algorithms to efficiently handle, but the second is as simple as an equality check.
+
+And in addition, [this loop](https://github.com/mithrilJS/mithril.js/blob/db277217f88d293aa14154c8f0017675ffe94a9c/render/vnode.js#L16-L23) is not something I want to keep around in a framework. It's ugly, it's slow, and it's just a band-aid to protect users against a common user bug. By splitting these two out and changing how keyed fragments are built, it solves several problems:
+
+- Instead of having to check for all keyed/unkeyed, it's literally impossible by design to make that mistake.
+- `m.link` makes it easy and clear when you're binding a state to a subtree, so it's easy to simply swap that out for something else.
+- There's nothing to check to see if it's a keyed fragment or an unkeyed one besides just testing a simple integer ID, mitigating most of the performance cliff and complexity associated with it.
+- It's much less of a footgun to just `m.link` everything than it is to add `key:`s to v2 fragments, resulting in a *lot* fewer questions coming up regarding them.
+
+## Why the change of syntax with events?
+
+I for several months floated back and forth on whether to use `onevent: ...`, `on: {event: ...}`, deliberating off and on mentally on which one to pick. There's pros and cons to each, and neither are obvious.
+
+- Reasons to stick with `onevent: ...`:
+    - It's easier to type.
+    - It aligns better with HTML and is thus more familiar.
+    - It's easier to scan for individual listeners.
+    - It's easier to read in isolation as it only involves two tokens to parse: `on` and the event name.
+
+- Reasons to switch to `on: {event(ev) { ... }}`:
+    - It's easier to develop types for. [TypeScript doesn't currently provide a way to match type keys starting with `on`](https://github.com/Microsoft/TypeScript/issues/6579), and Flow also lacks similar functionality.
+    - It's easier to scan for internally, and doesn't require any string manipulation to iterate or invoke in. It also requires less branching for similar reasons.
+    - It's clearer how event names map to event listeners in the underlying DOM representation, as the name and the `on` are separated with additional tokens.
+
+> I also considered a third option, `m.on({event: ...})`/`m.on("event", ...)`, but while it's very, *very* nice for the runtime, it's far too token-heavy for such a common need. This is also around the time I considered using `m.set({attr: ...})`/`m.set("attr", ...)`, and you can probably guess why I skipped over that harebrained idea.
+
+I've solidified on the second. The first seems better on the surface, but the benefits of that over the second have proven themselves to be minimal:
+
+- It's only marginally more difficult to type when only one listener is present (two braces and a colon, nothing more), and that ease vanishes very quickly with multiple listeners as you aren't having to type `on` repeatedly for each name.
+- Aligning with HTML sounds great in theory, as there's fewer things to teach, but it's not paid off without frequent catches in practice. I've noticed a pattern where new people are expecting it to be *too* similar, passing strings and such to it. And I've seen many used to `elem.onfoo` run into other issues, finding it surprising they can't, say, set `vnode.dom.onclick = ...` in `onupdate` and it *not* call the handler they passed in the vnode. (Yes, I've seen this come up in the past, even with more experienced users.)
+    - In the React world, nobody sees `onClick` as actually identical to HTML's `onclick` or the DOM's `Element.prototype.onclick`, and the casing convention makes this abundantly clear. (In fact, people are surprised to learn that *any* event name works, provided you case it correctly. Mithril does not suffer from this issue as much, BTW.)
+    - Similarly, nobody mistakes jQuery's `$elem.on("event", callback)` as being truly 100% equivalent to the DOM's `elem.addEventListener("event", callback, false)`. They see it as isomorphic, but they do *not* expect everything to be the same, up to and including even the way `callback` is called.
+- It's only marginally harder to scan for listeners. In practice, you're not likely to have a variable named `click` or `change` in the same file as a component, and if you do, it's likely to only be 1-2 extra enter key presses to find the listener you need. And that's if you have to search for it - you generally don't need to.
+- The simpler tokenization has shown to not really help. People talk about `onclick` events rather than `click` events, and any time they're dealing with custom events from third-party libraries with names that aren't valid identifier names for properties (like `bs.modal.show`), they inevitably get confused. I've seen even people who've used Mithril for years get confused over this fact.
+
+I know this will be controversial, but my focus is on solving long-standing design issues people have had with Mithril. It's simple in many respects, but I've witnessed with this, among others, a superficial simplicity that us regular users understand intuitively, but runs against the intuition of most others.

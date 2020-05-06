@@ -98,10 +98,11 @@ The redesign didn't just stop at being smaller - it also kept me from even havin
              m(Header),
              m("div.main", m.link(id, m(Async, {
     -            load: async () => {
-    -                info.state = (await api.thread(id)).root
     +            load: async (signal) => {
-    +                info.state = (await api.thread(id, {signal})).root
+    -                const node = (await api.thread(id)).root
+    +                const node = (await api.thread(id, {signal})).root
                      document.title = `ThreaditJS: Mithril | ${T.trimTitle(node.text)}`
+                     return node
                  }},
                  view: () => m(ThreadNode, {node}),
              }))
@@ -155,7 +156,7 @@ Here's what the diffs for each of those in the vanilla version:
     -const Async = component(({attrs, view}) {
     +const Layout = component(({attrs, view}) {
          const info = useInfo()
-         const result = use(() => load(info.signal()))
+         const result = use((signal) => load(signal))
 
     +    return [
     +        m(Header),

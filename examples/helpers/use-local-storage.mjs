@@ -7,7 +7,7 @@ export function useLocalStorage(key) {
     const parsed = memo(value, () => value ? JSON.parse(value) : undefined)
 
     const info = useInfo()
-    usePortal(window, {onstorage: () => info.redraw()})
+    usePortal(window, {on: {storage: () => info.redraw()}})
 
     return parsed
 }

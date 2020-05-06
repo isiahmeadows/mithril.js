@@ -73,14 +73,14 @@ function ScheduleTransition(
     attrs: TransitionAttrs,
     info: V.ComponentInfo<ScheduleTransitionState>
 ) {
-    const state = info.state || (info.state = {
+    const state = info.init(() => ({
         adding: attrs.in != null,
         moving: false,
         removed: false,
         closed: false,
         ref: void 0,
         closeRemove: void 0,
-    })
+    }))
 
     info.whenReady((ref) => {
         state.ref = ref as Any as Element & V.RenderTarget
@@ -92,10 +92,10 @@ function ScheduleTransition(
     if (attrs.in != null && state.adding) {
         vnodes.push(
             classOrStyleToAttrs(attrs.in),
-            {ontransitionend() {
+            {on: {transitionend() {
                 state.adding = false
                 if (typeof attrs.afterIn === "function") return attrs.afterIn()
-            }}
+            }}}
         )
     } else {
         vnodes.push(void 0, void 0)
@@ -115,7 +115,7 @@ function ScheduleTransition(
             info.render(state.ref!, () => [
                 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
                 classOrStyleToAttrs(attrs.out!),
-                {ontransitionend(_: V.EventValue, capture: V.Capture) {
+                {on: {transitionend(_: V.EventValue, capture: V.Capture) {
                     capture.redraw()
                     state.removed = true
                     const close = state.closeRemove
@@ -124,7 +124,7 @@ function ScheduleTransition(
                         resolve(close())
                         invokeAfterOut()
                     }
-                }}
+                }}}
             ])
                 .then((close) => {
                     if (state.removed) {

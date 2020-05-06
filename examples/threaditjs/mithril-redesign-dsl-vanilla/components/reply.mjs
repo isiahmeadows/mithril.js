@@ -7,16 +7,16 @@ export default component("Reply", ({node}) => {
 
     return m.if(comment != null, {
         then: () => m("form",
-            m("textarea", {value: comment, oninput: ["value", setComment]}),
+            m("textarea", {value: comment, on: {input: ["value", setComment]}}),
             m("input", {type: "submit", value: "Reply!"}),
             m("div.preview", {innerHTML: preview}),
-            {async onsubmit(_, capture) {
+            {on: {async submit(_, capture) {
                 capture.event()
                 const {data} = await api.newComment(comment, node.id)
                 node.children.push(data)
                 setComment(null)
-            }}
+            }}}
         ),
-        else: () => m("a", "Reply!", {onclick() { setComment("") }})
+        else: () => m("a", "Reply!", {on: {click() { setComment("") }}})
     })
 })

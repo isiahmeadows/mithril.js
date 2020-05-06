@@ -13,7 +13,7 @@ export default function Home() {
         },
         view: (threads) => [
             m.each(threads, "id", (thread) => m(ThreadPreview, {thread})),
-            m(NewThread, {onsave(thread) { threads.push(thread) }}),
+            m(NewThread, {on: {save(thread) { threads.push(thread) }}}),
         ]
     })
 }

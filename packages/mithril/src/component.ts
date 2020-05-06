@@ -17,8 +17,8 @@ import {AbortSignal, AbortController} from "./internal/dom"
 import {
     VnodeAttributes,
     ComponentInfo, Environment, EnvironmentValue,
-    WhenRemovedResult, WhenRemovedCallback, Vnode, Component,
-    ErrorValue, RenderTarget, StateValue
+    WhenReadyResult, WhenRemovedResult, WhenRemovedCallback, CloseCallback,
+    Vnode, Component, ErrorValue, RenderTarget
 } from "./internal/vnode"
 
 /*************************************/
@@ -116,32 +116,53 @@ function runClose(
 // on it. It also goes to great lengths to minimize stack usage, it only
 // allocates the remove closure if child remove callbacks exist, and it attempts
 // to reuse the same closure context where possible/practical.
+//
+// The state is modeled as two phases:
+//
+// Live:
+// - Number of blocks still closing
+// - Child cells
+// - Child `whenRemoved` callbacks
+// - Parent `onRemove`
+// Closed:
+// - Number of blocks still closing
+// - Parent `onRemove`'s `resolve` function
+// - Ignored
+// - Ignored
+//
+// The function itself is structured as five concrete steps:
+//
+// 1. Set up initial state in preparation for the block
+// 1. Invoke the block
+// 1. Restore old state
+// 1. Clean up after child close (if applicable)
+// 1. Schedule removal callback if any child remove callbacks were scheduled
+//
+// This specifically limits itself to
 export function guard<T>(cond: Any, block: () => T): T {
     if (__DEV__) validateContext()
-    const prevMask = currentMask
-    const cells = currentCells
+    const parentMask = currentMask
+    const parentCells = currentCells
     const prevRemoveTarget = currentRemoveTarget
 
-    if (prevMask & Bits.IsFirstRun) {
-        currentMask = Bits.IsActive | Bits.IsNestedRemove
-        cells.push(
+    if (parentMask & Bits.IsFirstRun) {
+        currentMask = Bits.IsActive | Bits.IsFirstRun | Bits.IsNestedRemove
+        parentCells.push(
             1, // close open count
             currentCells = [], // child cells on run, close resolve after closed
             currentRemoveTarget = [],
             void 0 // onRemove
         )
     } else {
+        const index = parentMask >>> Bits.IndexOffset
         currentMask = Bits.IsActive | Bits.IsNestedRemove |
             // Intentionally using an implicit coercion here.
             (!!cond as Any as number) << Bits.IsFirstRunOffset
-        currentRemoveTarget = cells[(prevMask >>> Bits.IndexOffset) + 1] as
-            WhenRemovedCallback[]
-        currentCells = cells[(prevMask >>> Bits.IndexOffset) + 2] as CellList
-        if (currentRemoveTarget.length) {
-            currentRemoveTarget = cells[(prevMask >>> Bits.IndexOffset) + 1] =
-                []
-        }
-        if (currentMask & Bits.IsFirstRun) currentCells.length = 0
+        const removes = currentRemoveTarget =
+            parentCells[index + 1] as WhenRemovedCallback[]
+        if (removes.length) currentRemoveTarget = parentCells[index + 1] = []
+        const cells = currentCells = parentCells[index + 2] as CellList
+        if (parentMask & Bits.IsFirstRun) cells.length = 0
     }
 
     try {
@@ -149,26 +170,26 @@ export function guard<T>(cond: Any, block: () => T): T {
     } finally {
         const childMask = currentMask
         const info = currentInfo
-        const index = prevMask >>> Bits.IndexOffset
-        currentCells = cells
+        const index = parentMask >>> Bits.IndexOffset
+        currentCells = parentCells
         currentRemoveTarget = prevRemoveTarget
-        currentMask = prevMask + (4 << Bits.IndexOffset)
+        currentMask = parentMask + (4 << Bits.IndexOffset)
 
         if (childMask & Bits.IsFirstRun) {
-            const childRemoves = cells[index + 1] as WhenRemovedCallback[]
+            const childRemoves = parentCells[index + 1] as WhenRemovedCallback[]
 
             if (childRemoves.length) {
                 const result = runClose(info, childRemoves)
                 if (result != null) {
                     // Add it, then remove it once it resolves.
-                    (cells[index] as number)++
+                    (parentCells[index] as number)++
                     ;(result as PromiseLike<WhenRemovedResult>).then(() => {
-                        if (!--(cells[index] as number)) {
-                            (cells[index + 2] as () => void)()
+                        if (!--(parentCells[index] as number)) {
+                            (parentCells[index + 2] as () => void)()
                         }
                     }, (e: ErrorValue) => {
-                        if (!--(cells[index] as number)) {
-                            (cells[index + 2] as () => void)()
+                        if (!--(parentCells[index] as number)) {
+                            (parentCells[index + 2] as () => void)()
                         }
                         info.throw(e, false)
                     })
@@ -180,21 +201,25 @@ export function guard<T>(cond: Any, block: () => T): T {
         // handled.
         if (
             childMask & Bits.HasRemoveCallback ||
-            (cells[index + 2] as number) > 1
+            (parentCells[index + 2] as number) > 1
         ) {
+            // Better to just update it directly rather than to waste stack
+            // space just to avoid a heap access.
             currentMask |= Bits.HasRemoveCallback
-            let onRemove = cells[index + 3] as Maybe<WhenRemovedCallback>
+            let onRemove = parentCells[index + 3] as Maybe<WhenRemovedCallback>
             if (onRemove == null) {
-                cells[index + 3] = onRemove = () => {
-                    const removes = cells[index + 2] as WhenRemovedCallback[]
+                parentCells[index + 3] = onRemove = () => {
+                    const removes = parentCells[index + 2] as
+                        WhenRemovedCallback[]
                     // Clear out unneeded memory references.
-                    cells[index + 1] = cells[index + 2] = cells[index + 3] =
-                        void 0
+                    parentCells[index + 1] =
+                    parentCells[index + 2] =
+                    parentCells[index + 3] = void 0
                     // If there's nothing to await, let's just skip the
                     // ceremony.
-                    if (--(cells[index] as number)) {
+                    if (--(parentCells[index] as number)) {
                         const p = new Promise<WhenRemovedResult>((resolve) => {
-                            cells[index + 2] = resolve
+                            parentCells[index + 2] = resolve
                         })
                         if (!removes.length) return p
                         removes.push(() => p)
@@ -224,14 +249,14 @@ export function useEffect<D extends Any>(
     block?: () => Maybe<WhenRemovedCallback>
 ): void {
     if (__DEV__) validateContext()
-    const prevMask = currentMask
+    const mask = currentMask
     const cells = currentCells
-    const index = prevMask >>> Bits.IndexOffset
+    const index = mask >>> Bits.IndexOffset
     let callback: Maybe<WhenRemovedCallback>
 
     if (arguments.length < 2) {
-        currentMask = prevMask + (1 << Bits.IndexOffset)
-        if (prevMask & Bits.IsFirstRun) {
+        currentMask = mask + (1 << Bits.IndexOffset)
+        if (mask & Bits.IsFirstRun) {
             callback = (dependency as () => Maybe<WhenRemovedCallback>)()
             if (typeof callback !== "function") callback = void 0
             cells.push(callback)
@@ -239,8 +264,8 @@ export function useEffect<D extends Any>(
             callback = cells[index] as Maybe<WhenRemovedCallback>
         }
     } else {
-        currentMask = prevMask + (2 << Bits.IndexOffset)
-        if (prevMask & Bits.IsFirstRun) {
+        currentMask = mask + (2 << Bits.IndexOffset)
+        if (mask & Bits.IsFirstRun) {
             callback = (block as () => WhenRemovedCallback)()
             if (typeof callback !== "function") callback = void 0
             cells.push(dependency, callback)
@@ -262,8 +287,9 @@ export function useEffect<D extends Any>(
 
 export function whenRemoved(callback: () => Await<WhenRemovedResult>) {
     if (__DEV__) validateContext()
-    currentMask |= Bits.HasRemoveCallback
-    if (currentMask & Bits.IsNestedRemove) {
+    const mask = currentMask
+    currentMask = mask | Bits.HasRemoveCallback
+    if (mask & Bits.IsNestedRemove) {
         (currentRemoveTarget as WhenRemovedCallback[]).push(callback)
     } else {
         (currentRemoveTarget as Info).whenRemoved(callback)
@@ -287,6 +313,8 @@ export function when<T>(
 ): Maybe<T> {
     if (__DEV__) validateContext()
     const coerced = !!cond
+    const mask = currentMask
+    const cells = currentCells
     let changed = true
     let block: Maybe<() => T>
 
@@ -296,15 +324,13 @@ export function when<T>(
         block = coerced ? opts.then : opts.else
     }
 
-    if (currentMask & Bits.IsFirstRun) {
-        currentCells.push(true)
+    currentMask = mask + (1 << Bits.IndexOffset)
+    if (mask & Bits.IsFirstRun) {
+        cells.push(true)
     } else {
-        changed =
-            (currentCells[currentMask >>> Bits.IndexOffset] as boolean) !==
-            (currentCells[currentMask >>> Bits.IndexOffset] = coerced)
+        const index = mask >>> Bits.IndexOffset
+        changed = (cells[index] as boolean) !== (cells[index] = coerced)
     }
-
-    currentMask += 1 << Bits.IndexOffset
 
     return guard(
         changed,
@@ -312,33 +338,61 @@ export function when<T>(
     )
 }
 
-// Not a common need, so it's implemented in userland.
 export function usePortal(
-    target: RenderTarget,
+    target: RenderTarget | (() => RenderTarget),
     ...children: Vnode[]
-): Use<void> {
-    const info = useInfo()
-    const childrenRef = ref<Vnode[]>()
-    const infoRef = ref<ComponentInfo<StateValue>>()
+): void {
+    if (__DEV__) validateContext()
+    const mask = currentMask
+    const cells = currentCells
+    const info = currentInfo
+    const index = mask >>> Bits.IndexOffset
+    let onRemove: WhenRemovedCallback
 
-    childrenRef.current = children
+    currentMask = mask + (5 << Bits.IndexOffset) | Bits.HasRemoveCallback
+    if (mask & Bits.IsFirstRun) {
+        cells.push(
+            void 0, // target
+            void 0, // children
+            void 0, // child info
+            void 0, // init promise
+            onRemove = () =>
+                (cells[index + 3] as Promise<CloseCallback>)
+                    .then((close) => close()) as Any as WhenRemovedResult
+        )
+    } else {
+        onRemove = cells[index + 4] as WhenRemovedCallback
+    }
 
-    // This is intentionally before the `useEffect` as `useEffect` runs on
-    // first run and there's no redraw handle on first run.
-    infoRef.current?.redraw().catch((e) => {
-        info.throw(e as ErrorValue, true)
-    })
+    cells[index + 1] = children
+    if (mask & Bits.IsNestedRemove) {
+        (currentRemoveTarget as WhenRemovedCallback[]).push(onRemove)
+    } else {
+        (currentRemoveTarget as Info).whenRemoved(onRemove)
+    }
 
-    return use(target, (target, signal) => {
-        infoRef.current = void 0
-        return info.render<StateValue>(target, (childInfo) => {
-            infoRef.current = childInfo
-            return childrenRef.current
-        }).then((close) => {
-            if (signal.aborted) return close()
-            signal.onabort = close
-            return void 0
-        })
+    // Defer the update, so things get queued correctly and so in the event a
+    // ref needs rendered to, this can still be up to the task.
+    info.whenReady((): Await<WhenReadyResult> => {
+        const resolved = typeof target === "function"
+            ? target()
+            : target
+
+        if (cells[index] === resolved) {
+            return (
+                (cells[index + 2] as Maybe<ComponentInfo<never>>)?.redraw()
+            ) as Any as Promise<WhenReadyResult>
+        }
+
+        return (
+            cells[index + 3] = info.render<never>(
+                cells[index] = resolved,
+                (childInfo) => {
+                    cells[index + 2] = childInfo
+                    return cells[index + 1] as Vnode
+                }
+            )
+        ) as Any as Promise<WhenReadyResult>
     })
 }
 
@@ -350,14 +404,14 @@ export function ref<T>(): Ref<T | undefined>
 export function ref<T>(initialValue: T): Ref<T>
 export function ref<T>(initialValue?: T): Ref<T | undefined> {
     if (__DEV__) validateContext()
-    const prevMask = currentMask
-    currentMask = prevMask + (1 << Bits.IndexOffset)
-    if (prevMask & Bits.IsFirstRun) {
+    const mask = currentMask
+    currentMask = mask + (1 << Bits.IndexOffset)
+    if (mask & Bits.IsFirstRun) {
         const value = {current: initialValue}
         currentCells.push(value)
         return value
     } else {
-        return currentCells[prevMask >>> Bits.IndexOffset] as Ref<T>
+        return currentCells[mask >>> Bits.IndexOffset] as Ref<T>
     }
 }
 
@@ -451,24 +505,21 @@ export function component<
 }
 
 export function isInitial(): boolean {
-    return !!(currentMask & Bits.IsFirstRun)
+    return (currentMask & Bits.IsFirstRun) !== 0
 }
 
 export function slot<T extends Any>(
     initialValue: T
 ): [T, (value: T) => Promise<void>] {
     if (__DEV__) validateContext()
+    const mask = currentMask
     const cells = currentCells
     const info = currentInfo
-    const index = currentMask >>> Bits.IndexOffset
+    const index = mask >>> Bits.IndexOffset
 
-    if (currentMask & Bits.IsFirstRun) {
-        currentCells.push(initialValue)
-    } else {
-        initialValue = currentCells[index] as T
-    }
-
-    currentMask += 1 << Bits.IndexOffset
+    currentMask = mask + (1 << Bits.IndexOffset)
+    if (mask & Bits.IsFirstRun) cells.push(initialValue)
+    else initialValue = cells[index] as T
 
     return [initialValue, (next: T): Promise<void> => {
         cells[index] = next
@@ -481,18 +532,15 @@ export function useReducer<T extends Any, A extends Any>(
     reducer: (prev: T, action: A) => T
 ): [T, (action: A) => Promise<void>] {
     if (__DEV__) validateContext()
+    const mask = currentMask
     const cells = currentCells
     const info = currentInfo
-    const index = currentMask >>> Bits.IndexOffset
+    const index = mask >>> Bits.IndexOffset
     let value: T
 
-    if (currentMask & Bits.IsFirstRun) {
-        currentCells.push(value = init())
-    } else {
-        value = cells[index] as T
-    }
-
-    currentMask += 1 << Bits.IndexOffset
+    currentMask = mask + (1 << Bits.IndexOffset)
+    if (mask & Bits.IsFirstRun) cells.push(value = init())
+    else value = cells[index] as T
 
     return [value, (next: A): Promise<void> => {
         cells[index] = reducer(cells[index] as T, next)
@@ -505,18 +553,15 @@ export function lazy<T extends Any>(
     init: () => T
 ): [T, (updater: (value: T) => T) => Promise<void>] {
     if (__DEV__) validateContext()
+    const mask = currentMask
     const cells = currentCells
     const info = currentInfo
-    const index = currentMask >>> Bits.IndexOffset
+    const index = mask >>> Bits.IndexOffset
     let value: T
 
-    if (currentMask & Bits.IsFirstRun) {
-        currentCells.push(value = init())
-    } else {
-        value = cells[index] as T
-    }
-
-    currentMask += 1 << Bits.IndexOffset
+    currentMask = mask + (1 << Bits.IndexOffset)
+    if (mask & Bits.IsFirstRun) cells.push(value = init())
+    else value = cells[index] as T
 
     return [value, (update: (value: T) => T): Promise<void> => {
         cells[index] = update(cells[index] as T)
@@ -534,32 +579,32 @@ export function memo<T extends Any, D extends Any>(
     init?: (value: D) => T
 ): T {
     if (__DEV__) validateContext()
-    const prevMask = currentMask
+    const mask = currentMask
+    const cells = currentCells
+    const index = mask >>> Bits.IndexOffset
 
     if (arguments.length < 2) {
-        currentMask = prevMask + (1 << Bits.IndexOffset)
-        if (prevMask & Bits.IsFirstRun) {
+        currentMask = mask + (1 << Bits.IndexOffset)
+        if (mask & Bits.IsFirstRun) {
             const value = (dependency as () => T)()
-            currentCells.push(value)
+            cells.push(value)
             return value
         } else {
-            return currentCells[prevMask >>> Bits.IndexOffset] as T
+            return cells[index] as T
         }
     } else {
-        currentMask = prevMask + (2 << Bits.IndexOffset)
-        if (prevMask & Bits.IsFirstRun) {
+        currentMask = mask + (2 << Bits.IndexOffset)
+        if (mask & Bits.IsFirstRun) {
             const value = (init as (v: D) => T)(dependency as D)
-            currentCells.push(dependency, value)
+            cells.push(dependency, value)
             return value
         } else {
-            const index = prevMask >>> Bits.IndexOffset
-            const prev = currentCells[index] as D
-            currentCells[index] = dependency
+            const prev = cells[index] as D
+            cells[index] = dependency
             if (isEqual(prev, dependency)) {
-                return currentCells[index + 1] as T
+                return cells[index + 1] as T
             } else {
-                return currentCells[index + 1] =
-                    (init as (v: D) => T)(dependency as D)
+                return cells[index + 1] = (init as (v: D) => T)(dependency as D)
             }
         }
     }
@@ -567,39 +612,26 @@ export function memo<T extends Any, D extends Any>(
 
 export function usePrevious<T extends Any>(value: T, initial: T): T {
     if (__DEV__) validateContext()
+    const mask = currentMask
+    const cells = currentCells
+    const index = mask >>> Bits.IndexOffset
 
-    if (currentMask & Bits.IsFirstRun) {
-        currentCells.push(value)
+    currentMask = mask + (1 << Bits.IndexOffset)
+
+    if (mask & Bits.IsFirstRun) {
+        cells.push(value)
     } else {
-        const index = currentMask >>> Bits.IndexOffset
-        initial = currentCells[index] as T
-        currentCells[index] = value
+        initial = cells[index] as T
+        cells[index] = value
     }
-
-    currentMask += 1 << Bits.IndexOffset
 
     return initial
 }
 
 export function useToggle(): [boolean, () => Promise<void>] {
     if (__DEV__) validateContext()
-    const info = currentInfo
-    const cells = currentCells
-    const index = currentMask >>> Bits.IndexOffset
-    let toggle = false
-
-    currentMask += 1 << Bits.IndexOffset
-    if (currentMask & Bits.IsFirstRun) {
-        cells.push(false)
-    } else {
-        toggle = currentCells[index] as boolean
-        currentCells[index] = true
-    }
-
-    return [toggle, (): Promise<void> => {
-        cells[index] = true
-        return info.redraw()
-    }]
+    const [value, setValue] = slot<boolean>(false)
+    return [value, () => setValue(true)]
 }
 
 const enum UseState {
@@ -629,28 +661,32 @@ type _UseCommon<T> = {
 }
 
 const Use: {
-    new<T>(init: (signal: AbortSignal) => Await<T>): Use<T>
+    new<T>(init?: (signal: AbortSignal) => Await<T>): Use<T>
     prototype: _UseCommon<Any>
 } = /*@__PURE__*/ (() => {
-function Use<T>(this: Use<T>, init: (signal: AbortSignal) => Await<T>) {
-    const index = currentMask >>> Bits.IndexOffset
+function Use<T>(this: Use<T>, init?: (signal: AbortSignal) => Await<T>) {
+    const mask = currentMask
     const cells = currentCells
     const info = currentInfo
+    const index = mask >>> Bits.IndexOffset
+    let onRemove: WhenRemovedCallback
 
-    if (currentMask & Bits.IsFirstRun) {
+    currentMask = mask + (3 << Bits.IndexOffset) | Bits.HasRemoveCallback
+    if (mask & Bits.IsFirstRun) {
         let controller: Maybe<AbortController> =
                 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
                 new info.window!.AbortController()
-        currentCells.push(
+        cells.push(
             this.$ = UseState.Pending, // state
             this._ = void 0, // value
-            () => {
+            onRemove = () => {
                 cells[index + 2] = void 0
                 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
                 const ctrl = controller!
                 controller = void 0
                 ctrl.abort()
-            } // close
+                return void 0 as Any as WhenRemovedResult
+            }
         )
 
         // I'm creating a synthetic promise because it's cheaper than adding
@@ -668,12 +704,16 @@ function Use<T>(this: Use<T>, init: (signal: AbortSignal) => Await<T>) {
             }
         )
     } else {
-        this.$ = currentCells[index] as UseState
-        this._ = currentCells[index + 1] as Maybe<T | ErrorValue>
+        this.$ = cells[index] as UseState
+        this._ = cells[index + 1] as Maybe<T | ErrorValue>
+        onRemove = cells[index + 2] as WhenRemovedCallback
     }
 
-    currentMask += 3 << Bits.IndexOffset
-    whenRemoved(currentCells[index + 2] as WhenRemovedCallback)
+    if (mask & Bits.IsNestedRemove) {
+        (currentRemoveTarget as WhenRemovedCallback[]).push(onRemove)
+    } else {
+        (currentRemoveTarget as Info).whenRemoved(onRemove)
+    }
 }
 
 (Use.prototype as _UseCommon<Any>).state = function () {
@@ -695,14 +735,15 @@ function Use<T>(this: Use<T>, init: (signal: AbortSignal) => Await<T>) {
 }
 
 return Use as Any as {
-    new<T>(init: (signal: AbortSignal) => Await<T>): Use<T>
+    new<T>(init?: (signal: AbortSignal) => Await<T>): Use<T>
     prototype: _UseCommon<Any>
 }
 })()
 
 // `use` is pretty complicated to begin with. Let's not blow this module up
 // further by super-optimizing an inherently moderately expensive operation to
-// begin with.
+// begin with. It's also something mildly perf-sensitive on subsequent runs as
+// it handles resource loading, a very common operation in many apps.
 export function use<T>(
     init: (signal: AbortSignal) => Await<T>
 ): Use<T>
@@ -755,20 +796,21 @@ export function isIdentical(a: Any, b: Any) {
 export function hasChanged(...values: Any[]): boolean
 export function hasChanged(): boolean {
     if (__DEV__) validateContext()
-    if (currentMask & Bits.IsFirstRun) {
-        currentCells.push.apply(currentCells, arguments)
-        currentMask += arguments.length << Bits.IndexOffset
+    const mask = currentMask
+    const cells = currentCells
+    let index = mask >>> Bits.IndexOffset
+
+    currentMask = mask + (arguments.length << Bits.IndexOffset)
+    if (mask & Bits.IsFirstRun) {
+        cells.push.apply(cells, arguments)
         return true
     } else {
-        let index = currentMask >>> Bits.IndexOffset
         let result = 1
         for (let i = 0; i < arguments.length; i++, index++) {
-            result &=
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-                isEqual(currentCells[index], arguments[i]) as Any as number
-            currentCells[index] = arguments[i]
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+            result &= isEqual(cells[index], arguments[i]) as Any as number
+            cells[index] = arguments[i]
         }
-        currentMask += arguments.length << Bits.IndexOffset
         return !!result
     }
 }
@@ -778,14 +820,17 @@ export function hasChangedBy<T extends Any>(
     comparator: (prev: T, next: T) => boolean
 ): boolean {
     if (__DEV__) validateContext()
-    if (currentMask & Bits.IsFirstRun) {
-        currentCells.push(value)
-        currentMask += 1 << Bits.IndexOffset
+    const mask = currentMask
+    const cells = currentCells
+    let index = mask >>> Bits.IndexOffset
+
+    currentMask = mask + (1 << Bits.IndexOffset)
+    if (mask & Bits.IsFirstRun) {
+        cells.push(value)
         return true
     } else {
-        const prev = currentCells[currentMask >>> Bits.IndexOffset] as T
-        currentCells[currentMask >>> Bits.IndexOffset] = value
-        currentMask += 1 << Bits.IndexOffset
+        const prev = cells[index] as T
+        cells[index] = value
         return comparator(prev, value)
     }
 }

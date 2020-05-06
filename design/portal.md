@@ -5,7 +5,7 @@
 This is exposed under `mithril/portal` and exported from the full bundle as `Mithril.portal`.
 
 - `portal(target, ...children)` - Create a portal to `target` and render `children` to it
-    - `target` is a ref (as received by the callback of `m.capture()`).
+    - `target` is a ref (as received by the callback of `m.whenReady(...)`) or a function to one.
     - `children` are the children to render.
 
 ### Why?

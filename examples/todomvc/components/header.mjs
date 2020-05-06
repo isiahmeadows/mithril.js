@@ -8,12 +8,12 @@ export default function Header(attrs, info, {dispatch}) {
             id: "new-todo",
             placeholder: "What needs to be done?",
             autofocus: true,
-            onkeypress(ev) {
+            on: {keypress(ev) {
                 if (ev.keyCode !== 13 && ev.target.value) {
                     dispatch(Model.addTodo(ev.target.value))
                     ev.target.value = ""
                 }
-            },
+            }},
         }),
     ])
 }

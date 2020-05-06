@@ -6,14 +6,13 @@ Components are very simple and consistent. Lifecycle is easy to process, easy to
 
 ```js
 function Comp(attrs, info, env) {
-    const state = info.state
+    const state = info.init(() => initialState)
     return view
 }
 ```
 
 - `attrs` is the current attributes, set to a frozen object. Event handlers are included for easier event delegation, but they're merged.
 - `info` is the component info, necessary for basic tree reflection.
-    - `info.state` is a simple property that allows stateful persistence.
 - `env` is the current environment, set to a frozen object. Its identity is an implementation detail, and it's not necessarily unique.
 - `initialAttrs` and `initialEnv` are as you would expect, the initial attributes and environment, respectively
     - In general, avoid using these.
@@ -38,7 +37,7 @@ For convenience and consistency, `attrs.children` is set to a resolved children 
 
 The component receives event handlers a little differently. Specifically:
 
-- `attrs.onevent(value, capture?)` - Invokes `onevent(value, capture)` for each such listener and returns `true` if any of them invoked `capture.event()`.
+- `attrs.on.event(value, capture?)` - Invokes `on.event(value, capture)` for each such listener and returns `true` if any of them invoked `capture.event()`.
     - If `capture` is not passed, one is made internally.
     - Note: the redraw is skipped if either it's not listened to or if all listeners call this.
 - Event listeners are only defined if one event is listened to, but multiple event listeners are merged and single event listeners are normalized.
@@ -49,6 +48,13 @@ The component info object (`info` below) contains all the necessary bits for com
 
 - Whether the component is active (and not yet removed): `test = info.isActive()`
     - `test` is `false` if the component was ever removed, `true` otherwise.
+
+- Current state: `state = info.state`
+    - You can use this to persist state across multiple renders.
+
+- Initialize and link state: `state = info.init(callback)`
+    - `initialState = callback()` creates and returns the initial state.
+    - This is just sugar for `info.isInitial() ? (info.state = callback()) : info.state`, though it's a primitive for convenience.
 
 - Render to targeted node: `promiseToClose = info.render(target, init)`
     - This converts `target` to a root and renders `vnode = init(info)` accordingly, where `info` is a child info object. `init` is like a state vnode, but without the parent attributes.

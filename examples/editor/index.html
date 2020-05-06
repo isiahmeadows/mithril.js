@@ -18,28 +18,28 @@ h1,h2,h3,h4,h5,h6,p {margin:0 0 10px;}
 const {m} = Mithril
 
 //model
-const state = {
+const Model = {
     text: "# Markdown Editor\n\nType on the left panel and see the result on the right panel",
     update(value) {
-        state.text = value
+        Model.text = value
     }
 }
 
 //view
 const Editor = (_, info) => {
-    const state = info.state || (info.state = { prev: null, rendered: null })
+    const state = info.init(() => ({prev: null, rendered: null}))
 
-    if (prev !== state.text) {
-        prev = state.text
-        rendered = marked(state.text)
+    if (state.prev !== Model.text) {
+        state.prev = Model.text
+        state.rendered = marked(Model.text)
     }
 
     return [
         m("textarea.input", {
-            value: state.text,
-            oninput: ["value", state.update],
+            value: Model.text,
+            on: {input: ["value", Model.update]},
         }),
-        m("div.preview", {innerHTML: rendered}),
+        m("div.preview", {innerHTML: state.rendered}),
     ]
 }
 

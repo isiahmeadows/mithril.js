@@ -89,13 +89,13 @@ m("a", linkTo("/"), "Home")
     - You can prevent navigation by returning `false` from the target's `onclick` event handler.
     - This reads the context variable `router` to get its router instance.
 
-Those would all likely end up something like this:
+That utility would just be implemented like this, just using the framework:
 
 ```js
-function LinkTo({target, options}, info, {router}) {
-    return {
+export function linkTo(target, options) {
+    return m.state((info, {router}) => ({
         href: router.resolve(target),
-        onclick(ev, capture) {
+        on: {click(ev, capture) {
             if (
                 // Skip if a prior listener prevented default
                 !ev.defaultPrevented &&
@@ -111,16 +111,10 @@ function LinkTo({target, options}, info, {router}) {
                 capture.redraw()
                 return router.goTo(target, options)
             }
-        }
-    }
-}
-
-export function linkTo(target, options) {
-    return m(LinkTo, {target, options})
+        }}
+    }))
 }
 ```
-
-It's not magic at all - it's all just using the framework!
 
 ### Route syntax
 
@@ -145,69 +139,6 @@ All matching routes are rendered, regardless of whether other routes match or no
 - Each of these wrap inconsistencies in the router passed via `router:`. Note that prefix stripping is a router feature, not a framework feature!
 - You can have multiple separate `router.match` subtrees active at once. So for example, you could use one in your navigation to select which item is considered "active" *and* one in the main page to select which page body to render. As mentioned above, it returns a stream that passes through its output, so you can still use it in other contexts like your data model.
 - This is necessarily going to be larger than the current v2 router, because of the dynamic nature of it all.
-
-### TypeScript definitions
-
-If it helps to see what the shape of the API itself looks like, a full, relatively precise TS definition of the above would look like this:
-
-```ts
-interface BaseSetOpts {
-    replace?: boolean;
-    state?: any;
-    exact?: any;
-}
-
-// Extend this with your own backend options.
-interface LinkSetOpts extends BaseSetOpts {}
-
-type BackendRender<State> =
-    (route: string, state: State) => void
-
-interface Backend<SetOpts extends BaseSetOpts> {
-    init(render: BackendRender<SetOpts["state"]>): () => void;
-    goTo(href: string, options?: SetOpts): any;
-    goTo(n: number): any;
-    getURL(target: string): string;
-    getURL(offset: number): void | null | undefined | string;
-}
-
-type MatchResult = {readonly [key: string]: string};
-type QueryValue = string | true | QueryArray | QueryResult;
-interface QueryArray extends Array<QueryValue> {}
-type QueryResult = object & {readonly [key: string]: QueryValue};
-
-type _RoutedEnv<R> = {router: R};
-type Routed<SetOpts, S extends TreeState> =
-    S & {env: S["env"] & _RoutedEnv<Router<SetOpts, this>>};
-
-export class Router<SetOpts extends BaseSetOpts, P extends TreeState | null = null> {
-    constructor(backend: Backend<SetOpts>)
-    goTo(offset: number): Promise<void>;
-    goTo(href: string, options?: SetOpts): Promise<void>;
-    getURL(target: string | number): string;
-    getURL(target: string): string;
-    getURL(offset: number): void | null | undefined | string;
-
-    readonly path: string;
-    readonly query: QueryResult;
-
-    next(): P extends null ? null : Child<Routed<SetOpts, P>>;
-}
-
-export function route<C extends (P extends null ? TreeState : P)>(
-    path: string,
-    [route: string]: (
-        matched: MatchResult,
-        router: Router<SetOpts, C>
-    ) => Child<Routed<SetOpts, C>>;
-): Child<C>;
-
-export function linkTo(target: string, options?: LinkSetOpts): Child;
-export function linkTo(offset: number): Child;
-
-export const DOM: Backend<BaseSetOpts & {title?: string}> & {prefix: string};
-export const Memory: Backend<BaseSetOpts> & {initial: string};
-```
 
 ### Why?
 

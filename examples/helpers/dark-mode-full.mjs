@@ -17,7 +17,7 @@ export default function isDarkMode() {
     const enabled = value ? Boolean(value) : mql.matches
 
     usePortal(document.body, {class: {"dark-mode": enabled}})
-    usePortal(window, {onstorage: () => info.redraw()})
+    usePortal(window, {on: {storage: () => info.redraw()}})
 
     return enabled
 }

@@ -2,7 +2,7 @@ import {m} from "mithril"
 import * as api from "../api.mjs"
 
 export default function Reply({node}, info) {
-    const state = info.state || (info.state = {comment: null, preview: null})
+    const state = info.init(() => ({comment: null, preview: null}))
 
     function setComment(value) {
         if (value === state.comment) return

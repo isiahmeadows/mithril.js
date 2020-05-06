@@ -198,9 +198,9 @@ class Counter extends Component {
     constructor(initAttrs) { this.count = 1 }
     view(next, prev) {
         return [
-            m("button", {onclick: () => { this.count--; this.update() }}, "-"),
+            m("button", {on: {click: () => { this.count--; this.update() }}}, "-"),
             m("div.count", this.count),
-            m("button", {onclick: () => { this.count++; this.update() }}, "+"),
+            m("button", {on: {click: () => { this.count++; this.update() }}}, "+"),
         ]
     }
 }
@@ -210,9 +210,9 @@ class Counter {
     constructor(initAttrs) { this.count = 1 }
     view(next, prev) {
         return [
-            m("button", {onclick: () => this.count--}, "-"),
+            m("button", {on: {click: () => this.count--}}, "-"),
             m("div.count", this.count),
-            m("button", {onclick: () => this.count++}, "+"),
+            m("button", {on: {click: () => this.count++}}, "+"),
         ]
     }
 }
@@ -223,9 +223,9 @@ function Counter(initAttrs) {
     return {
         view(next, prev) {
             return [
-                m("button", {onclick: () => count--}, "-"),
+                m("button", {on: {click: () => count--}}, "-"),
                 m("div.count", count),
-                m("button", {onclick: () => count++}, "+"),
+                m("button", {on: {click: () => count++}}, "+"),
             ]
         },
     }
@@ -236,9 +236,9 @@ let Counter = {
     oninit(initAttrs) { this.count = 1 },
     view(next, prev) {
         return [
-            m("button", {onclick: () => this.count--}, "-"),
+            m("button", {on: {click: () => this.count--}}, "-"),
             m("div.count", this.count),
-            m("button", {onclick: () => this.count++}, "+"),
+            m("button", {on: {click: () => this.count++}}, "+"),
         ]
     },
 }
@@ -247,9 +247,9 @@ let Counter = {
 function Counter(initAttrs) {
     let count = 1
     return (next, prev) => [
-        m("button", {onclick: () => count--}, "-"),
+        m("button", {on: {click: () => count--}}, "-"),
         m("div.count", count),
-        m("button", {onclick: () => count++}, "+"),
+        m("button", {on: {click: () => count++}}, "+"),
     ]
 }
 ```
@@ -312,9 +312,9 @@ function Counter(attrs, count = 1, context) {
     return {
         next: count,
         value: [
-            m("button", {onclick: () => context.update(count - 1)}, "-"),
+            m("button", {on: {click: () => context.update(count - 1)}}, "-"),
             m("div.count", count),
-            m("button", {onclick: () => context.update(count + 1)}, "+"),
+            m("button", {on: {click: () => context.update(count + 1)}}, "+"),
         ]
     }
 }
@@ -382,7 +382,7 @@ So because of these growing pains, I found I couldn't stick with this abstractio
 
 ## Generators
 
-One idea I briefly entertained was using generators, yielding for attributes and yielding views.
+One idea I briefly entertained, and was later recommended for me to look into again, was using generators, yielding for attributes and yielding views.
 
 ```js
 function *Counter() {
@@ -390,9 +390,9 @@ function *Counter() {
     let attrs = yield
     while (true) {
         attrs = yield [
-            m("button", {onclick() { count-- }}, "-"),
+            m("button", {on: {click: () => count--}}, "-"),
             m("div.count", count),
-            m("button", {onclick() { count++ }}, "+"),
+            m("button", {on: {click: () => count++}}, "+"),
         ]
     }
 }
@@ -412,9 +412,9 @@ async function *Counter(updates) {
     let count = 0
     for await (const attrs of updates) {
         yield [
-            m("button", {onclick() { count-- }}, "-"),
+            m("button", {on: {click: () => count--}}, "-"),
             m("div.count", count),
-            m("button", {onclick() { count++ }}, "+"),
+            m("button", {on: {click: () => count++}}, "+"),
         ]
     }
 }
