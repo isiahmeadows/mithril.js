@@ -512,11 +512,11 @@ transition("some-class")
 transition({in: "foo", out: "bar", move: "baz", ...})
 
 // Routing
-router.match("/", {
-    "/": () => m(Home),
-    "/profile/:id": ({id}) => m(ShowProfile, {id}),
-    "/profile/:id/edit": ({id}) => m(EditProfile, {id}),
-})
+route(DOM,
+    route("/", () => m(Home)),
+    route("/profile/:id", ({id}) => m(ShowProfile, {id})),
+    route("/profile/:id/edit", ({id}) => m(EditProfile, {id}))
+)
 
 // Route links
 linkTo("/")

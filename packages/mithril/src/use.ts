@@ -4,7 +4,7 @@ import {
     Vnode, ErrorValue
 } from "./internal/vnode"
 
-type UseAttrs<T> = VnodeAttributes & {
+type UseAttrs<T extends Any> = VnodeAttributes & {
     init(signal: AbortSignal): Await<T>
     pending(): Vnode
     ready(value: T): Vnode
@@ -17,13 +17,13 @@ const enum State {
     Error,
 }
 
-interface UseState<T> {
+interface UseState<T extends Any> {
     s: State
     v: T | ErrorValue | undefined
     r: WhenRemovedCallback
 }
 
-export function Use<T>(
+export function Use<T extends Any>(
     attrs: UseAttrs<T>,
     info: ComponentInfo<UseState<T>>
 ): Vnode {

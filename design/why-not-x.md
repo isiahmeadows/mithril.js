@@ -182,7 +182,7 @@ There is a [component DSL](component-dsl.md) in large part inspired by hooks and
 
 > Or to put it another way: 99% of what you can do with React's DSL you can do with the component DSL proposal here fairly directly, but there's several classes of things you can do with the component DSL that you can't do with React Hooks. However, the way you do these things often differ substantially, so it's not advised to code in the same way you might code React Hooks.
 
-But even with this DSL, that's a *library* because the implementation isn't something you can just slap together and call it a day with. It might seem simple to write, but unless you want slow, memory-hungry components creating a ton of extra garbage on every execution (a *very* terrible experience on mobile) and potentially even leaking memory, you *have* to optimize their memory heavily, and this turns a simple implementation taking a little over a couple hundred lines of code into a 700-line-plus behemoth.
+But even with this DSL, that's a *library* because the implementation isn't something you can just slap together and call it a day with. It might seem simple to write, but unless you want slow, memory-hungry components creating a ton of extra garbage on every execution (a *very* terrible experience on mobile) and potentially even leaking memory, you *have* to optimize their memory heavily, and this is what turned a [simple 200-ish line implementation](component-dsl.md#implementation) (minus `isEqual`) into a near 700-line behemoth. (This does not account for types, comments, compile-time constants, or development build checks in the actual implementation, BTW. Those jack it up well over 1000 lines.)
 
 ## Classes (and equivalent abstractions)
 

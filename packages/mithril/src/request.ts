@@ -4,7 +4,7 @@ import {
     XMLHttpRequestReadyState, XMLHttpRequestBodyObject, FormData
 } from "./internal/dom"
 
-interface RequestOptions<T> {
+interface RequestOptions<T extends Polymorphic> {
     window?: APIOptional<Window>
     method?: APIOptional<string>
     body?: Any
@@ -21,17 +21,17 @@ interface RequestOptions<T> {
     extract?: APIOptional<
         (xhr: XMLHttpRequest, opts: this, url: string) => Await<T>
     >
-    serialize?: APIOptional<(data: Any) => string | FormData>
-    deserialize?: APIOptional<(response: Any) => T>
+    serialize?: APIOptional<(data: Polymorphic) => string | FormData>
+    deserialize?: APIOptional<(response: Polymorphic) => T>
     config?: APIOptional<(xhr: XMLHttpRequest) => void>
 }
 
 interface ResponseError extends Error {
     code: number
-    response: Any
+    response: Polymorphic
 }
 
-function hasHeader<T extends Any>(
+function hasHeader<T extends Polymorphic>(
     opts: RequestOptions<T>, name: RegExp
 ) {
     for (const key in opts.headers) {
@@ -42,7 +42,7 @@ function hasHeader<T extends Any>(
     return false
 }
 
-function makeResponseError(message: string, code: number, response: Any) {
+function makeResponseError(message: string, code: number, response: Polymorphic) {
     const error = new Error(message as string) as ResponseError
     error.code = code
     error.response = response
@@ -50,7 +50,7 @@ function makeResponseError(message: string, code: number, response: Any) {
     return error
 }
 
-export function extract<T extends Any>(
+export function extract<T extends Polymorphic>(
     xhr: XMLHttpRequest, opts: RequestOptions<T>, url: string
 ): T {
     const success = (xhr.status >= 200 && xhr.status < 300) ||
@@ -59,7 +59,7 @@ export function extract<T extends Any>(
     // wrong thing to use. Browsers do the right thing and throw here, and we
     // should honor that and do the right thing by preferring `xhr.response`
     // where possible/practical.
-    let response = xhr.response
+    let response = xhr.response as Polymorphic
 
     if (opts.responseType == null || opts.responseType === "json") {
         // For IE and Edge, which don't implement
@@ -87,7 +87,7 @@ export function extract<T extends Any>(
 declare const window: Window
 
 export const request: {
-    <T extends Any>(
+    <T extends Polymorphic>(
         url: string,
         opts?: APIOptional<RequestOptions<T>>
     ): Promise<T>
@@ -95,7 +95,7 @@ export const request: {
 } = /*@__PURE__*/ (() => {
     request.TIMEOUT = makeResponseError("Request timed out.", 0, null)
     return request
-    function request<T extends Any>(
+    function request<T extends Polymorphic>(
         url: string,
         opts?: APIOptional<RequestOptions<T>>
     ): Promise<T> {

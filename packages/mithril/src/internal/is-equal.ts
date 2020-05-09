@@ -4,7 +4,7 @@ export interface IsEqualOpts {
     tolerance?: number
 }
 
-export function isEqual<T>(a: T, b: T, opts?: IsEqualOpts): boolean
+export function isEqual<T extends Any>(a: T, b: T, opts?: IsEqualOpts): boolean
 export function isEqual(a: Any, b: Any, opts?: IsEqualOpts) {
     const tolerance = opts?.tolerance ?? 1e-8
     const prevGlobalTolerance = globalTolerance

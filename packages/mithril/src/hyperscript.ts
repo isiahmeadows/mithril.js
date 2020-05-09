@@ -1,5 +1,5 @@
 import * as V from "./internal/vnode"
-import {arrayify} from "./internal/util"
+import {arrayify, assertDevelopment} from "./internal/util"
 import {TrustedString} from "./internal/dom"
 
 interface IfElseBlocks {
@@ -9,10 +9,10 @@ interface IfElseBlocks {
 
 type Component = V.Component<V.VnodeAttributes, V.StateValue>
 
-type _KeyFrom<T> =
+type _KeyFrom<T extends Polymorphic> =
     {[P in keyof T]: T[P] extends V.KeyValue ? P : never}[keyof T]
 
-type _KeySelector<T> =
+type _KeySelector<T extends Polymorphic> =
     (value: T, index: number) => V.KeyValue
 
 interface Hyperscript {
@@ -24,7 +24,7 @@ interface Hyperscript {
     state(initializer: V.StateInit<V.StateValue>): V.VnodeState
     trust(text: Any): V.VnodeTrust
     if(cond: boolean, blocks: IfElseBlocks): V.VnodeLink
-    each<T>(
+    each<T extends Polymorphic>(
         coll: Iterable<T>,
         keySelector: _KeyFrom<T> | _KeySelector<T>,
         view: (value: T, index: number) => V.Vnode
@@ -33,15 +33,49 @@ interface Hyperscript {
     Attrs: V.Component<V.VnodeAttributes, Any>
     create<T extends V.VnodeNonPrimitive>(type: T["%"], value: T["_"]): T
 }
+
 // Display precisely where the error is in the dev build - this will take a
 // lot more space and is why the separate dev build exists - it's all for
 // the dev side.
 function invalidSelector(
     selector: string, pos: number, message: string
 ): never {
+    assertDevelopment()
     let str = `Error at offset ${pos}\n\n"${selector}"\n`
     for (let i = 0; i <= pos; i++) str += " "
     throw new SyntaxError(`${str}^\n\n${message}`)
+}
+
+function validateTagName(tag: string): void {
+    assertDevelopment()
+
+    let index: number
+
+    if (tag === "" || tag.startsWith(".")) {
+        return invalidSelector(
+            tag, 0, "String selectors must include tag names."
+        )
+    }
+
+    if (tag.startsWith("#")) {
+        return invalidSelector(tag, 0, "Unknown special tag.")
+    }
+
+    if ((index = tag.indexOf(" ")) >= 0) {
+        return invalidSelector(
+            tag, index, "String selectors must not contain spaces."
+        )
+    }
+
+    if (
+        (index = tag.indexOf("..")) >= 0 ||
+            tag[index = tag.length - 1] === "."
+    ) {
+        return invalidSelector(
+            tag, index,
+            "String selectors must not contain empty class names."
+        )
+    }
 }
 
 function createFromArgs<
@@ -56,42 +90,13 @@ const m: Hyperscript = /*@__PURE__*/ (() => {
 function m(tag: string, ...children: V.Vnode[]): V.VnodeElement
 function m(tag: Component, ...children: V.Vnode[]): V.VnodeLink
 function m(tag: string | Component, attrs: V.Vnode): V.Vnode {
-    if (tag === m.Attrs) {
-        return attrs
-    } else if (tag === m.Fragment) {
-        return arrayify.apply(1, arguments) as V.Vnode[]
-    } else if (typeof tag === "string") {
+    if (tag === m.Attrs) return attrs
+    if (tag === m.Fragment) return arrayify.apply<1, V.Vnode[]>(1, arguments)
+
+    if (typeof tag === "string") {
         // If in release mode, defer the check to the runtime - it'll
         // validate and throw as necessary.
-        if (__DEV__) {
-            let index: number
-
-            if (tag === "" || tag.startsWith(".")) {
-                return invalidSelector(
-                    tag, 0, "String selectors must include tag names."
-                )
-            }
-
-            if (tag.startsWith("#")) {
-                return invalidSelector(tag, 0, "Unknown special tag.")
-            }
-
-            if ((index = tag.indexOf(" ")) >= 0) {
-                return invalidSelector(
-                    tag, index, "String selectors must not contain spaces."
-                )
-            }
-
-            if (
-                (index = tag.indexOf("..")) >= 0 ||
-                    tag[index = tag.length - 1] === "."
-            ) {
-                return invalidSelector(
-                    tag, index,
-                    "String selectors must not contain empty class names."
-                )
-            }
-        }
+        if (__DEV__) validateTagName(tag)
     } else if (typeof tag !== "function") {
         throw new TypeError(
             "The selector must be either a string or a component."
@@ -132,7 +137,9 @@ m.if = (cond: boolean, blocks: IfElseBlocks): V.Vnode => {
     ])
 }
 
-function compilePropertySelector<T>(keySelector: _KeyFrom<T>): _KeySelector<T> {
+function compilePropertySelector<T extends Polymorphic>(
+    keySelector: _KeyFrom<T>
+): _KeySelector<T> {
     const key = typeof keySelector === "symbol"
         ? keySelector
         // Coercion to a string is just so it's not done repeatedly in the
@@ -143,7 +150,7 @@ function compilePropertySelector<T>(keySelector: _KeyFrom<T>): _KeySelector<T> {
     return (value: T) => value[key] as unknown as V.KeyValue
 }
 
-m.each = <T>(
+m.each = <T extends Polymorphic>(
     // The redundancy here is just for the guard to work.
     coll: T[] | Iterable<T>,
     keySelector: _KeyFrom<T> | _KeySelector<T>,

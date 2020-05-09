@@ -1,14 +1,14 @@
 declare const KeyMapMarker: unique symbol
 
-interface KeyMap<K, V> {
+interface KeyMap<K extends Any, V extends Any> {
     // To ensure it's read as invariant
     [KeyMapMarker]: (key: K, value: V) => [K, V]
 }
 
 interface KeyMapModule {
-    T: new <K, V>() => KeyMap<K, V>
-    g<K, V>(m: KeyMap<K, V>, key: K): V
-    s<K, V>(m: KeyMap<K, V>, key: K, value: V): void
+    T: new <K extends Any, V extends Any>() => KeyMap<K, V>
+    g<K extends Any, V extends Any>(m: KeyMap<K, V>, key: K): V
+    s<K extends Any, V extends Any>(m: KeyMap<K, V>, key: K, value: V): void
 }
 
 // This is some seriously unsafe code, and it's easiest if I disable the type
@@ -24,8 +24,13 @@ interface KeyMapModule {
 export const KeyMap: KeyMapModule = typeof Map === "function"
     ? {
         T: Map as any,
-        g: <K, V>(m: KeyMap<K, V>, k: K) => (m as any).get(k),
-        s: <K, V>(m: KeyMap<K, V>, k: K, v: V) => { (m as any).set(k, v) },
+
+        g: <K extends Any, V extends Any>(m: KeyMap<K, V>, k: K) =>
+            (m as any).get(k),
+
+        s: <K extends Any, V extends Any>(m: KeyMap<K, V>, k: K, v: V) => {
+            (m as any).set(k, v)
+        },
     }
     : {
         T: (() => {
@@ -34,6 +39,11 @@ export const KeyMap: KeyMapModule = typeof Map === "function"
             Dict.prototype = null
             return Dict
         })() as any,
-        g: <K, V>(m: KeyMap<K, V>, k: K) => (m as any)[k as any],
-        s: <K, V>(m: KeyMap<K, V>, k: K, v: V) => { (m as any)[k as any] = v },
+
+        g: <K extends Any, V extends Any>(m: KeyMap<K, V>, k: K) =>
+            (m as any)[k as any],
+
+        s: <K extends Any, V extends Any>(m: KeyMap<K, V>, k: K, v: V) => {
+            (m as any)[k as any] = v
+        },
     }
