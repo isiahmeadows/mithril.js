@@ -31,15 +31,9 @@ interface ResponseError extends Error {
     response: Polymorphic
 }
 
-function hasHeader<T extends Polymorphic>(
-    opts: RequestOptions<T>, name: RegExp
-) {
-    for (const key in opts.headers) {
-        if (hasOwn.call(opts.headers, key) && name.test(key)) {
-            return true
-        }
-    }
-    return false
+function hasHeader<T extends Polymorphic>(opts: RequestOptions<T>, re: RegExp) {
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    return Object.keys(opts.headers!).some(key => re.test(key))
 }
 
 function makeResponseError(message: string, code: number, response: Polymorphic) {
@@ -75,7 +69,9 @@ export function extract<T extends Polymorphic>(
     if (opts.deserialize != null) {
         response = opts.deserialize(response)
     }
+
     if (success) return response as T
+
     let message = response
     try { message = xhr.responseText } catch (e) { /* ignore */ }
     // Thrown so IE gets correct stacks here.

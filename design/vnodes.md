@@ -143,16 +143,28 @@ Attribute vnodes represent attributes, and you can use them literally. They're m
 
 Note that attribute vnodes cannot be returned from keyed fragments except nested in elements or components, and an error will be thrown from that vnode if such an attempt is made. (In general, it doesn't make sense anyways.) However, lifecycle vnodes can still be used in them.
 
-`class:` and `style:` attributes would support an object of booleans, merged with previous class names/style properties instead of simply overwritten. (A class is rendered if it's present and all conditions on it are truthy.) Class strings are sugar for just `class: {[classString]: true}` and style strings are parsed into style objects.
+`class:` and `style:` attributes would support an object of values, merged with previous class names/style properties instead of simply overwritten. (A class is rendered if it's present and any condition on it is truthy.) Class strings are sugar for just `class: {[classString]: true}` and style strings are parsed into style objects more or less via this code:
+
+```js
+const styleObject = Object.fromEntries(
+    styleString.trim().split(/\s*;\s*/)
+        .map(str => {
+            const exec = /^([^\s:]+)\s*:\s*(.+)$/.exec(str)
+            if (exec == null) return null
+            return [exec[0], exec[1]]
+        })
+        .filter(pair => pair != null)
+)
+```
 
 The `on:` attribute specify event handlers. Keys are event names, and values are either functions or `[key, func]` pairs. For DOM events, you can specify `capture: true` by using `event@capture` instead. They're called as `on.event(value, capture)`, where `value` is the received event value (a DOM event for DOM vnodes) and `capture` is a capture object. If a promise is returned and it rejects, this catches that and reports it as the usual component error.
 
 The `[key, func]` variant is spiritually similar to `m.withAttr`, but takes advantage of its primitive nature to be context-dependent:
 
 - For DOM vnodes, it returns the relevant property/attribute value for the current element target, and the choice of element vs attribute is detected similarly to how that key is applied as a property normally.
-- For components, it's just sugar for `value => func(value[key])`, using the current ref at the time of reading.
+- For components, it's just sugar for `(_, capture) => func(ref[key], capture)`, using the current ref at the time of reading.
 
-> Why reinstate it after it was removed? Well, unlike `m.prop()` which was an utter waste of memory for what could just as easily be done in a closure, the existence of the [component DSL and its `slot`](component-dsl.md#state) makes it *much* more useful. Also, it being a simple array pair means it's actually smaller to use than `event.target.key` directly if that's all you're using.
+> Why reinstate it after it was removed? Well, unlike `m.prop()` which was an utter waste of memory for what could just as easily be done as a simple state variable, the existence of the [component DSL and its `slot`](component-dsl.md#state) makes it *much* more useful. Also, it being a simple array pair means it's actually smaller to use than `event.target.key` directly if that's all you're using.
 
 `capture` objects have a few methods:
 

@@ -47,7 +47,7 @@ declare const EventsObjectMarker: unique symbol
 declare const RenderTargetMarker: unique symbol
 declare const EnvironmentMarker: unique symbol
 declare const StateValueMarker: unique symbol
-declare const RefValueMarker: unique symbol
+declare const RefPropertyValueMarker: unique symbol
 declare const LinkValueMarker: unique symbol
 declare const KeyValueMarker: unique symbol
 declare const AttributesValueMarker: unique symbol
@@ -55,9 +55,12 @@ declare const EnvironmentValueMarker: unique symbol
 declare const WhenReadyResultMarker: unique symbol
 declare const WhenRemovedResultMarker: unique symbol
 declare const CatchResultMarker: unique symbol
-export type RefValue = {
-    [RefValueMarker]: void
+
+export type RefPropertyValue = {
+    [RefPropertyValueMarker]: void
 }
+
+export type RefValue = APIOptional<Record<PropertyKey, RefPropertyValue>>
 
 export type Capture = object & {
     event(): void
