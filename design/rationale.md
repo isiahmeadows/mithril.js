@@ -34,14 +34,17 @@ Also, ES3 syntax is just ES5 minus getters and setters. I've found getters to on
 
 As for reasoning, see above in the ES5, though the biases at play are typically more extreme and once said organizations break free of them, it's often the case that migration equals a complete redesign, something those organizations often couldn't economically support even if they wanted to.
 
-## Why are attributes a type of vnode?
+## Why did I abandon making attributes a type of vnode?
 
-The benefits of this aren't immediately obvious, I know. But it does lead to some radical new paradigms:
+For quite a while, I considered making attributes a type of vnode. The benefits of this aren't immediately obvious, I know, but it does end up providing a paradigm shift:
 
 - You want to include move transitions? Just add a `transition("list")` to it with appropriate CSS for `.list-in`, `.list-out`, and `.list-move`.
 - You want an `m("a")` or `m("button")` to route to a link on click? Use a simple `linkTo("/route")`.
-- You want an `m("a")` or `m("button")` to act as a back button? Just drop in a `linkBack()` or `linkTo(-1)`. It's literally that simple.
 - You want to set overlay attributes appropriately on a modal, listening to clicks outside it and such? Just drop an `overlay(...)` as a child of your overlay element.
+
+I do know this was a bit hyped on my part, but here's why I abandoned it: complexity. It's a *very* complicated thing to implement performantly, and it's far too easy to screw up. When I first started laying out the groundwork to implement it, I found it'd require me to fully virtualize the attributes as well as the elements, and so in essence, it'd be a second virtual DOM (though a simpler one). Attribute application is already complicated enough as it is as I have to work around several browser bugs as well as a couple idiosyncracies with the HTML spec, and adding yet another layer of things to work around just isn't worth it.
+
+Now if Mithril was statically compiled, I could actually make it happen and make it happen *performantly*, with virtually all the complexity compiled away.
 
 ## Removing arbitrary selector support in the hyperscript DSL
 
@@ -299,7 +302,7 @@ In my proposed hooks DSL, you might instead write this:
 
 ```js
 import {
-    guard, hasChanged, whenRemoved, isInitial, memo, useInfo, usePortal,
+    guard, hasChanged, whenRemoved, isInitial, memo, useInfo,
 } from "mithril"
 
 function useLocalStorage(key) {
@@ -309,7 +312,13 @@ function useLocalStorage(key) {
     ))
 
     const info = useInfo()
-    usePortal(window, {on: {storage: () => info.redraw()}})
+    whenRemoved(memo(() => {
+        const update = () => info.redraw()
+        window.addEventListener("storage", update, false)
+        return () => {
+            window.removeEventListener("storage", update, false)
+        }
+    }))
 
     return [parsed, (value) => {
         window.localStorage.setItem(key, JSON.stringify(value))
@@ -338,7 +347,17 @@ export default function isDarkMode() {
     const [enabled = prefersDarkMode, setEnabled] =
         useLocalStorage("dark-mode-enabled")
 
-    usePortal(document.body, {class: {"dark-mode": enabled}})
+    if (hasChanged(enabled)) {
+        if (enabled) {
+            document.body.classList.add("dark-mode")
+        } else {
+            document.body.classList.remove("dark-mode")
+        }
+    }
+
+    whenRemoved(() => {
+        document.body.classList.remove("dark-mode")
+    })
 
     return [Boolean(enabled), setEnabled]
 }
@@ -409,14 +428,20 @@ export function useEffect(didUpdate, dependencies = undefined) {
 And for convenience, the DSL also has built-in support for dependency-based programming, with a variant of `memo` similar to React's `useMemo` and `useEffect` to work similarly to React's `useEffect`. So in reality, the DSL code would more likely look like this:
 
 ```js
-import {useEffect, memo, useInfo, usePortal} from "mithril"
+import {useEffect, memo, useInfo} from "mithril"
 
 function useLocalStorage(key) {
     const value = window.localStorage.getItem(key)
     const parsed = memo(value, () => value ? JSON.parse(value) : undefined)
 
     const info = useInfo()
-    usePortal(window, {on: {storage: () => info.redraw()}})
+    useEffect(() => {
+        const update = () => info.redraw()
+        window.addEventListener("storage", update, false)
+        return () => {
+            window.removeEventListener("storage", update, false)
+        }
+    })
 
     return [parsed, (value) => {
         window.localStorage.setItem(key, JSON.stringify(value))
@@ -443,7 +468,17 @@ export default function isDarkMode() {
     const [enabled = prefersDarkMode, setEnabled] =
         useLocalStorage("dark-mode-enabled")
 
-    usePortal(document.body, {class: {"dark-mode": enabled}})
+    if (hasChanged(enabled)) {
+        if (enabled) {
+            document.body.classList.add("dark-mode")
+        } else {
+            document.body.classList.remove("dark-mode")
+        }
+    }
+
+    whenRemoved(() => {
+        document.body.classList.remove("dark-mode")
+    })
 
     return [Boolean(enabled), setEnabled]
 }

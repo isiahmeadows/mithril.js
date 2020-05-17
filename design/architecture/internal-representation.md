@@ -11,13 +11,12 @@ The vnode tree is tracked in an array. There are two separate "old" and "new" ar
 - Hole: `null`, `undefined`, `true`, `false`
 - Text: strings, numbers
 - Fragment: arrays of vnode children
-- Attribute: any non-array object without a numeric `"%"` property
 - Retain: `m.RETAIN`
     - Type: `0`
     - Data: none
-- Element: `m("div", ...children)`
+- Element: `m("div", attrs, ...children)`
     - Type: `1`
-    - Data: `[tag, ...children]`
+    - Data: `[tag, attrs, ...children]`
 - State: `m.state(body, ...children)`
     - Type: `2`
     - Data: `[body, ...children]`
@@ -36,14 +35,22 @@ The vnode tree is tracked in an array. There are two separate "old" and "new" ar
 - Trust: `m.trust(string)`
     - Type: `7`
     - Data: `[Comp, ...children]`
-- Component: `m(Comp, ...children)`
+- Component: `m(Comp, attrs, ...children)`
     - Type: `8`
-    - Data: `[Comp, ...children]`
+    - Data: `[Comp, attrs, ...children]`
+- Portal: `m(node, attrs, ...children)`
+    - Type: `8`
+    - Data: `[node, attrs, ...children]`
 
 Their internal storage is considerably different, however. The internal representation uses constant-size blocks of the following structure, in the following order:
 
-- Type (low 8)
-- Child count (high 24)
+- Mask:
+    - Type (bits 0-3)
+    - Is removed flag (bit 4)
+        - Vnodes that are currently being removed, but still need preserved as their removal is blocked, are tracked with this bit
+    - Is static flag (bit 5)
+        - This is applied to static vnodes and their descendants
+    - Child count (bits 8-32)
 - Value
 - Node count
 - Reference
@@ -61,7 +68,7 @@ These comprise a flattened tree representation, enumerated in a depth-first preo
 There are two additional arrays so things like portals can still work reasonably efficiently:
 
 - A resizable ready callback array cleared after every render, for `info.whenReady(callback)`.
-- A root redraw queue, for `info.redraw`, `info.render`, and friends so they don't need to wait an additional tick to operate. This is handled internally with a resizable circular buffer. This is used with every recursive `render` call.
+- A root redraw queue, for `info.redraw` and friends so they don't need to wait an additional tick to operate. This is handled internally with a resizable circular buffer. This is also used with every recursive `render` call.
 
 ## Types
 
@@ -79,10 +86,11 @@ There are 11 internal types, and these do *not* align one-to-one with received t
 
 - Element:
     - Type: `1`
-    - Child count: number of children
+    - Child count: number of children + `1`
     - Value: tag name
     - Node count: `1`
     - Reference: element reference
+    - First child: attributes instance (synthetic)
 
 - State:
     - Type: `2`
@@ -90,6 +98,7 @@ There are 11 internal types, and these do *not* align one-to-one with received t
     - Value: `undefined`
     - Node count: number of encapsulated nodes
     - Reference: component info object
+    - First child: component instance (always non-synthetic)
 
 - Link:
     - Type: `3`
@@ -132,6 +141,7 @@ There are 11 internal types, and these do *not* align one-to-one with received t
     - Value: component reference
     - Node count: number of encapsulated nodes
     - Reference: component info object
+    - First child: component instance (always non-synthetic)
 
 - Text:
     - Type: `9`
@@ -140,36 +150,43 @@ There are 11 internal types, and these do *not* align one-to-one with received t
     - Node count: `1`
     - Reference: text node
 
-- Removed callback:
+- Portal:
     - Type: `10`
+    - Child count: `0`
+    - Value: text string
+    - Node count: `1`
+    - Reference: text node
+
+- Removed callback (synthetic):
+    - Type: `11`
     - Child count: `0`
     - Value: callback reference
     - Node count: `0`
     - Reference: `undefined`
 
-- Attributes:
-    - Type: `11`
+- Attributes (synthetic):
+    - Type: `12`
     - Child count: `0`
-    - Value: attributes
+    - Value: attributes or `undefined` if no attributes exist
     - Node count: `0`
     - Reference: `undefined`
 
-The type/child count mask and initial value can be derived from vnodes using the following algorithm:
+The initial type/child count mask and value for internal nodes can be derived from vnodes using the following algorithm:
 
 ```js
 const info = (mask, value) => ({mask, value})
 
 function extractVnodeInfo(vnode) {
     if (vnode == null || typeof vnode === "boolean") {
-        return info(0 /* fragment */ | 0 << 8)
+        return [info(0 /* fragment */ | 0 << 8)]
     }
 
     if (typeof vnode !== "object") {
-        return info(9 /* text */ | 1 << 8, String(vnode))
+        return [info(9 /* text */ | 1 << 8, String(vnode))]
     }
 
     if (Array.isArray(vnode)) {
-        return info(0 /* fragment */ | vnode.length << 8)
+        return [info(0 /* fragment */ | vnode.length << 8)]
     }
 
     switch (vnode["%"]) {
@@ -177,82 +194,38 @@ function extractVnodeInfo(vnode) {
         return null /* retain */
 
     case 1:
-        return info(1 /* element */ | (vnode._.length - 1) << 8, vnode._[0])
+        return [
+            info(1 /* element */ | vnode._.length << 8, vnode._[0]),
+            info(12 /* attributes */ | 1 << 8, vnode._[0]),
+        ]
 
     case 2:
-        return info(2 /* state */ | 1 << 8)
+        return [info(2 /* state */ | 1 << 8)]
 
     case 3:
-        return info(3 /* link */ | (vnode._.length - 1) << 8, vnode._[0])
+        return [info(3 /* link */ | (vnode._.length - 1) << 8, vnode._[0])]
 
     case 4:
-        return info(4 /* keyed */ | vnode._.length << 7,
+        return [info(4 /* keyed */ | vnode._.length << 7,
             new Map(Array.from({length: vnode._.length / 2}, (_, i) =>
                 [vnode._[i * 2], i]
             ))
-        )
+        )]
 
     case 5:
-        return info(5 /* static */ | 1 << 8)
+        return [info(5 /* static */ | 1 << 8)]
 
     case 6:
-        return info(6 /* catch */ | (vnode._.length - 1) << 8, vnode._[0])
+        return [info(6 /* catch */ | (vnode._.length - 1) << 8, vnode._[0])]
 
     case 7:
-        return info(7 /* trust */ | 0 << 8, vnode._)
+        return [info(7 /* trust */ | 0 << 8, vnode._)]
 
     case 8:
-        return info(8 /* component */ | vnode._.length << 8, vnode._[0])
+        return [info(8 /* component */ | vnode._.length << 8, vnode._[0])]
 
     default:
-        return info(11 /* attributes */ | 0 << 8, vnode)
-    }
-}
-
-// Optimized
-const info = (mask, value) => ({mask, value})
-
-function extractVnodeInfo(vnode) {
-    if (vnode == null || typeof vnode === "boolean") {
-        return info(0 /* fragment */ | 0 << 8)
-    }
-
-    if (typeof vnode !== "object") {
-        return info(9 /* text */ | 1 << 8, String(vnode))
-    }
-
-    if (Array.isArray(vnode)) {
-        return info(0 /* fragment */ | vnode.length << 8)
-    }
-
-    let type = vnode["%"]
-
-    if (type == null) {
-        return info(11 /* attributes */ | 0 << 8, vnode)
-    }
-
-    switch (type) {
-    case 0:
-        return null /* retain */
-
-    case 1: case 3: case 6: case 8:
-        return info(type | (vnode._.length - (type !== 8)) << 8, vnode._[0])
-
-    case 2: case 5:
-        return info(type | 1 << 8, undefined)
-
-    case 4:
-        const map = new Map()
-        for (let i = 0, j = 0; i < vnode._.length; i += 2, j++) {
-            map.set(vnode._[i], j)
-        }
-        return info(4 /* keyed */ | vnode._.length << 7, map)
-
-    case 7:
-        return info(7 /* trust */ | 0 << 8, vnode._)
-
-    default:
-        throw new TypeError(`Invalid vnode type: ${vnode["%"]}`)
+        throw new TypeError("Non-vnode objects are not children.")
     }
 }
 ```

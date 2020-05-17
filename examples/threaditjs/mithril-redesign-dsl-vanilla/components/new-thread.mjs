@@ -5,13 +5,13 @@ export const NewThread = component(({on}) => {
     const [text, setText] = slot("")
 
     return m("form",
-        m("textarea", {value: text, on: {input: ["value", setText]}}),
-        m("input", {type: "submit", value: "Post!"}),
         {on: {async submit(ev, capture) {
             capture.event()
             const {data: thread} = await api.newThread(text)
             on.save(thread)
             setText("")
-        }}}
+        }}},
+        m("textarea", {value: text, on: {input: ["value", setText]}}),
+        m("input", {type: "submit", value: "Post!"})
     )
 })

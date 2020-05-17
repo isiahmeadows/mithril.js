@@ -1,4 +1,4 @@
-import {m, linkTo, component} from "mithril"
+import {m, useEnv, component} from "mithril"
 
 const demoSource =
     "https://github.com/isiahmeadows/mithril.js/tree/redesign/examples/" +
@@ -9,5 +9,5 @@ export const Header = component(() => [
         m("a", {href: demoSource}, "Source"), " | ",
         m("a", {href: "http://threaditjs.com"}, "ThreaditJS Home"),
     ),
-    m("h2", m("a", linkTo("/"), "ThreaditJS: Mithril")),
+    m("h2", m("a", useEnv().router.linkTo("/"), "ThreaditJS: Mithril")),
 ])

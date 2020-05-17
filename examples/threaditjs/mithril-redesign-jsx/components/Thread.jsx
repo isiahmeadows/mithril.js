@@ -7,7 +7,7 @@ export default function Thread({id}, info) {
     if (info.isInitial()) T.time("Thread render")
 
     return <>
-        {info.isInitial() && m.capture(() => T.timeEnd("Thread render"))}
+        {info.isInitial() && m.whenReady(() => T.timeEnd("Thread render"))}
         <Layout
             id={id}
             load={async (signal) => {

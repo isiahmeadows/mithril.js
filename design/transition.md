@@ -6,19 +6,19 @@ This is exposed under `mithril/transition`.
 
 > Note: move transitions are post-MVP due to complexity concerns that need addressed first.
 
-- `transition(className)`, `transition(options)` - Track transitioning in and/or out and wait for all transitions to end before committing the change to the DOM.
-    - `options.in` - The class or styles to set when the node is first created.
-    - `options.out` - The class or styles to set when the node is removed.
-    - `options.move` - The class or styles to set when the node is moved.
+- `transition(className, child)`, `transition(options, child)` - Track transitioning in and/or out and wait for all transitions to end before committing the change to the DOM.
+    - `options.in` - The class string or object of styles to set when the node is first created.
+    - `options.out` - The class string or object of styles to set when the node is removed.
+    - `options.move` - The class string or object of styles to set when the node is moved.
     - `className`, `options.class` - Sugar for `in: "foo-in"`, `out: "foo-out"`, and `move: "foo-move"`.
     - `options.afterIn()` - Optionally called after the transition in finishes.
     - `options.afterOut()` - Optionally called after the transition out finishes.
     - `options.afterMove()` - Optionally called after the move transition finishes.
-    - Each option is a `[classOrStyle, transitionOpts]` tuple
+    - `child` is a child DOM vnode to update.
 
-`transition` works for both keyed and unkeyed lists as well. For keyed moves, it just uses [the FLIP principle](https://aerotwist.com/blog/flip-your-animations/), using `info.isParentMoving()` and `m.capture(callback)` to coordinate moves. (The "first" step is performed in the render callback if `info.isParentMoving()` and the rest during `ontransitionend`.) For additions, it's trivial with `info.isInitial()`, and for deletions, it uses `info.whenRemoved(callback)` and returns a promise.
+`transition` works for both keyed and unkeyed lists as well. For keyed moves, it just uses [the FLIP principle](https://aerotwist.com/blog/flip-your-animations/), using `info.isParentMoving()` and `m.whenReady(callback)` to coordinate moves. (The "first" step is performed in the render callback if `info.isParentMoving()` and the rest during `ontransitionend`.) For additions, it's trivial with `info.isInitial()`, and for deletions, it uses `info.whenRemoved(callback)` and returns a promise.
 
-It all might seem slightly magical, but it's far from it - it just returns a component that renders a handful of strategic attributes, [event handlers, and lifecycle methods](vnodes.md#attributes) and is otherwise entirely stateless.
+It all might seem slightly magical, but it's far from it - it just leverages a few strategic [attributes, event handlers, lifecycle `info` methods](vnodes.md#attributes).
 
 ### Why?
 

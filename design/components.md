@@ -56,31 +56,6 @@ The component info object (`info` below) contains all the necessary bits for com
     - `initialState = callback()` creates and returns the initial state.
     - This is just sugar for `info.isInitial() ? (info.state = callback()) : info.state`, though it's a primitive for convenience.
 
-- Render to targeted node: `promiseToClose = info.render(target, init)`
-    - This converts `target` to a root and renders `vnode = init(info)` accordingly, where `info` is a child info object. `init` is like a state vnode, but without the parent attributes.
-    - This returns a promise that resolves once it's fully committed to the DOM, with a `promise = clear()` callback that clears the root, releases any relevant resources, and returns a promise that resolves once it's fully committed to the DOM. (This is always async, but the precise timing is an implementation detail.)
-        - If no more roots exist, this removes the `data-mithril-root` attribute added above and sets `root._ir` to `undefined`.
-    - The semantics depend on the renderer, and it can choose how to process `target` and `children`.
-    - Inside the rendered subtree, `info.root` remains the same. It's *not* set to `target`.
-    - Examples for the DOM renderer:
-        - Set properties and events on `window`: `info.render(info.window, () => ({onfoo, ...}))`
-            - Note: use with care. Note that since `window` is not an element, you must make sure that you only use writable attributes and event handlers.
-        - Render attributes and children to `<html>`: `info.render(info.document.documentElement, () => ({...attrs}))`
-            - This is useful for script and style inclusion as well as setting the title.
-            - This is basically native support for what [React Helmet](https://github.com/nfl/react-helmet) provides for React. (For us, it's easy. Just render to a different node.)
-        - Render children to `document.body`: `info.render(info.document.body, () => [...children])`
-        - Render attributes and children to `<head>`: `info.render(info.document.head, () => [{...attrs}, ...children])`
-            - This is useful for script and style inclusion as well as setting the title.
-            - This is basically native support for what [React Helmet](https://github.com/nfl/react-helmet) provides for React. (For us, it's easy. Just render to a different node.)
-        - Render children to `<body>`: `info.render(info.document.body).render(...children)`
-            - You can set event handlers via attribute nodes, including ones like `mouseenter` and `mouseleave` that don't fire on `window`
-            - You can set things like the `lang` attribute accordingly.
-            - Extra nodes can be added for things like modals and alerts.
-    - Note: when you invoke `info.render(target)`, this only clears resets attributes it tracks.
-    - When called in `info.whenReady` or `info.whenRemoved`, it's *highly* recommended to await it before returning.
-    - This makes stuff like userland modals trivial.
-    - You can also usefully render to captured refs this way.
-
 - Throw error: `info.throw(value, nonFatal = false)`
     - This triggers the usual exception handling mechanism, the same one used for event listeners and synchronous view errors.
 
@@ -105,7 +80,7 @@ The component info object (`info` below) contains all the necessary bits for com
     - The initial `ref` is `undefined`, and previous refs are persisted. It can also be set to any value.
     - This is different from React's `useImperativeHandle` in that it lets you set the ref at any time.
 
-- Set environment key: `info.set(key, value)`
+- Set environment key: `info.setEnv(key, value)`
     - `key` - The key to set in the child environment, as an object property.
         - Use symbols if you need guaranteed uniqueness.
     - `value` - The value to set the key to.
@@ -126,7 +101,16 @@ The component info object (`info` below) contains all the necessary bits for com
         - This also delays resolution of the outer render/redraw call.
     - This is always scheduled for the current render pass only. During stateful component initialization, it's only scheduled for the first render pass, not subsequent ones. (Tip: using this on every call acts more like a fused `onbeforeremove` + `onremove`.)
     - This throws an error if this component is not currently rendering and the component view has already been initialized.
-    - `callback` is called on the same tick, right after all changes have been committed to DOM.
+    - `callback` is called on the same tick, right before all changes have been committed to DOM so things like event handlers can be added.
+
+- Schedule callback to run on component error: `info.whenCaught(callback)`
+    - `await callback(e, stack, isFatal)` - Called with each error that propagates from children after this in the subtree as well as a component `stack` trace, may rethrow or return rejected promise to propagate
+    - `isFatal` is whether the error was fatal (originated from any point other than `beforeRemove`) or not.
+    - Errors caught include both errors in streams and errors and rejections caught from event handlers. It does *not* include errors thrown from the top-level component view invocation itself.
+    - Caught errors are batched and scheduled to be reported on the next tick.
+    - This exists mainly for error reporting, but can be used in other ways like with async network requests.
+    - When an error propagates past a subtree, that subtree is synchronously removed with inner `done` callbacks invoked. If any of those throw, their errors are also added to the `errors` list.
+    - Resolution searches back to the first child, then up to the parent, then back to its first child, and so on, until it finds such a hook.
 
 - DOM renderer-specific:
     - Detected window: `info.window`
@@ -143,7 +127,7 @@ You may be wondering why a few of these are defined on `info` and why this `info
 - "On remove" callbacks are generally scheduled as the component is visited. Reducing that to an inner array means no type checks are required, just an `array != null` or `array.length !== 0`.
 - `info.ref` as a settable property trivializes that process, and it's just read whenever it's ready. There's literally no extra overhead involved.
 - Using a single `info` object injected means we aren't doing polymorphic code accesses. The only polymorphic invocation involved is invoking the component.
-- Setting keys via `info.set("key", value)` is for similar reasons to `info.whenReady(...)` - the environment object can just be tracked globally, and `set` can just assign directly to it, creating it if necessary and setting a bit so it doesn't get recreated again (and to pre-allocate it on subsequent runs to avoid a branch prediction penalty).
+- Setting keys via `info.setEnv("key", value)` is for similar reasons to `info.whenReady(...)` - the environment object can just be tracked globally, and `set` can just assign directly to it, creating it if necessary and setting a bit so it doesn't get recreated again (and to pre-allocate it on subsequent runs to avoid a branch prediction penalty).
 - Stuff like `info.isInitial()` and `info.isParentMoving()` can just test a bit - they don't need to have a whole property dedicated to themselves.
 
 > Also, in general, everything that *could* be a getter, setter, or proxy is a function, so those stuck developing against IE (and Edge's IE Mode) can shim as appropriate.
@@ -157,7 +141,7 @@ Lifecycles are much more streamlined, and there's fewer of them. It's bound to i
 
 - `callback` in `info.whenRemoved(callback)` is called after all changes or movement have been committed with this vnode, provided it wasn't removed. It may return a promise to block removal. This is also called on parent error but not self or child error.
 
-- `callback` in `m.catch(callback)` is called on child error. The child errors caught and reported include both sync view errors, sync lifecycle errors propagated via `info.throw(e)`, sync event listener errors, and event listener rejections. This does *not* get called errors within lifecycle methods, only errors that occur in child components.
+- `callback` in `info.whenCaught(callback)` is called on child error. The child errors caught and reported include both sync view errors, sync lifecycle errors propagated via `info.throw(e)`, sync event listener errors, and event listener rejections. This does *not* get called errors within lifecycle methods, only errors that occur in child components.
 
 - `info.isInitial()` checks if this is the first render, for easier initialization.
 
@@ -174,6 +158,6 @@ This is another place where we break with other frameworks:
 
 This happens to be better for performance and ergonomics, counterintuitively:
 
-- Child components can return attributes that affect parent components. This is what enables `transition` to work.
-- Parent components receive the normalized and fully resolved children, with component instances in place of component vnodes and holes in place of attributes and lifecycle vnodes.
+- Child components can set parent element and component attributes. This is what enables `transition` to work.
+- Parent components receive the normalized and fully resolved children, with the rendered output of components and state callbacks in place of component vnodes and state vnodes.
 - Certain DOM attributes, like `selectedIndex`, are set automatically by the children (in that case, the offset for the first child with a `selected` attribute), so to apply it correctly, you have to set it after you set the children. This is simpler than the workaround that HTML and other frameworks use, where they apply parent attributes before rendering children and just defer applying the offending attributes.

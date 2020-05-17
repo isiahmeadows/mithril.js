@@ -22,8 +22,8 @@ declare global {
         T extends U ? true : false
 
     // Until I get an `awaited T` type, this is the closest I'm going to get.
-    type Await<T extends Polymorphic> = T | _AwaitPromise<T>
-    interface _AwaitPromise<T extends Polymorphic>
+    type Await<T extends Polymorphic> = T | AwaitPromise<T>
+    interface AwaitPromise<T extends Polymorphic>
         extends PromiseLike<Await<T>> {}
 
     // For convenience when dealing with API contracts

@@ -1,9 +1,9 @@
 import * as V from "./internal/vnode"
 import {Element} from "./internal/dom"
+import {assign} from "./internal/util"
+import {StyleObject} from "./internal/normalize-attrs"
 
-type TransitionStyle = object & {[key: string]: TransitionStyleValue}
-type TransitionStyleValue = [string, string, string, string]
-type ClassOrStyle = string | TransitionStyle
+type ClassOrStyle = string | StyleObject
 
 // Warning: dynamic CSS transitions are very, *very* complicated and
 // counterintuitive to support generically. I've gone through several links
@@ -37,7 +37,7 @@ type ClassOrStyle = string | TransitionStyle
 // - Remove while add/move transition is playing
 // - Move while add transition is playing
 
-type TransitionAttrs = V.VnodeAttributes & {
+interface TransitionOptions {
     in?: APIOptional<ClassOrStyle>
     out?: APIOptional<ClassOrStyle>
     move?: APIOptional<ClassOrStyle>
@@ -46,127 +46,268 @@ type TransitionAttrs = V.VnodeAttributes & {
     afterMove?(): Await<void>
 }
 
-function classOrStyleToAttrs(classOrStyle: ClassOrStyle): V.VnodeAttributes {
-    return {
-        class: typeof classOrStyle === "string" ? classOrStyle : void 0,
-        style: typeof classOrStyle === "object" ? classOrStyle : void 0,
-    }
+interface Snapshot {
+    x: number
+    y: number
+    h: number
+    w: number
+    v: number
 }
 
-interface ScheduleTransitionState {
+interface Delta {
+    dx: number
+    dy: number
+    dh: number
+    dw: number
+    dv: number
+}
+
+interface TransitionState {
     // TODO: compress to bit mask
     adding: boolean
     moving: boolean
+    moved: boolean
     removed: boolean
-    closed: boolean
     ref: Maybe<Element & V.RenderTarget>
-    closeRemove: Maybe<V.CloseCallback>
+    resolve: Maybe<() => void>
+    first: Maybe<Snapshot>
+    last: Maybe<Snapshot>
+    delta: Maybe<Delta>
 }
 
-function getOpacity(ref: Element) {
-    return +ref.ownerDocument.defaultView
+function makeSnapshot(ref: Element) {
+    const rect = ref.getBoundingClientRect()
+    const opacity = +ref.ownerDocument.defaultView
         .getComputedStyle(ref)
         .getPropertyValue("opacity")
+
+    return {
+        x: rect.left,
+        y: rect.top,
+        h: rect.height,
+        w: rect.width,
+        v: opacity,
+    }
 }
 
-function ScheduleTransition(
-    attrs: TransitionAttrs,
-    info: V.ComponentInfo<ScheduleTransitionState>
-) {
-    const state = info.init(() => ({
-        adding: attrs.in != null,
-        moving: false,
-        removed: false,
-        closed: false,
-        ref: void 0,
-        closeRemove: void 0,
-    }))
+export function transition(
+    opts: APIOptional<string | TransitionOptions>,
+    child: V.Vnode
+): V.Vnode {
+    let resolvedOpts: TransitionOptions
 
-    info.whenReady((ref) => {
-        state.ref = ref as Any as Element & V.RenderTarget
-        return void 0 as Any as V.WhenReadyResult
-    })
-
-    const vnodes: V.Vnode[] = []
-
-    if (attrs.in != null && state.adding) {
-        vnodes.push(
-            classOrStyleToAttrs(attrs.in),
-            {on: {transitionend() {
-                state.adding = false
-                if (typeof attrs.afterIn === "function") return attrs.afterIn()
-            }}}
-        )
+    if (opts != null && typeof opts === "object") {
+        resolvedOpts = opts
+    } else if (typeof opts === "string") {
+        resolvedOpts = {
+            in: `${opts}--in`,
+            out: `${opts}--out`,
+            move: `${opts}--move`,
+        }
     } else {
-        vnodes.push(void 0, void 0)
+        throw new TypeError("`opts` must be a string or object.")
     }
 
-    if (attrs.out != null) {
-        info.whenRemoved(() => new Promise<void>((resolve, reject) => {
-            function invokeAfterOut() {
-                if (typeof attrs.afterOut === "function") {
-                    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                    new Promise((resolve) => resolve(attrs.afterOut!()))
-                        .catch((e) => { info.throw(e as V.ErrorValue, false) })
+    if (
+        child == null || typeof child !== "object" ||
+        (child as V.VnodeNonPrimitive)["%"] !== V.Type.Element
+    ) {
+        throw new TypeError("`child` must be an element vnode.")
+    }
+
+    return V.create(V.Type.State, ((info: V.ComponentInfo<TransitionState>) => {
+        const state = info.init(() => ({
+            adding: resolvedOpts.in != null,
+            moving: false,
+            moved: false,
+            removed: false,
+            ref: void 0,
+            resolve: void 0,
+            first: void 0,
+            last: void 0,
+            delta: void 0,
+        }))
+
+        info.whenReady((ref) => {
+            state.ref = ref as Any as Element & V.RenderTarget
+            return void 0 as Any as V.WhenReadyResult
+        })
+
+        const initialAttrs = (child as V.VnodeElement)._[1]
+        let attrsToSet = assign({}, initialAttrs) as V.AttributesObject
+
+        if (state.delta) {
+            // TODO: set transition for move
+        }
+
+        let ontransitionend: APIOptional<V.EventListener>
+        attrsToSet.on = {} as V.EventsObject
+        if (initialAttrs.on != null) {
+            ontransitionend = initialAttrs.on.transitionend
+            assign(attrsToSet.on, initialAttrs.on as object)
+        }
+        attrsToSet.on.transitionend = (ev, capture) => {
+            let ps: AwaitPromise<void>[] = []
+            let error: Any = ps
+
+            if (typeof ontransitionend === "function") {
+                try {
+                    const p = ontransitionend(ev, capture)
+                    if (p != null && typeof p.then === "function") {
+                        ps.push(p)
+                    }
+                } catch (e) {
+                    error = e
+                }
+            } else {
+                // Simulate the default behavior.
+                capture.redraw()
+            }
+
+            if (state.adding) {
+                state.adding = false
+
+                try {
+                    if (typeof resolvedOpts.afterIn === "function") {
+                        const p = resolvedOpts.afterIn()
+                        if (p != null && typeof p.then === "function") {
+                            ps.push(p)
+                        }
+                    }
+                } catch (e) {
+                    error = e
+                }
+            } else if (state.moving) {
+                state.moving = false
+                // TODO: element moved
+
+                try {
+                    if (typeof resolvedOpts.afterMove === "function") {
+                        const p = resolvedOpts.afterMove()
+                        if (p != null && typeof p.then === "function") {
+                            ps.push(p)
+                        }
+                    }
+                } catch (e) {
+                    error = e
+                }
+            } else if (state.removed) {
+                // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+                state.resolve!()
+                // TODO: account for `move` stuff being removed mid-animation
+
+                try {
+                    if (typeof resolvedOpts.afterOut === "function") {
+                        const p = resolvedOpts.afterOut()
+                        if (p != null && typeof p.then === "function") {
+                            ps.push(p)
+                        }
+                    }
+                } catch (e) {
+                    error = e
                 }
             }
 
+            // Skip the overhead of promise awaiting if we can.
+            if (error !== ps) throw error
+            if (ps.length === 0) return void 0
+            if (ps.length === 1) return ps[0]
+            // TODO: implement this not using an ES2020 function.
+            return Promise.allSettled(ps) as Any as Await<void>
+        }
+
+        if (resolvedOpts.out != null) {
+            info.whenRemoved(() => new Promise(resolve => {
+                state.removed = true
+                state.resolve = resolve
+            }))
+        }
+
+        if (state.moving) {
+            // TODO: add moving classes
+        }
+
+        if (state.moved) {
+            // TODO: start transition
+        }
+
+        let requestMove = false
+
+        if (info.isParentMoving() && resolvedOpts.move != null) {
+            requestMove = true
+            state.last = state.first
             // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            info.render(state.ref!, () => [
+            state.first = makeSnapshot(state.ref!)
+        }
+
+        let classString: Maybe<String>
+        let styleObject: Maybe<{[key: string]: Any}>
+        let classIsNew = initialAttrs.class != null
+        let styleIsNew = initialAttrs.style != null
+
+        if (state.adding && resolvedOpts.in != null) {
+            if (typeof resolvedOpts.in === "object") {
+                if (styleIsNew) styleObject = assign({}, initialAttrs.style)
+                styleIsNew = false
                 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                classOrStyleToAttrs(attrs.out!),
-                {on: {transitionend(_: V.EventValue, capture: V.Capture) {
-                    capture.redraw()
-                    state.removed = true
-                    const close = state.closeRemove
-                    state.closeRemove = void 0
-                    if (close != null) {
-                        resolve(close())
-                        invokeAfterOut()
+                assign(styleObject!, resolvedOpts.in)
+            } else {
+                if (classIsNew) classString = `${initialAttrs.class}`
+                classIsNew = false
+                classString += ` ${resolvedOpts.in}`
+            }
+        }
+
+        if (state.moving && resolvedOpts.move != null) {
+            if (typeof resolvedOpts.move === "object") {
+                if (styleIsNew) styleObject = assign({}, initialAttrs.style)
+                styleIsNew = false
+                // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+                assign(styleObject!, resolvedOpts.move)
+            } else {
+                if (classIsNew) classString = `${initialAttrs.class}`
+                classIsNew = false
+                classString += ` ${resolvedOpts.move}`
+            }
+        }
+
+        if (classIsNew) attrsToSet.class = classString
+        if (styleIsNew) attrsToSet.style = styleObject
+
+        const oldData = (child as V.VnodeElement)._
+        const newData: V.VnodeElement["_"] = [oldData[0], attrsToSet]
+        for (var i = 2; i < oldData.length; i++) newData.push(oldData[i])
+        newData.push(V.create(V.Type.State, (info) => {
+            info.whenReady((ref) => {
+                state.ref = ref as Any as Element & V.RenderTarget
+                /* eslint-disable @typescript-eslint/no-non-null-assertion */
+                if (requestMove) {
+                    state.last = makeSnapshot(state.ref)
+                    const dx = state.first!.x - state.last.x
+                    const dy = state.first!.y - state.last.y
+                    const dh = state.first!.h - state.last.h
+                    const dw = state.first!.w - state.last.w
+                    const dv = state.first!.v - state.last.v
+                    if (dx || dy || dh || dw || dv) {
+                        state.delta = {dx, dy, dh, dw, dv}
+                        state.moving = true
+                        // Loop back around to add the moving styles
+                        info.redraw()
+                    } else if (state.moving) {
+                        state.moving = false
+                        state.moved = true
+                        // Note: this is intentionally unused - we're just forcing
+                        // a layout.
+                        state.ref.offsetHeight
+                        // Loop back around to add the transition class
+                        info.redraw()
                     }
-                }}}
-            ])
-                .then((close) => {
-                    if (state.removed) {
-                        resolve(close())
-                        invokeAfterOut()
-                    } else {
-                        state.closeRemove = close
-                    }
-                }, (e) => {
-                    // We should never get here absent either a renderer bug or
-                    // some byzantine fault, but let's still handle it just in
-                    // case.
-                    state.removed = true
-                    reject(e as Error)
-                    // Let users still see completion, even though it wasn't
-                    // successful.
-                    invokeAfterOut()
-                })
-        }) as Any as V.WhenRemovedResult)
-    }
-
-    if (info.isParentMoving()) {
-        // TODO
-        // Note: account for `move` stuff being removed mid-animation
-    }
-
-    return vnodes
-}
-
-export function transition(opts: string | TransitionAttrs): V.Vnode {
-    return V.create(V.Type.Link, [
-        ScheduleTransition as Any as V.KeyValue,
-        V.create(V.Type.State, [
-            ScheduleTransition as Any as
-                V.Component<TransitionAttrs, V.StateValue>,
-            typeof opts === "string"
-                ? {
-                    in: `${opts}--in`,
-                    out: `${opts}--out`,
-                    move: `${opts}--move`,
-                } as TransitionAttrs
-                : opts,
-        ]),
-    ])
+                }
+                /* eslint-disable @typescript-eslint/no-non-null-assertion */
+                return void 0 as any as V.WhenReadyResult
+            })
+            return void 0
+        }))
+        return V.create(V.Type.Element, newData)
+    }) as Any as V.StateInit<V.StateValue>)
 }

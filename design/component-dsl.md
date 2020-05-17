@@ -333,11 +333,9 @@ Note: if you need to manually reset a component, you can use `let [isToggled, to
 
 ## Render state
 
-You can check if this is the current render via calling `isInitial()` in the body. If you want to set the ref captured via `whenReady(callback)`, you can use `setRef(ref)`. For more advanced uses, like `info.render(target, vnode)` or `info.throw(error)`, you can get the [`info` object](components.md#component-info) itself via `info = useInfo()`.
+You can check if this is the current render via calling `isInitial()` in the body. If you want to set the ref captured via `whenReady(callback)`, you can use `setRef(ref)`. For more advanced uses, like `info.throw(error)`, you can get the [`info` object](components.md#component-info) itself via `info = useInfo()`.
 
 You can also get keys from the [`env` value passed](components.md) via `let {key} = useEnv()` and set them via `setEnv("key", value)`, for things like routing.
-
-And for the common case of just listening to events, you can use `usePortal(target, ...children)`, which just renders `...children` to `target` using `info.render` and handling its lifecycle appropriately.
 
 ## Lifecycle
 
@@ -356,6 +354,14 @@ return m("div.container", ...otherChildren, component(() => {
 ```
 
 If you just need to do work after the component executes (suppose it's an expensive calculation), you can use `whenReady`. The callback can itself return a promise, in which errors are handled appropriately. (Note: errors here are *fatal* and result in the removal of the component.)
+
+```js
+whenReady(async () => {
+    await doSomethingExpensive()
+})
+```
+
+If you need to catch and handle an error that occurs within your rendered subtree, you can use `whenCaught`. The callback can itself return a promise, in which rejections are propagated as errors appropriately (with the same fatal/non-fatal status).
 
 ```js
 whenReady(async () => {
@@ -589,7 +595,7 @@ export function whenReady(callback) {
 }
 
 export function setEnv(key, value) {
-    useInfo().set(key, value)
+    useInfo().setEnv(key, value)
 }
 
 export function useReducer(init, reducer) {
@@ -698,21 +704,6 @@ export function when(cond, opts) {
 
     return guard(cond !== prevCond, signal =>
         typeof block === "function" ? block(signal) : undefined
-    })
-}
-
-export function usePortal(target, ...children) {
-    return guard(hasChanged(target), () => {
-        let info = useInfo()
-        let child = ref()
-        let handle = ref()
-        let promiseToClose = memo(() => info.render(target, (info) => {
-            handle.current = info
-            return child.current
-        }))
-        whenRemoved(() => promiseToClose.then((close) => close()))
-        child.current = children
-        if (handle.current != null) handle.current.redraw()
     })
 }
 ```

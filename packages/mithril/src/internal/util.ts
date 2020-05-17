@@ -12,7 +12,7 @@ export type ArrayCoercible<T extends Any> = Iterable<T> | ArrayLike<T>
 // }[L extends [] ? 0 : 1]
 
 export const assign: (
-    <T extends AnyNotNull>(target: T, source: Maybe<Partial<T>>) => T
+    <T extends AnyNotNull>(target: T, source: APIOptional<Partial<T>>) => T
 ) =
     /*@__PURE__*/ Object.assign ||
         (<T extends AnyNotNull>(target: T, source: Partial<T>) => {

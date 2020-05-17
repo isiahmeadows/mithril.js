@@ -1,5 +1,5 @@
 // Translated from https://usehooks.com/useDarkMode/
-import {usePortal} from "mithril"
+import {whenRemoved, hasChanged} from "mithril"
 import {useLocalStorage, setLocalStorage} from "./use-local-storage.mjs"
 import {isMedia} from "./is-media.mjs"
 
@@ -9,7 +9,17 @@ export function isDarkMode() {
     const [enabled = prefersDarkMode, setEnabled] =
         useLocalStorage("dark-mode-enabled")
 
-    usePortal(document.body, {class: {"dark-mode": enabled}})
+    if (hasChanged(enabled)) {
+        if (enabled) {
+            document.body.classList.add("dark-mode")
+        } else {
+            document.body.classList.remove("dark-mode")
+        }
+    }
+
+    whenRemoved(() => {
+        document.body.classList.remove("dark-mode")
+    })
 
     return [Boolean(enabled), setEnabled]
 }

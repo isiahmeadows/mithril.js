@@ -61,7 +61,7 @@ export interface EventTarget<E extends Event<string>> {
     removeEventListener<F extends E>(
         type: F extends Event<infer T> ? T : never,
         callback: EventListenerOrEventListenerObject<this, F> | null,
-        options?: EventListenerOptions | boolean
+        options?: boolean | EventListenerOptions
     ): void
 }
 
@@ -103,11 +103,15 @@ export interface Document {
 // union than casting every two seconds.
 export type Element = HTMLElement | SVGElement | MathMLElement
 
-export interface ElementCommon {
+export interface ElementCommon extends EventTarget<
+    | Event<"transitionend">
+> {
+    ontransitionend: null | EventListener<this, Event<"transitionend">>
     tagName: string
     ownerDocument: Document
     parentElement: Element | null
     style: CSSStyleDeclaration
+    offsetHeight: number
     getBoundingClientRect(): DOMRectReadOnly
 }
 

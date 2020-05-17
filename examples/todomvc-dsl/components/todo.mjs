@@ -38,7 +38,7 @@ export const Todo = component(({todo, model}) => {
                 checked: todo.isCompleted,
                 on: {click: toggleCompleted},
             }),
-            m("label", todo.title, {on: {dblclick: edit}}),
+            m("label", {on: {dblclick: edit}}, todo.title),
             m("button.destroy", {on: {click: destroy}}),
         ),
         m("input.edit", {on: {

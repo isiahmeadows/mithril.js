@@ -1,5 +1,9 @@
 import * as V from "./internal/vnode"
-import {arrayify, assertDevelopment} from "./internal/util"
+import {
+    Fragment, validateTagName, desugarElementAttrs,
+    SugaredAttributes, ComponentAttributes,
+} from "./internal/hyperscript-common"
+import {arrayify} from "./internal/util"
 import {TrustedString} from "./internal/dom"
 
 interface IfElseBlocks {
@@ -7,7 +11,7 @@ interface IfElseBlocks {
     else(): V.Vnode
 }
 
-type Component = V.Component<V.VnodeAttributes, V.StateValue>
+type Component = V.Component<V.AttributesObject, V.StateValue>
 
 type _KeyFrom<T extends Polymorphic> =
     {[P in keyof T]: T[P] extends V.KeyValue ? P : never}[keyof T]
@@ -17,9 +21,12 @@ type _KeySelector<T extends Polymorphic> =
 
 interface Hyperscript {
     (tag: string, ...children: V.Vnode[]): V.VnodeElement
+    (tag: string, attrs: SugaredAttributes, ...children: V.Vnode[]): V.VnodeElement
     (tag: Component, ...children: V.Vnode[]): V.VnodeComponent
+    (tag: Component, attrs: ComponentAttributes, ...children: V.Vnode[]): V.VnodeComponent
+    (tag: V.RefValue, ...children: V.Vnode[]): V.VnodePortal
+    (tag: V.RefValue, attrs: ComponentAttributes, ...children: V.Vnode[]): V.VnodePortal
     RETAIN: V.VnodeRetain
-    catch(callback: V.CatchCallback, ...children: V.Vnode[]): V.VnodeCatch
     link(id: V.LinkValue, ...children: V.Vnode[]): V.VnodeLink
     state(initializer: V.StateInit<V.StateValue>): V.VnodeState
     trust(text: Any): V.VnodeTrust
@@ -29,53 +36,8 @@ interface Hyperscript {
         keySelector: _KeyFrom<T> | _KeySelector<T>,
         view: (value: T, index: number) => V.Vnode
     ): V.VnodeLink
-    Fragment: V.Component<V.VnodeAttributes, Any>
-    Attrs: V.Component<V.VnodeAttributes, Any>
+    Fragment: V.Component<V.AttributesObject, Any>
     create<T extends V.VnodeNonPrimitive>(type: T["%"], value: T["_"]): T
-}
-
-// Display precisely where the error is in the dev build - this will take a
-// lot more space and is why the separate dev build exists - it's all for
-// the dev side.
-function invalidSelector(
-    selector: string, pos: number, message: string
-): never {
-    assertDevelopment()
-    let str = `Error at offset ${pos}\n\n"${selector}"\n`
-    for (let i = 0; i <= pos; i++) str += " "
-    throw new SyntaxError(`${str}^\n\n${message}`)
-}
-
-function validateTagName(tag: string): void {
-    assertDevelopment()
-
-    let index: number
-
-    if (tag === "" || tag.startsWith(".")) {
-        return invalidSelector(
-            tag, 0, "String selectors must include tag names."
-        )
-    }
-
-    if (tag.startsWith("#")) {
-        return invalidSelector(tag, 0, "Unknown special tag.")
-    }
-
-    if ((index = tag.indexOf(" ")) >= 0) {
-        return invalidSelector(
-            tag, index, "String selectors must not contain spaces."
-        )
-    }
-
-    if (
-        (index = tag.indexOf("..")) >= 0 ||
-            tag[index = tag.length - 1] === "."
-    ) {
-        return invalidSelector(
-            tag, index,
-            "String selectors must not contain empty class names."
-        )
-    }
 }
 
 function createFromArgs<
@@ -87,36 +49,64 @@ function createFromArgs<T extends V.NonPrimitiveParentVnode>(this: T["%"]): T {
 
 export {m as default}
 const m: Hyperscript = /*@__PURE__*/ (() => {
+function m(tag: typeof m.Fragment, ...children: V.Vnode[]): V.VnodeFragment
+function m(tag: typeof m.Fragment, attrs: SugaredAttributes, ...children: V.Vnode[]): V.VnodeFragment
 function m(tag: string, ...children: V.Vnode[]): V.VnodeElement
-function m(tag: Component, ...children: V.Vnode[]): V.VnodeLink
-function m(tag: string | Component, attrs: V.Vnode): V.Vnode {
-    if (tag === m.Attrs) return attrs
-    if (tag === m.Fragment) return arrayify.apply<1, V.Vnode[]>(1, arguments)
+function m(tag: string, attrs: SugaredAttributes, ...children: V.Vnode[]): V.VnodeElement
+function m(tag: Component, ...children: V.Vnode[]): V.VnodeComponent
+function m(tag: Component, attrs: ComponentAttributes, ...children: V.Vnode[]): V.VnodeComponent
+function m(tag: V.RefValue, ...children: V.Vnode[]): V.VnodePortal
+function m(tag: V.RefValue, attrs: SugaredAttributes, ...children: V.Vnode[]): V.VnodePortal
+function m(
+    tag: typeof m.Fragment | string | Component | V.RefValue,
+    attrs: SugaredAttributes | ComponentAttributes | V.Vnode
+): V.Vnode {
+    let start = 2
 
-    if (typeof tag === "string") {
-        // If in release mode, defer the check to the runtime - it'll
-        // validate and throw as necessary.
-        if (__DEV__) validateTagName(tag)
-    } else if (typeof tag !== "function") {
-        throw new TypeError(
-            "The selector must be either a string or a component."
-        )
+    if (
+        attrs != null &&
+        typeof (attrs as Partial<V.VnodeNonPrimitive>)["%"] === "number"
+    ) {
+        start = 1
+        attrs = void 0
     }
 
-    return createFromArgs.apply<
-        typeof tag extends string ? V.Type.Element : V.Type.Component,
-        typeof tag extends string ? V.VnodeElement : V.VnodeComponent
-    >(
-        (typeof tag === "string" ? V.Type.Element : V.Type.Component) as
-            typeof tag extends string ? V.Type.Element : V.Type.Component,
-        arguments
+    if (tag === m.Fragment) {
+        return arrayify.apply<number, V.Vnode[]>(start, arguments)
+    }
+
+    if (typeof tag !== "function") {
+        // If in release mode, defer the check to the runtime - it'll
+        // validate and throw as necessary.
+        if (__DEV__) {
+            if (typeof tag === "string") {
+                validateTagName(tag)
+            } else if (tag != null && typeof tag !== "object") {
+                throw new TypeError(
+                    "The selector must be either a string or a component."
+                )
+            }
+        }
+
+        if (attrs != null) {
+            attrs = desugarElementAttrs(attrs as SugaredAttributes)
+        }
+    }
+
+    const data: Any[] = [tag, attrs]
+    while (start < arguments.length) data.push(arguments[start++])
+
+    return V.create(
+        typeof tag === "string" ? V.Type.Element
+        : typeof tag === "function" ? V.Type.Component
+        : V.Type.Portal,
+        data as (V.VnodeElement | V.VnodeComponent | V.VnodePortal)["_"],
     )
 }
 
 m.create = V.create
 m.RETAIN = V.create<V.VnodeRetain>(V.Type.Retain, void 0)
 
-m.catch = createFromArgs.bind(V.Type.Catch)
 m.link = createFromArgs.bind(V.Type.Link)
 m.state = (init: V.StateInit<V.StateValue>): V.VnodeState =>
     V.create(V.Type.State, init)
@@ -199,13 +189,7 @@ m.each = <T extends Polymorphic>(
 
 // This should always align with the hyperscript version they're plugged into -
 // it's not supported to use such tags from other instances.
-m.Fragment = () => {
-    throw new TypeError("This component is not meant to be invoked directly.")
-}
-
-m.Attrs = () => {
-    throw new TypeError("This component is not meant to be invoked directly.")
-}
+m.Fragment = Fragment
 
 return m as Hyperscript
 })()

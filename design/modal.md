@@ -12,7 +12,7 @@ This is exposed under `mithril/modal`.
     - Pass `m.state((_, info) => info.whenRemoved(func))` to observe when the modal is removed.
     - On remove, this always restores the previously active focused element if one was previously active.
     - Stacked modals are supported.
-- `overlay({on: {close}, class?, clickFilter?, closeOnClick?, closeOnEscape?})` - Set common overlay options on the given element
+- `overlay({on: {click, close}, class?, clickFilter?, closeOnClick?, closeOnEscape?})` - Get common overlay attributes to render.
     - `attrs.class = "mithril-modal--open"` - The class name to set on the modal and modal target.
     - `attrs.clickFilter = e => e.target === e.currentTarget` - The filter to use for clicks. If the overlay consists of multiple stacked elements, you'll need to change this to account for that added structure, but you rarely need to do this otherwise.
     - `attrs.closeOnClick = true` - Whether to emit the close event whenever the overlay itself (not any of its children) is clicked.

@@ -1,7 +1,7 @@
 import {assign, eachKey} from "./internal/util"
 
 // These all need to be reasonably fast as they all could be used in a
-// `Router.linkTo` parameter in the view.
+// `router.linkTo` parameter in the view.
 
 type PathValue = string | number | boolean | ParamsObject | PathArray
 interface ParamsObject { [key: string]: PathValue }

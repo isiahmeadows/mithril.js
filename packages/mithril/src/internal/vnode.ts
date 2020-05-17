@@ -9,13 +9,9 @@ import {Window, TrustedString, TagNameString} from "./dom"
 // - All values that are not objects with a numeric `%` property, a well as
 //   arrays that may recursively contain them, are considered valid vnodes.
 // - The `%` property can be literally anything on object vnodes.
-type AnyNonSpecialObject =
-    | Exclude<Any, object>
-    | Array<AnyNonSpecialObject> & {"%"?: Exclude<Any, number>}
-    | object & {"%"?: Exclude<Any, number>}
-export type __TestVnodeAny = Assert<AnyNonSpecialObject, Vnode>
-export type __TestAttributeUnionNonPrimitiveTypeIdentifierIsAny =
-    Assert<Any, VnodeAttributes["%"] | VnodeNonPrimitive["%"]>
+type AnyNonObject = Exclude<Any, object> | Array<AnyNonObject>
+export type __TestVnodeAny = Assert<AnyNonObject, Vnode>
+export type __TestAttributeValueIsAny = Assert<Any, AttributesObject[string]>
 export type __TestFunctionsAreNotValidVnodes =
     Assert<Is<(...args: Any[]) => Any, Vnode>, false>
 export type __TestConstructorsAreNotValidVnodes =
@@ -28,9 +24,9 @@ export const enum Type {
     Link,
     Keyed,
     Static,
-    Catch,
     Trust,
     Component,
+    Portal,
 }
 
 export type __TestTypeEnumIsMinimal = Assert<Type, VnodeNonPrimitive["%"]>
@@ -44,13 +40,12 @@ export type __TestTypeEnumIsComplete = Assert<VnodeNonPrimitive["%"], Type>
 declare const ErrorValueMarker: unique symbol
 declare const EventValueMarker: unique symbol
 declare const EventsObjectMarker: unique symbol
-declare const RenderTargetMarker: unique symbol
 declare const EnvironmentMarker: unique symbol
 declare const StateValueMarker: unique symbol
 declare const RefPropertyValueMarker: unique symbol
 declare const LinkValueMarker: unique symbol
 declare const KeyValueMarker: unique symbol
-declare const AttributesValueMarker: unique symbol
+declare const NonSpecialAttributeValueMarker: unique symbol
 declare const EnvironmentValueMarker: unique symbol
 declare const WhenReadyResultMarker: unique symbol
 declare const WhenRemovedResultMarker: unique symbol
@@ -100,20 +95,29 @@ export type KeyValue = PropertyKey & {
     [KeyValueMarker]: void
 }
 
+export type EventListener =
+    | ((this: void, e: EventValue, c: Capture) => Await<void>)
+    | [PropertyKey, (this: void, e: RefPropertyValue, c: Capture) => Await<void>]
+
 export type EventsObject = object & {
     [EventsObjectMarker]: void
-    [key: string]: (this: undefined, e: EventValue, c: Capture) => void
+    [key: string]: EventListener
 }
 
-export type AttributesValue = {
-    [AttributesValueMarker]: void
+export type NonSpecialAttributeValue = {
+    [NonSpecialAttributeValueMarker]: void
 }
 
-export type VnodeAttributes = object & {
-    "%"?: Exclude<Any, number>
-    [key: string]: (
-        APIOptional<EventsObject | AttributesValue | Exclude<Any, number>>
-    )
+export type AttributesValue = Any | EventsObject | NonSpecialAttributeValue
+
+export type AttributesObject = object & {
+    on?: EventsObject
+    [key: string]: AttributesValue
+}
+
+export type ElementAttributesObject = AttributesObject & {
+    class?: Exclude<Any, symbol>
+    style?: APIOptional<{[key: string]: Exclude<Any, symbol>}>
 }
 
 export type VnodeHole = undefined | null | boolean
@@ -130,30 +134,16 @@ export type Environment = object & {
     [key: string]: EnvironmentValue
 }
 
-export type RenderTarget = object & {
-    [RenderTargetMarker]: void
-}
-
-export interface RenderHandle {
-    render(...children: Vnode[]): Promise<void>
-    close(): Promise<void>
-}
-
-export type CloseCallback = () => Promise<void>
-
 export interface ComponentInfo<S> {
     throw(value: ErrorValue, nonFatal: boolean): void
     redraw(): Promise<void>
-    render<T>(
-        target: RenderTarget,
-        init: (info: ComponentInfo<T>) => Vnode
-    ): Promise<CloseCallback>
     isParentMoving(): boolean
     isInitial(): boolean
     renderType(): string
     whenReady(callback: WhenReadyCallback): void
     whenRemoved(callback: WhenRemovedCallback): void
-    set(key: PropertyKey, value: EnvironmentValue): void
+    whenCaught(callback: CatchCallback): void
+    setEnv(key: PropertyKey, value: EnvironmentValue): void
     state: S | undefined
     init(initializer: () => S): S
     ref: RefValue
@@ -165,7 +155,7 @@ export type StateInit<
 > = (info: ComponentInfo<S>, env: E) => Vnode
 
 export type Component<
-    A extends VnodeAttributes, S, E extends Environment = Environment
+    A extends AttributesObject, S, E extends Environment = Environment
 > = (attrs: A, info: ComponentInfo<S>, env: E) => Vnode
 
 export type CatchCallback =
@@ -184,7 +174,7 @@ export type VnodeRetain = object & {
 
 export type VnodeElement = object & {
     "%": Type.Element
-    _: [TagNameString, ...Vnode[]]
+    _: [TagNameString, ElementAttributesObject, ...Vnode[]]
 }
 
 export type VnodeState = object & {
@@ -208,11 +198,6 @@ export type VnodeStatic = object & {
     _: Vnode
 }
 
-export type VnodeCatch = object & {
-    "%": Type.Catch
-    _: [CatchCallback, ...Vnode[]]
-}
-
 export type VnodeTrust = object & {
     "%": Type.Trust
     _: TrustedString
@@ -220,12 +205,20 @@ export type VnodeTrust = object & {
 
 export type VnodeComponent = object & {
     "%": Type.Component
-    _: [Component<VnodeAttributes, StateValue>, ...Vnode[]]
+    _: [
+        Component<AttributesObject, StateValue>,
+        APIOptional<AttributesObject>,
+        ...Vnode[]
+    ]
+}
+
+export type VnodePortal = object & {
+    "%": Type.Portal
+    _: [RefValue | (() => RefValue), APIOptional<AttributesObject>, ...Vnode[]]
 }
 
 export type Vnode =
     | VnodeHole
-    | VnodeAttributes
     | VnodeText
     | VnodeFragment
     | VnodeNonPrimitive
@@ -237,16 +230,16 @@ export type VnodeNonPrimitive =
     | VnodeLink
     | VnodeKeyed
     | VnodeStatic
-    | VnodeCatch
     | VnodeTrust
     | VnodeComponent
+    | VnodePortal
 
 // Strictly for vnodes whose children are arrays
 export type NonPrimitiveParentVnode =
     | VnodeElement
     | VnodeLink
-    | VnodeCatch
     | VnodeComponent
+    | VnodePortal
 
 // The one and only function exported from this
 export function create<T extends VnodeNonPrimitive>(

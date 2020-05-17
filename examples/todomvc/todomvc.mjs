@@ -11,7 +11,7 @@ function App(_, info) {
     )
 
     const {model, dispatch} = state
-    info.set("dispatch", dispatch)
+    info.setEnv("dispatch", dispatch)
 
     return route(DOM, ({router}) => [
         route("/all", () => m(View, {model, showing: "all"})),

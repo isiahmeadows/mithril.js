@@ -1,7 +1,7 @@
 // `./dark-mode.mjs` with all dependencies inlined and everything specialized.
 //
 // This is probably closer to what one would expect of real-world code.
-import {useEffect, memo, useInfo, usePortal} from "mithril"
+import {useEffect, memo, useInfo, hasChanged, whenRemoved} from "mithril"
 
 export default function isDarkMode() {
     const mql = memo(() => window.matchMedia("(prefers-color-scheme: dark)"))
@@ -10,14 +10,27 @@ export default function isDarkMode() {
     useEffect(() => {
         const handle = () => info.redraw()
         mql.addListener(handle)
-        return () => mql.removeListener(handle)
+        window.addEventListener("storage", handle, false)
+        return () => {
+            mql.removeListener(handle)
+            window.removeEventListener("storage", handle, false)
+        }
     })
 
     const value = window.localStorage.getItem("dark-mode-enabled")
     const enabled = value ? Boolean(value) : mql.matches
 
-    usePortal(document.body, {class: {"dark-mode": enabled}})
-    usePortal(window, {on: {storage: () => info.redraw()}})
+    if (hasChanged(enabled)) {
+        if (enabled) {
+            document.body.classList.add("dark-mode")
+        } else {
+            document.body.classList.remove("dark-mode")
+        }
+    }
+
+    whenRemoved(() => {
+        document.body.classList.remove("dark-mode")
+    })
 
     return enabled
 }

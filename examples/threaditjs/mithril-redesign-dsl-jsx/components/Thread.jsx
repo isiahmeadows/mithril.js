@@ -1,4 +1,4 @@
-import {m, component, whenReady, isInitial, usePortal} from "mithril"
+import {m, component, whenReady, isInitial} from "mithril"
 import * as api from "../api.mjs"
 import {Layout} from "./Layout.jsx"
 import {ThreadNode} from "./ThreadNode.jsx"
@@ -14,7 +14,7 @@ export const Thread = component(({id}) => {
         load={(_, signal) => api.thread(id, {signal})}
         view={({root: node}) => {
             const title = T.trimTitle(node.text)
-            usePortal(document, {title: `ThreaditJS: Mithril | ${title}`})
+            document.title = `ThreaditJS: Mithril | ${title}`
             return <ThreadNode node={node} />
         }}
     />

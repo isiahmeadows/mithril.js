@@ -1,28 +1,28 @@
 import {
-    Vnode, Component, VnodeAttributes, Environment, ComponentInfo
+    Vnode, Component, AttributesObject, Environment, ComponentInfo
 } from "./internal/vnode"
 
-type ClosureBody<A extends VnodeAttributes> =
+type ClosureBody<A extends AttributesObject> =
     (attrs: A, env: Environment) => Vnode
 
-type ClosureInit<A extends VnodeAttributes> =
+type ClosureInit<A extends AttributesObject> =
     (info: ComponentInfo<ClosureBody<A>>) => ClosureBody<A>
 
 export function component<
-    A extends VnodeAttributes,
+    A extends AttributesObject,
     E extends Environment = Environment
 >(
     body: ClosureInit<A>
 ): Component<A, ClosureBody<A>, E>
 export function component<
-    A extends VnodeAttributes,
+    A extends AttributesObject,
     E extends Environment = Environment
 >(
     name: string,
     body: ClosureInit<A>
 ): Component<A, ClosureBody<A>, E>
 export function component<
-    A extends VnodeAttributes,
+    A extends AttributesObject,
     E extends Environment = Environment
 >(
     name: string | ClosureInit<A>,

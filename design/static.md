@@ -8,16 +8,16 @@ This is exposed under `mithril/static`.
     - `options.xhtml` is whether to emit XML-compatible HTML or not. Default is not to.
     - `options.window` is the global `window` to use. By default, it tries to read the global `window` and falls back on `undefined` if it can't detect one. It's only used for certain context methods.
     - `options.signal` is an [abort signal](signal.md), in case it ever needs to cancel.
-    - This does *not* set `info.document`, `info.window`, and `info.root`, and `info.render` is a no-op.
+    - This does *not* set `info.document`, `info.window`, and `info.root`, and portals are not rendered.
     - `promise` is a promise to the rendered result string.
 
 - `promise = renderPage(vnode, options?)` - Render `vnode` to an HTML string.
     - `options.xhtml` is whether to emit XML-compatible HTML or not. Default is not to.
     - `options.window` is the global `window` to use. By default, it tries to read the global `window` and falls back on `undefined` if it can't detect one. It's only used for certain context methods.
     - `options.signal` is an [abort signal](signal.md), in case it ever needs to cancel.
-    - This sets `info.document.documentElement`, `info.document.head`, `info.document.body`, `info.window`, and `info.root` to special sentinel values so you can use those as appropriate, and `info.render` recognizes them so it can just do the right thing. It ignores all other values, however.
+    - This sets `info.document.documentElement`, `info.document.head`, `info.document.body`, `info.window`, and `info.root` to special sentinel values so you can use those as appropriate, portal processing recognizes them so it can just do the right thing. It ignores all other values, however.
     - This sets `data-mithril-ssr` on children "rendered" to the above nodes.
-    - `promise` is a promise to the rendered result string. Child `info.render` promises do *not* wait for the string to be rendered, however.
+    - `promise` is a promise to the rendered result string.
 
 - `promise = renderText(vnode, options?)` - Render `vnode` to a text string.
     - `options.window` is the global `window` to use. By default, it tries to read the global `window` and falls back on `undefined` if it can't detect one. It's only used for certain context methods.

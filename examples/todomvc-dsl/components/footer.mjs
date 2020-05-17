@@ -1,14 +1,15 @@
-import {linkTo, m, component, useEnv} from "mithril"
+import {m, component, useEnv} from "mithril"
 import * as Model from "../model.mjs"
 
 export const Footer = component(({model, showing}) => {
-    const {dispatch} = useEnv()
+    const {dispatch, router} = useEnv()
     const remaining = Model.remainingCount(model)
 
     function filter(href, label, children) {
-        return m("li", m("a", linkTo(href), children, {
-            class: {selected: showing === label},
-        }))
+        return m("li", m("a",
+            {...router.linkTo(href), class: {selected: showing === label}},
+            children
+        ))
     }
 
     return [
@@ -21,9 +22,9 @@ export const Footer = component(({model, showing}) => {
             filter("/active", "active", "Active"),
             filter("/completed", "completed", "Completed"),
         ]),
-        m("button", "Clear completed", {
+        m("button", {
             id: "clear-completed",
             on: {click() { dispatch(Model.clearCompleted()) }},
-        }),
+        }, "Clear completed"),
     ]
 })

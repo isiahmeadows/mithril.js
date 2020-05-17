@@ -34,6 +34,11 @@ This is exposed under `mithril/router`. It depends on the internal path parsing 
 - `router.resolve(route)`, `router.resolve(offset)` - Resolve the route or offset to an external URL.
     - If a history entry cannot be found, an error is thrown.
 
+- `router.linkTo(offset)`, `router.linkTo(route, options?)` - See below in "Links".
+    - `options` is the same as what's passed to `router.goTo`, but it also accepts an `on: {click}` parameter to handle clicks.
+    - If the event was captured, this does nothing.
+    - If the event was not captured, this should navigate on a simple left click or equivalent.
+
 Two built-in router instances exist:
 
 - `DOM` - The DOM instance.
@@ -59,7 +64,7 @@ Two built-in router instances exist:
     - `query` - The query parameters.
         - This is a plain object generated from `parseQuery` from [`mithril/path`](path.md).
     - `state` - The current history state.
-    - For convenience, this also sets the above variables in the `mithril/route` environment key.
+    - For convenience, this also sets the `router` environment key to `router` and the `routeInfo` environment key to `{path, query, state}`.
 
 - `route(target, (params) => vnode)` - Define a route.
     - This must be nested at least indirectly within a `route(Instance, ...)` route.
@@ -75,46 +80,56 @@ Two built-in router instances exist:
 
 ## Links
 
-Links are *really* easy: just drop a `linkTo(target, options?)` in whatever you want to route whenever it gets clicked.
+Links are *really* easy: just drop a `{...router.linkTo(target, options?)}` in the attributes of whatever you want to route whenever it gets clicked.
 
 ```js
 // Leave the `href` out of your `a`. It'll be fine. (If you want isomorphic,
 // Mithril might not have the prefix until runtime anyways.)
-m("a", linkTo("/"), "Home")
+m("a", router.linkTo("/"), "Home")
 ```
 
-- `linkTo(href, options?)`, `linkTo(offset)` - Create a link that changes to a new route on click.
-    - The `href`, `options`, and `offset` parameters are the same as with `router.goTo`, so you can use either `linkTo(...)` or `router.goTo(...)`.
-    - Pass this in the body of an element, like `m("a", linkTo(...))`. It adds an appropriate listener and `href` attribute.
+- `router.linkTo(href, options?)`, `router.linkTo(offset)` - Create a link that changes to a new route on click.
+    - The `href`, `options`, and `offset` parameters are the same as with `router.goTo`, so you can use either `router.linkTo(...)` or `router.goTo(...)`.
+    - Pass this in the body of an element, like `m("a", router.linkTo(...))`. It adds an appropriate listener and `href` attribute.
     - You can prevent navigation by returning `false` from the target's `onclick` event handler.
     - This reads the context variable `router` to get its router instance.
 
 That utility would just be implemented like this, just using the framework:
 
 ```js
-export function linkTo(target, options) {
-    return m.state((info, {router}) => ({
+export function linkTo(router, target, options) {
+    return {
         href: router.resolve(target),
         on: {click(ev, capture) {
-            if (
-                // Skip if a prior listener prevented default
-                !ev.defaultPrevented &&
-                // Ignore everything but left clicks
-                (ev.button === 0 || ev.which === 0 || ev.which === 1) &&
-                // No modifier keys
-                !ev.ctrlKey && !ev.metaKey && !ev.shiftKey && !ev.altKey &&
-                // Let the browser handle `target="_blank"`, etc.
-                (!ev.target || ev.target === "_self")
-            ) {
-                capture.event()
-                // Redrawing at this stage is not meaningful.
-                capture.redraw()
-                return router.goTo(target, options)
+            let promises = []
+            try {
+                if (options.on != null && typeof options.on.click === "function") {
+                    promises.push(options.on.click(ev, capture))
+                }
+            } finally {
+                if (
+                    // Skip if a prior listener prevented default
+                    !capture.eventCaptured() &&
+                    // Ignore everything but left clicks
+                    (ev.button === 0 || ev.which === 0 || ev.which === 1) &&
+                    // No modifier keys
+                    !ev.ctrlKey && !ev.metaKey && !ev.shiftKey && !ev.altKey &&
+                    // Let the browser handle `target="_blank"`, etc.
+                    (!ev.target || ev.target === "_self")
+                ) {
+                    capture.event()
+                    // Redrawing at this stage is not meaningful.
+                    capture.redraw()
+                    promises.push(router.goTo(target, options))
+                }
             }
+            return Promise.allSettled(promises)
         }}
-    }))
+    }
 }
 ```
+
+*This would also be exposed from `mithril/router` as the above, so custom DOM routers could trivially implement the expected contract. Non-DOM routers can and should feel free to implement something else if more appropriate.*
 
 ### Route syntax
 

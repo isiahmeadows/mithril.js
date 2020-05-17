@@ -15,11 +15,10 @@ import {noop, assertDevelopment} from "./internal/util"
 import {isEqual} from "./internal/is-equal"
 import {AbortSignal, AbortController} from "./internal/dom"
 import {
-    VnodeAttributes,
+    AttributesObject,
     ComponentInfo, Environment, EnvironmentValue,
-    WhenReadyCallback, WhenReadyResult, WhenRemovedResult, WhenRemovedCallback,
-    CloseCallback,
-    Vnode, Component, ErrorValue, RenderTarget
+    WhenReadyCallback, WhenRemovedResult, WhenRemovedCallback,
+    Vnode, Component, ErrorValue
 } from "./internal/vnode"
 
 /*************************************/
@@ -159,7 +158,6 @@ const enum Direct {
     Slot,
     Lazy,
     Toggle,
-    PortalRemove,
     GuardRemove,
     GuardPromise,
     UsePromise,
@@ -167,7 +165,6 @@ const enum Direct {
 
 const enum Indirect {
     Reducer,
-    PortalWhenReady,
     UseRemove,
 }
 
@@ -178,8 +175,6 @@ interface StateFactory {
         (update: (value: T) => T) => Promise<void>
     d(index: number, type: Direct.Toggle, p: undefined):
         () => Promise<void>
-    d(index: number, type: Direct.PortalRemove, p: undefined):
-        WhenRemovedCallback
     d(index: number, type: Direct.GuardRemove, p: undefined):
         WhenRemovedCallback
     d(index: number, type: Direct.GuardPromise, p: Promise<Any>): void
@@ -191,12 +186,6 @@ interface StateFactory {
         type: Indirect.Reducer,
         p: undefined
     ): (next: T) => Promise<void>
-    i(
-        index: number,
-        value: RenderTarget | (() => RenderTarget),
-        type: Indirect.PortalWhenReady,
-        p: undefined
-    ): WhenReadyCallback
     i(
         index: number,
         value: AbortController,
@@ -228,10 +217,6 @@ function createStateFactory(info: Info, cells: CellList): StateFactory {
                     cells[index] = !cells[index]
                     return info.redraw()
                 }
-            } else if (type === Direct.PortalRemove) {
-                return () =>
-                    (cells[index + 3] as Promise<CloseCallback>)
-                        .then((close) => close()) as Any as WhenRemovedResult
             } else if (type === Direct.GuardRemove) {
                 return (): Await<WhenRemovedResult> => {
                     const removes = cells[index + 2] as
@@ -293,7 +278,6 @@ function createStateFactory(info: Info, cells: CellList): StateFactory {
             index: number,
             value: (
                 | ((acc: A, next: T) => A)
-                | RenderTarget | (() => RenderTarget)
                 | AbortController | undefined
             ),
             type: Indirect
@@ -305,29 +289,6 @@ function createStateFactory(info: Info, cells: CellList): StateFactory {
                         cells[index] as A, next
                     )
                     return info.redraw()
-                }
-            } else if (type === Indirect.PortalWhenReady) {
-                return (): Await<WhenReadyResult> => {
-                    const resolved = typeof value === "function"
-                        ? (value as () => RenderTarget)()
-                        : value as RenderTarget
-
-                    if (cells[index] === resolved) {
-                        return (
-                            (cells[index + 2] as Maybe<ComponentInfo<never>>)
-                                ?.redraw()
-                        ) as Any as Promise<WhenReadyResult>
-                    }
-
-                    return (
-                        cells[index + 3] = info.render<never>(
-                            cells[index] = resolved,
-                            (childInfo) => {
-                                cells[index + 2] = childInfo
-                                return cells[index + 1] as Vnode
-                            }
-                        )
-                    ) as Any as Promise<WhenReadyResult>
                 }
             } else {
                 return () => {
@@ -364,7 +325,6 @@ const enum CellType {
     Guard,
     UseEffect,
     When,
-    UsePortal,
     Ref,
     Slot,
     UseReducer,
@@ -381,7 +341,6 @@ const CellTypeTable = [
     "guard",
     "useEffect",
     "when",
-    "usePortal",
     "ref",
     "slot",
     "useReducer",
@@ -464,20 +423,20 @@ function runClose(
     return void 0
 }
 export function component<
-    A extends VnodeAttributes,
+    A extends AttributesObject,
     E extends Environment = Environment
 >(
     body: (attrs: A) => Vnode
 ): Component<A, CellList, E>
 export function component<
-    A extends VnodeAttributes,
+    A extends AttributesObject,
     E extends Environment = Environment
 >(
     name: string,
     body: (attrs: A) => Vnode
 ): Component<A, CellList, E>
 export function component<
-    A extends VnodeAttributes,
+    A extends AttributesObject,
     E extends Environment = Environment
 >(
     name: string | ((attrs: A) => Vnode),
@@ -710,6 +669,16 @@ export function useEffect<D extends Any>(
     if (callback != null) whenRemoved(callback)
 }
 
+export function whenCaught(callback: WhenReadyCallback) {
+    if (__DEV__) validateContext(void 0)
+    currentInfo.whenReady(callback)
+}
+
+export function whenReady(callback: WhenReadyCallback) {
+    if (__DEV__) validateContext(void 0)
+    currentInfo.whenReady(callback)
+}
+
 export function whenRemoved(callback: WhenRemovedCallback) {
     if (__DEV__) validateContext(void 0)
 
@@ -766,47 +735,6 @@ export function when<T extends Any>(
     )
 }
 
-export function usePortal(
-    target: RenderTarget | (() => RenderTarget),
-    ...children: Vnode[]
-): void {
-    if (__DEV__) validateContext(CellType.UsePortal)
-
-    const mask = currentMask
-    const cells = currentCells
-    const info = currentInfo
-    const index = mask >>> Bits.IndexOffset
-    let onRemove: WhenRemovedCallback
-
-    const stateFactory = getStateFactory(info, cells)
-
-    currentMask = mask + (5 << Bits.IndexOffset) | Bits.HasRemoveCallback
-    if (mask & Bits.IsFirstRun) {
-        cells.push(
-            void 0, // target
-            void 0, // children
-            void 0, // child info
-            void 0, // init promise
-            onRemove = stateFactory.d(index, Direct.PortalRemove, void 0)
-        )
-    } else {
-        onRemove = cells[index + 4] as WhenRemovedCallback
-    }
-
-    cells[index + 1] = children
-    if (mask & Bits.IsNestedRemove) {
-        (currentRemoveTarget as WhenRemovedCallback[]).push(onRemove)
-    } else {
-        (currentRemoveTarget as Info).whenRemoved(onRemove)
-    }
-
-    // Defer the update, so things get queued correctly and so in the event a
-    // ref needs rendered to, this can still be up to the task.
-    info.whenReady(
-        stateFactory.i(index, target, Indirect.PortalWhenReady, void 0)
-    )
-}
-
 export type Ref<T extends Any> = object & {
     current: T
 }
@@ -842,7 +770,7 @@ export function useEnv(): Environment {
 export function setEnv(key: PropertyKey, value: EnvironmentValue): void {
     if (__DEV__) validateContext(void 0)
 
-    currentInfo.set(key, value)
+    currentInfo.setEnv(key, value)
 }
 
 /*******************************************/

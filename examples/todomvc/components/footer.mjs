@@ -1,13 +1,13 @@
-import {linkTo, m} from "mithril"
 import * as Model from "../model.mjs"
 
-export default function Footer({model, showing}, info, {dispatch}) {
+export default function Footer({model, showing}, info, {router, dispatch}) {
     const remaining = Model.remainingCount(model)
 
     function filter(href, label, children) {
-        return m("li", m("a", linkTo(href), children, {
-            class: {selected: showing === label},
-        }))
+        return m("li", m("a",
+            {...router.linkTo(href), class: {selected: showing === label}},
+            children
+        ))
     }
 
     return [

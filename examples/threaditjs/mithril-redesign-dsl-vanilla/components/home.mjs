@@ -7,7 +7,7 @@ import {NewThread} from "./new-thread.mjs"
 export const Home = component(() => m(Layout, {
     load: (signal) => api.home({signal}),
     view: (_, {data: threads}) => [
-        m.portal(document, {title: "ThreaditJS: Mithril | Home"}),
+        m(document, {title: "ThreaditJS: Mithril | Home"}),
         m.each(threads, "id", (thread) => m(ThreadPreview, {thread})),
         m(NewThread, {on: {save(thread) { threads.push(thread) }}}),
     ]
