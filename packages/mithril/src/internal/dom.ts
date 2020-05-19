@@ -12,6 +12,13 @@ export type TrustedString = {[TrustedStringMarker]: void}
 declare const TagNameStringMarker: unique symbol
 export type TagNameString = {[TagNameStringMarker]: void}
 
+// Not technically DOM, but in common use in browser code anyways, and in some
+// cases, it means people don't have to add explicit branches in their own code.
+export interface EventEmitter<T extends {}> {
+    on<K extends keyof T>(name: K, callback: (value: T[K]) => void): void;
+    off<K extends keyof T>(name: K, callback: (value: T[K]) => void): void;
+}
+
 export interface Window {
     AbortController: {
         prototype: AbortController
@@ -53,15 +60,15 @@ export type AddEventListenerOptions = EventListenerOptions & {
 
 export interface EventTarget<E extends Event<string>> {
     addEventListener<F extends E>(
-        type: F extends Event<infer T> ? T : never,
+        type: F["type"],
         listener: EventListenerOrEventListenerObject<this, F> | null,
-        options?: boolean | AddEventListenerOptions
+        options: boolean | AddEventListenerOptions
     ): void
     dispatchEvent(event: E): boolean
     removeEventListener<F extends E>(
-        type: F extends Event<infer T> ? T : never,
+        type: F["type"],
         callback: EventListenerOrEventListenerObject<this, F> | null,
-        options?: boolean | EventListenerOptions
+        options: boolean | EventListenerOptions
     ): void
 }
 

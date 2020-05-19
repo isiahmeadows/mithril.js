@@ -61,6 +61,7 @@ export type Capture = object & {
     event(): void
     redraw(): void
     eventCaptured(): boolean
+    redrawCaptured(): boolean
 }
 
 export type EventValue = {
@@ -142,8 +143,9 @@ export interface ComponentInfo<S> {
     renderType(): string
     whenReady(callback: WhenReadyCallback): void
     whenRemoved(callback: WhenRemovedCallback): void
-    whenCaught(callback: CatchCallback): void
+    whenCaught(callback: WhenCaughtCallback): void
     setEnv(key: PropertyKey, value: EnvironmentValue): void
+    createCapture(event?: Maybe<EventValue>): Capture
     state: S | undefined
     init(initializer: () => S): S
     ref: RefValue
@@ -158,7 +160,7 @@ export type Component<
     A extends AttributesObject, S, E extends Environment = Environment
 > = (attrs: A, info: ComponentInfo<S>, env: E) => Vnode
 
-export type CatchCallback =
+export type WhenCaughtCallback =
     (error: ErrorValue, nonFatal: boolean) => Await<CatchResult>
 
 export type WhenRemovedCallback =

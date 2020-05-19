@@ -188,7 +188,7 @@ result.match({
 
 Whenever the returned promise resolves or rejects, it not only sets the value, but it also schedules a redraw, so your view gets updated with the proper values automatically. The initializer's call is deferred, in case it's sufficiently expensive to perform, so it doesn't interfere with rendering performance.
 
-No support for observables or the like is included *for now*, but this could change in the future if/when [the observable proposal](https://github.com/tc39/proposal-observable) or other similar language proposals like [emitters](https://github.com/tc39/proposal-emitter) gain traction.
+No support for observables or the like is included *for now*, but this could change in the future if/when [the observable proposal](https://github.com/tc39/proposal-observable) or other similar language proposals like [emitters](https://github.com/tc39/proposal-emitter) gain traction. However, support for DOM event targets and Node event emitters are supported via `whenEmitted(target, key, (value, capture) => ...)`, as those are very broadly used (and amount to most `useEffect` calls I've seen in React), where `target` is the event target/emitter, `key` is the event key, `value` is the event value, and `capture` is similar to what event handlers in vnodes use.
 
 ## Comparisons
 
@@ -657,6 +657,35 @@ export function use(init) {
         value: () => value,
         match: params => params[state](value),
     }
+}
+
+export function useEffect(...args) {
+    const remove = memo(...args)
+    if (typeof remove === "function") whenRemoved(remove)
+}
+
+export function whenEmitted(target, name, callback) {
+    const info = useInfo()
+    useEffect([target, name, callback], () => {
+        const isNode = "addEventListener" in target
+        const handler = async value => {
+            const capture = info.createCapture(isNode : undefined : value)
+            const p = new Promise(resolve => resolve(callback(value, capture)))
+            if (!capture.redrawCaptured()) info.redraw()
+            try {
+                await p
+            } catch (e) {
+                info.throw(e, false)
+            }
+        }
+        if (isNode) {
+            target.on(name, handler)
+            return () => target.off(name, handler)
+        } else {
+            target.addEventListener(name, handler, false)
+            return () => target.removeEventListener(name, handler, false)
+        }
+    })
 }
 
 export function and(...args) {

@@ -112,6 +112,10 @@ The component info object (`info` below) contains all the necessary bits for com
     - When an error propagates past a subtree, that subtree is synchronously removed with inner `done` callbacks invoked. If any of those throw, their errors are also added to the `errors` list.
     - Resolution searches back to the first child, then up to the parent, then back to its first child, and so on, until it finds such a hook.
 
+- Create `capture` value: `info.createCapture(event?)`
+    - `event` is an optional platform-specific object to initialize with (in case native events have such functionality built-in, like with the DOM).
+    - This is part of the `info` object as 1. it may be more convenient to implement it natively and 2. it's platform-dependent.
+
 - DOM renderer-specific:
     - Detected window: `info.window`
         - Useful in JSDOM

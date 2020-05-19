@@ -13,10 +13,13 @@
 
 import {noop, assertDevelopment} from "./internal/util"
 import {isEqual} from "./internal/is-equal"
-import {AbortSignal, AbortController} from "./internal/dom"
 import {
-    AttributesObject,
-    ComponentInfo, Environment, EnvironmentValue,
+    EventEmitter, EventTarget, Event, EventListener,
+    AbortSignal, AbortController
+} from "./internal/dom"
+import {
+    AttributesObject, Capture, EventValue,
+    ComponentInfo, Environment, EnvironmentValue, WhenCaughtCallback,
     WhenReadyCallback, WhenRemovedResult, WhenRemovedCallback,
     Vnode, Component, ErrorValue
 } from "./internal/vnode"
@@ -50,6 +53,28 @@ const enum Bits {
     IsFirstRun = 1 << IsFirstRunOffset,
     HasRemoveCallback = 1 << HasRemoveCallbackOffset,
     IsNestedRemove = 1 << IsNestedRemoveOffset,
+}
+
+// Supporting function for `whenEmitted`
+function invokeEvent<T extends EventValue>(
+    info: Info,
+    callback: (value: T, capture: Capture) => Await<void>,
+    value: T,
+    captured: Maybe<T>
+): void {
+    const capture = info.createCapture(captured)
+    try {
+        try {
+            const p = callback(value, capture)
+            if (p != null && typeof p.then === "function") {
+                Promise.resolve(p).catch(e => { info.throw(e, false) })
+            }
+        } finally {
+            if (!capture.redrawCaptured()) info.redraw()
+        }
+    } catch (e) {
+        info.throw(e, false)
+    }
 }
 
 // Note: this machinery exists to reduce allocated closure memory. The enum
@@ -154,153 +179,188 @@ const enum Bits {
 // these closures, so there's no increased indirection in practice aside from
 // those two.
 
-const enum Direct {
+const enum StateType {
     Slot,
     Lazy,
     Toggle,
     GuardRemove,
     GuardPromise,
     UsePromise,
-}
-
-const enum Indirect {
-    Reducer,
     UseRemove,
+    Reducer,
+
+    WhenEmittedDOMCallback,
+    WhenEmittedNodeCallback,
+    WhenEmittedDOMRemove,
+    WhenEmittedNodeRemove,
 }
 
 interface StateFactory {
-    d<T extends Any>(index: number, type: Direct.Slot, p: undefined):
+    <T extends Any>(index: number, type: StateType.Slot, p: undefined):
         (value: T) => Promise<void>
-    d<T extends Any>(index: number, type: Direct.Lazy, p: undefined):
+    <T extends Any>(index: number, type: StateType.Lazy, p: undefined):
         (update: (value: T) => T) => Promise<void>
-    d(index: number, type: Direct.Toggle, p: undefined):
+    (index: number, type: StateType.Toggle, p: undefined):
         () => Promise<void>
-    d(index: number, type: Direct.GuardRemove, p: undefined):
+    (index: number, type: StateType.GuardRemove, p: undefined):
         WhenRemovedCallback
-    d(index: number, type: Direct.GuardPromise, p: Promise<Any>): void
-    d(index: number, type: Direct.UsePromise, p: Promise<Any>): void
+    (index: number, type: StateType.GuardPromise, p: Promise<Any>): void
+    (index: number, type: StateType.UsePromise, p: Promise<Any>): void
 
-    i<A extends Any, T>(
+    <T>(index: number, type: StateType.Reducer, p: undefined):
+        (next: T) => Promise<void>
+
+    (index: number, type: StateType.UseRemove, p: undefined):
+        WhenRemovedCallback
+
+    <E extends Event<string>>(
         index: number,
-        value: (acc: A, next: T) => A,
-        type: Indirect.Reducer,
+        type: StateType.WhenEmittedDOMCallback,
         p: undefined
-    ): (next: T) => Promise<void>
-    i(
+    ): EventListener<EventTarget<E>, E>
+    <T extends {}, K extends keyof T>(
         index: number,
-        value: AbortController,
-        type: Indirect.UseRemove,
+        type: StateType.WhenEmittedNodeCallback,
+        p: undefined
+    ): (event: T[K]) => void
+
+    (
+        index: number,
+        type: StateType.WhenEmittedDOMRemove | StateType.WhenEmittedNodeRemove,
         p: undefined
     ): WhenRemovedCallback
 }
 
 function createStateFactory(info: Info, cells: CellList): StateFactory {
-    return {
-        d: (<T extends Any>(
-            index: number, type: Direct,
-            promise?: Promise<T>
-        ) => {
-            if (type === Direct.Slot) {
-                return (next: T) => {
-                    // `unknown` used specifically to satisfy the type checker
-                    cells[index] = next
-                    return info.redraw()
-                }
-            } else if (type === Direct.Lazy) {
-                return (update: (value: T) => T) => {
-                    // `unknown` used specifically to satisfy the type checker
-                    cells[index] = update(cells[index] as T)
-                    return info.redraw()
-                }
-            } else if (type === Direct.Toggle) {
-                return (): Promise<void> => {
-                    cells[index] = !cells[index]
-                    return info.redraw()
-                }
-            } else if (type === Direct.GuardRemove) {
-                return (): Await<WhenRemovedResult> => {
-                    const removes = cells[index + 2] as
-                        WhenRemovedCallback[]
-                    // Clear out unneeded memory references.
-                    cells[index + 1] =
-                    cells[index + 2] =
-                    cells[index + 3] = void 0
-                    // If there's nothing to await, let's just skip the
-                    // ceremony.
-                    if (--(cells[index] as number)) {
-                        const p = new Promise<WhenRemovedResult>(
-                            (resolve) => { cells[index + 2] = resolve }
-                        )
-                        if (!removes.length) return p
-                        removes.push(() => p)
-                    } else if (!removes.length) {
-                        return void 0 as Any as WhenRemovedResult
-                    }
-                    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                    return runClose(info, removes)!
-                }
-            } else if (type === Direct.GuardPromise) {
-                // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                promise!.then(
-                    () => {
-                        if (!--(cells[index] as number)) {
-                            (cells[index + 2] as () => void)()
-                        }
-                    },
-                    (e: ErrorValue): void => {
-                        if (!--(cells[index] as number)) {
-                            (cells[index + 2] as () => void)()
-                        }
-                        info.throw(e, false)
-                    }
-                )
-                return void 0
-            } else {
-                // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                promise!.then(
-                    (v: T) => {
-                        if (cells[index + 2] == null) return
-                        cells[index] = UseState.Ready
-                        cells[index + 1] = v
-                        info.redraw()
-                    },
-                    (e: Error) => {
-                        if (cells[index + 2] == null) return
-                        cells[index] = UseState.Error
-                        cells[index + 1] = e
-                        info.redraw()
-                    }
-                )
-                return void 0
+    return (<T extends Any>(
+        index: number, type: StateType,
+        promise?: Promise<T>
+    ) => {
+        if (type === StateType.Slot) {
+            return (next: T) => {
+                // eslint-disable-next-line @typescript-eslint/ban-ts-ignore
+                // @ts-ignore https://github.com/microsoft/TypeScript/issues/35866
+                cells[index] = next
+                return info.redraw()
             }
-        }) as StateFactory["d"],
-        i: (<A extends Any, T>(
-            index: number,
-            value: (
-                | ((acc: A, next: T) => A)
-                | AbortController | undefined
-            ),
-            type: Indirect
-        ) => {
-            if (type === Indirect.Reducer) {
-                return (next: T): Promise<void> => {
-                    // `unknown` used specifically to satisfy the type checker
-                    cells[index] = (value as (acc: A, next: T) => A)(
-                        cells[index] as A, next
+        } else if (type === StateType.Lazy) {
+            return (update: (value: T) => T) => {
+                // eslint-disable-next-line @typescript-eslint/ban-ts-ignore
+                // @ts-ignore https://github.com/microsoft/TypeScript/issues/35866
+                cells[index] = update(cells[index] as T)
+                return info.redraw()
+            }
+        } else if (type === StateType.Toggle) {
+            return (): Promise<void> => {
+                cells[index] = !cells[index]
+                return info.redraw()
+            }
+        } else if (type === StateType.Reducer) {
+            return (next: T): Promise<void> => {
+                // eslint-disable-next-line @typescript-eslint/ban-ts-ignore
+                // @ts-ignore https://github.com/microsoft/TypeScript/issues/35866
+                cells[index] = (0, cells[index + 1] as (
+                    (acc: Any, next: T) => Any
+                ))(cells[index], next)
+                return info.redraw()
+            }
+        } else if (type === StateType.GuardRemove) {
+            return (): Await<WhenRemovedResult> => {
+                const removes = cells[index + 2] as
+                    WhenRemovedCallback[]
+                // Clear out unneeded memory references.
+                cells[index + 1] =
+                cells[index + 2] =
+                cells[index + 3] = void 0
+                // If there's nothing to await, let's just skip the
+                // ceremony.
+                if (--(cells[index] as number)) {
+                    const p = new Promise<WhenRemovedResult>(
+                        (resolve) => { cells[index + 2] = resolve }
                     )
-                    return info.redraw()
-                }
-            } else {
-                return () => {
-                    cells[index + 2] = void 0
-                    const ctrl = value as AbortController
-                    value = void 0
-                    ctrl.abort()
+                    if (!removes.length) return p
+                    removes.push(() => p)
+                } else if (!removes.length) {
                     return void 0 as Any as WhenRemovedResult
                 }
+                // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+                return runClose(info, removes)!
             }
-        }) as StateFactory["i"]
-    }
+        } else if (type === StateType.GuardPromise) {
+            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+            promise!.then(
+                () => {
+                    if (!--(cells[index] as number)) {
+                        (cells[index + 2] as () => void)()
+                    }
+                },
+                (e: ErrorValue): void => {
+                    if (!--(cells[index] as number)) {
+                        (cells[index + 2] as () => void)()
+                    }
+                    info.throw(e, false)
+                }
+            )
+            return void 0
+        } else if (type === StateType.UsePromise) {
+            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+            promise!.then(
+                (v: T) => {
+                    if (cells[index + 2] == null) return
+                    cells[index] = UseState.Ready
+                    cells[index + 1] = v
+                    info.redraw()
+                },
+                (e: Error) => {
+                    if (cells[index + 2] == null) return
+                    cells[index] = UseState.Error
+                    cells[index + 1] = e
+                    info.redraw()
+                }
+            )
+            return void 0
+        } else if (type === StateType.UseRemove) {
+            return () => {
+                const ctrl = cells[index + 3] as AbortController
+                cells[index + 2] = cells[index + 3] = void 0
+                ctrl.abort()
+                return void 0 as Any as WhenRemovedResult
+            }
+        } else if (type === StateType.WhenEmittedDOMCallback) {
+            type _E = T & EventValue
+            return (event: _E) => {
+                invokeEvent(info, cells[index] as (
+                    (event: _E, capture: Capture) => Await<void>
+                ), event, event)
+            }
+        } else if (type === StateType.WhenEmittedNodeCallback) {
+            type _E = T & EventValue
+            return (event: _E) => {
+                invokeEvent(info, cells[index] as (
+                    (event: _E, capture: Capture) => Await<void>
+                ), event, void 0)
+            }
+        } else if (type === StateType.WhenEmittedDOMRemove) {
+            return (): WhenRemovedResult => {
+                type _E = Event<string>
+                type _T = EventTarget<_E>
+                (cells[index + 1] as _T).removeEventListener(
+                    cells[index + 2] as _E["type"],
+                    cells[index + 3] as EventListener<_T, _E>,
+                    false
+                )
+                return void 0 as Any as WhenRemovedResult
+            }
+        } else /* if (type === StateType.WhenEmittedNodeRemove) */ {
+            return (): WhenRemovedResult => {
+                (cells[index + 1] as EventEmitter<Record<string, any>>).off(
+                    cells[index + 2] as string,
+                    cells[index + 3] as (event: Any) => void
+                )
+                return void 0 as Any as WhenRemovedResult
+            }
+        }
+    }) as StateFactory
 }
 
 let currentMask: number = Bits.NotActive
@@ -324,6 +384,7 @@ let currentCellTypeIndex = 0
 const enum CellType {
     Guard,
     UseEffect,
+    WhenEmitted,
     When,
     Ref,
     Slot,
@@ -340,6 +401,7 @@ const enum CellType {
 const CellTypeTable = [
     "guard",
     "useEffect",
+    "whenEmitted",
     "when",
     "ref",
     "slot",
@@ -590,7 +652,7 @@ export function guard<T extends Polymorphic>(cond: Any, block: () => T): T {
                     // Add it, then remove it once it resolves.
                     (parentCells[index] as number)++
                     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                    stateFactory.d(index, Direct.GuardPromise, result!)
+                    stateFactory(index, StateType.GuardPromise, result!)
                 }
             }
         }
@@ -610,7 +672,7 @@ export function guard<T extends Polymorphic>(cond: Any, block: () => T): T {
                     stateFactory = getStateFactory(info, parentCells)
                 }
                 parentCells[index + 3] = onRemove =
-                    stateFactory.d(index, Direct.GuardRemove, void 0)
+                    stateFactory(index, StateType.GuardRemove, void 0)
             }
 
             if (childMask & Bits.IsNestedRemove) {
@@ -669,9 +731,154 @@ export function useEffect<D extends Any>(
     if (callback != null) whenRemoved(callback)
 }
 
-export function whenCaught(callback: WhenReadyCallback) {
+export function whenEmitted<T extends {}, K extends keyof T>(
+    target: EventEmitter<T>,
+    name: K,
+    callback: (value: T[K], capture: Capture) => void
+): void
+export function whenEmitted<E extends Event<string>>(
+    target: EventTarget<E>,
+    name: E["type"],
+    callback: (value: E, capture: Capture) => void
+): void
+export function whenEmitted<
+    T extends {}, K extends keyof T,
+    E extends Event<string>
+>(
+    target: EventTarget<E> | EventEmitter<T>,
+    name: K | E["type"],
+    callback: (value: T[K] | E, capture: Capture) => void
+): void {
+    if (__DEV__) validateContext(CellType.UseEffect)
+
+    const mask = currentMask
+    const cells = currentCells
+    const info = currentInfo
+    const index = mask >>> Bits.IndexOffset
+    const currentIsDOM = "addEventListener" in target
+    const stateFactory = getStateFactory(info, cells)
+    let handler: ((value: T[K]) => void) | EventListener<EventTarget<E>, E>
+    let onRemove: WhenRemovedCallback
+
+    currentMask = mask + (5 << Bits.IndexOffset) | Bits.HasRemoveCallback
+
+    if (mask & Bits.IsFirstRun) {
+        if (currentIsDOM) {
+            (target as EventTarget<E>).addEventListener<E>(
+                name as E["type"],
+                handler = stateFactory<E>(
+                    index, StateType.WhenEmittedDOMCallback, void 0
+                ),
+                false
+            )
+        } else {
+            (target as EventEmitter<T>).on(
+                name as K,
+                handler = stateFactory<T, K>(
+                    index, StateType.WhenEmittedNodeCallback, void 0
+                )
+            )
+        }
+
+        cells.push(
+            callback,
+            target,
+            name,
+            handler,
+            onRemove = stateFactory( // remove
+                index,
+                currentIsDOM
+                    ? StateType.WhenEmittedDOMRemove
+                    : StateType.WhenEmittedNodeRemove,
+                void 0
+            )
+        )
+    } else {
+        const prevTarget = cells[index + 1] as (
+            EventTarget<E> | EventEmitter<T>
+        )
+        const prevName = cells[index + 1] as K | E["type"]
+        const prevHandler = cells[index + 2] as (
+            | ((value: T[K]) => void)
+            | EventListener<EventTarget<E>, E>
+        )
+        onRemove = cells[index + 4] as WhenRemovedCallback
+        let prevIsDOM = "addEventListener" in prevTarget
+
+        cells[index] = callback
+        cells[index + 1] = target
+        cells[index + 2] = name
+
+        if (target !== prevTarget || name !== prevName) {
+            if (currentIsDOM === prevIsDOM) {
+                if (currentIsDOM) {
+                    (target as EventTarget<E>).removeEventListener(
+                        prevName as E["type"],
+                        prevHandler as EventListener<EventTarget<E>, E>,
+                        false
+                    )
+                    ;(target as EventTarget<E>).addEventListener(
+                        name as E["type"],
+                        prevHandler as EventListener<EventTarget<E>, E>,
+                        false
+                    )
+                } else {
+                    (target as EventEmitter<T>).off(
+                        prevName as K,
+                        prevHandler as (value: T[K]) => void
+                    )
+                    ;(target as EventEmitter<T>).on(
+                        name as K,
+                        prevHandler as (value: T[K]) => void
+                    )
+                }
+            } else {
+                onRemove = cells[index + 4] = stateFactory(
+                    index,
+                    currentIsDOM
+                        ? StateType.WhenEmittedDOMRemove
+                        : StateType.WhenEmittedNodeRemove,
+                    void 0
+                )
+                if (currentIsDOM) {
+                    (target as EventTarget<E>).addEventListener(
+                        name as E["type"],
+                        cells[index + 3] = stateFactory<E>(
+                            index, StateType.WhenEmittedDOMCallback, void 0
+                        ),
+                        false
+                    )
+                } else {
+                    (target as EventEmitter<T>).off(
+                        name as K,
+                        cells[index + 3] = stateFactory<T, K>(
+                            index, StateType.WhenEmittedNodeCallback, void 0
+                        )
+                    )
+                }
+
+                if (prevIsDOM) {
+                    (prevTarget as EventTarget<E>).removeEventListener(
+                        prevName as E["type"],
+                        prevHandler as EventListener<EventTarget<E>, E>,
+                        false
+                    )
+                } else {
+                    (prevTarget as EventEmitter<T>).off(
+                        prevName as K,
+                        prevHandler as (value: T[K]) => void
+                    )
+                }
+            }
+        }
+    }
+
+    whenRemoved(onRemove)
+}
+
+export function whenCaught(callback: WhenCaughtCallback) {
     if (__DEV__) validateContext(void 0)
-    currentInfo.whenReady(callback)
+    currentInfo.whenCaught(callback)
 }
 
 export function whenReady(callback: WhenReadyCallback) {
@@ -795,7 +1002,7 @@ export function slot<T extends Any>(
 
     return [
         initialValue,
-        getStateFactory(info, cells).d(index, Direct.Slot, void 0),
+        getStateFactory(info, cells)(index, StateType.Slot, void 0),
     ]
 }
 
@@ -811,14 +1018,20 @@ export function useReducer<T extends Any, A extends Polymorphic>(
     const index = mask >>> Bits.IndexOffset
     let value: T
 
-    currentMask = mask + (1 << Bits.IndexOffset)
-    if (mask & Bits.IsFirstRun) cells.push(value = init())
-    else value = cells[index] as T
+    currentMask = mask + (2 << Bits.IndexOffset)
+    if (mask & Bits.IsFirstRun) {
+        cells.push(
+            value = init(),
+            reducer
+        )
+    } else {
+        value = cells[index] as T
+        cells[index + 1] = reducer
+    }
 
     return [
         value,
-        getStateFactory(info, cells)
-            .i(index, reducer, Indirect.Reducer, void 0),
+        getStateFactory(info, cells)(index, StateType.Reducer, void 0),
     ]
 }
 
@@ -840,7 +1053,7 @@ export function lazy<T extends Any>(
 
     return [
         value,
-        getStateFactory(info, cells).d(index, Direct.Lazy, void 0),
+        getStateFactory(info, cells)(index, StateType.Lazy, void 0),
     ]
 }
 
@@ -920,7 +1133,7 @@ export function useToggle(): [boolean, () => Promise<void>] {
 
     return [
         value,
-        getStateFactory(info, cells).d(index, Direct.Toggle, void 0)
+        getStateFactory(info, cells)(index, StateType.Toggle, void 0)
     ]
 }
 
@@ -964,7 +1177,7 @@ function Use<T extends Any>(
     const index = mask >>> Bits.IndexOffset
     let onRemove: WhenRemovedCallback
 
-    currentMask = mask + (3 << Bits.IndexOffset) | Bits.HasRemoveCallback
+    currentMask = mask + (4 << Bits.IndexOffset) | Bits.HasRemoveCallback
     if (mask & Bits.IsFirstRun) {
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         const controller: AbortController = new info.window!.AbortController()
@@ -972,15 +1185,15 @@ function Use<T extends Any>(
         cells.push(
             this.$ = UseState.Pending, // state
             this._ = void 0, // value
-            onRemove = stateFactory
-                .i(index, controller, Indirect.UseRemove, void 0)
+            onRemove = stateFactory(index, StateType.UseRemove, void 0),
+            controller,
         )
 
         // I'm creating a synthetic promise because it's cheaper than adding
         // `init` to the closure *and* creating a second function.
-        stateFactory.d(
+        stateFactory(
             index,
-            Direct.UsePromise,
+            StateType.UsePromise,
             Promise.resolve(controller.signal).then(init)
         )
     } else {

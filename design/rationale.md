@@ -428,20 +428,13 @@ export function useEffect(didUpdate, dependencies = undefined) {
 And for convenience, the DSL also has built-in support for dependency-based programming, with a variant of `memo` similar to React's `useMemo` and `useEffect` to work similarly to React's `useEffect`. So in reality, the DSL code would more likely look like this:
 
 ```js
-import {useEffect, memo, useInfo} from "mithril"
+import {useEffect, whenEmitted, memo, useInfo} from "mithril"
 
 function useLocalStorage(key) {
     const value = window.localStorage.getItem(key)
     const parsed = memo(value, () => value ? JSON.parse(value) : undefined)
 
-    const info = useInfo()
-    useEffect(() => {
-        const update = () => info.redraw()
-        window.addEventListener("storage", update, false)
-        return () => {
-            window.removeEventListener("storage", update, false)
-        }
-    })
+    whenEmitted(window, "storage", () => {})
 
     return [parsed, (value) => {
         window.localStorage.setItem(key, JSON.stringify(value))
