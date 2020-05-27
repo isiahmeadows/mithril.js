@@ -4,7 +4,7 @@
 
 This is exposed under `mithril/router`. It depends on the internal path parsing utilities, the hyperscript API and a native `Promise`, but that's it.
 
-## Router instances
+### Router instances
 
 - `unregister = router.register(info)` - Register a component info object, to redraw on route change
     - `unregister()` - Unregister a component info object, so it doesn't get called on future route changes.
@@ -53,7 +53,7 @@ Two built-in router instances exist:
     - `Memory.initial` - The initial global path to start with.
     - Useful for testing and why it's here.
 
-## Route matching
+### Route matching
 
 - `route(DOM | Memory, ({router, path, query, state}) => vnode)` - Set the global router instance to a given instance.
     - To keep it agnostic of environment, there is no default instance.
@@ -78,7 +78,7 @@ Two built-in router instances exist:
     - `vnode` - The resulting vnode to render for this route.
     - This returns a vnode representing the currently renderered route.
 
-## Links
+### Links
 
 Links are *really* easy: just drop a `{...router.linkTo(target, options?)}` in the attributes of whatever you want to route whenever it gets clicked.
 

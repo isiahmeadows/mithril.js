@@ -15,8 +15,8 @@ export type TagNameString = {[TagNameStringMarker]: void}
 // Not technically DOM, but in common use in browser code anyways, and in some
 // cases, it means people don't have to add explicit branches in their own code.
 export interface EventEmitter<T extends {}> {
-    on<K extends keyof T>(name: K, callback: (value: T[K]) => void): void;
-    off<K extends keyof T>(name: K, callback: (value: T[K]) => void): void;
+    on<K extends keyof T>(name: K, callback: (value: T[K]) => void): void
+    off<K extends keyof T>(name: K, callback: (value: T[K]) => void): void
 }
 
 export interface Window {
@@ -34,6 +34,9 @@ export interface Window {
         prototype: XMLHttpRequest
         new(): XMLHttpRequest
     }
+
+    innerWidth: number
+    innerHeight: number
 
     getComputedStyle(elem: Element): CSSStyleDeclarationReadOnly
 }
@@ -87,7 +90,7 @@ export interface Event<T extends string> {
     stopPropagation(): void
 }
 
-interface ProgressEvent<T extends string> extends Event<T> {
+export interface ProgressEvent<T extends string> extends Event<T> {
     readonly lengthComputable: boolean
     readonly loaded: number
     readonly total: number
@@ -103,6 +106,8 @@ export const enum EventPhase {
 // TODO: expand these
 export interface Document {
     defaultView: Window
+    clientWidth: number
+    clientHeight: number
     createElement(tagName: TagNameString): HTMLElement | SVGElement
 }
 

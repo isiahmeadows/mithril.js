@@ -30,12 +30,22 @@ interface KeySetModule {
     e<K extends Any>(m: KeySet<K>, func: (key: K) => void): void
 }
 
+// Using a class rather than `Object.create(null)` so I can just directly do
+// `new KeyMap.T()`/`new KeySet.T()`. Simpler and has slightly less overhead.
 const Dict = /*@__PURE__*/ (() => {
-    function Dict() {}
-    // @ts-ignore
-    Dict.prototype = null
-    return Dict
+function Dict() {}
+// eslint-disable-next-line @typescript-eslint/ban-ts-ignore
+// @ts-ignore This is just a standard JS hack.
+Dict.prototype = null
+return Dict
 })()
+
+// There's a few spots that need to verify this.
+export function supportsNativeKeys(
+    object: KeyMap<Any, Any> | KeySet<Any>
+): boolean {
+    return Object.getPrototypeOf(object) !== null
+}
 
 // This is some seriously unsafe code, and it's easiest if I disable the type
 // checker and most type-directed lints here. There's no pretty way to handle

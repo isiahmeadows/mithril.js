@@ -32,12 +32,23 @@ export const fill: <T extends Any>(
 ) => void =
     // `unknown` used specifically to satisfy the type checker
     /*@__PURE__*/ ([] as Any[]).fill ||
-    function <T extends Any>(this: T[], value: T, start: number, end: number): void {
+    function <T extends Any>(
+        this: T[], value: T, start: number, end: number
+    ): void {
         while (start < end) this[start++] = value
     }
 
 export const hasOwn = /*@__PURE__*/ {}.hasOwnProperty
 export const propertyIsEnumerable = /*@__PURE__*/ {}.propertyIsEnumerable
+
+export function isEmpty(value: Polymorphic) {
+    if (value != null) {
+        for (const key in value as object) {
+            if (hasOwn.call(value, key)) return false
+        }
+    }
+    return true
+}
 
 export function assertDevelopment(): void {
     if (!__DEV__) {

@@ -18,10 +18,10 @@ let Comp = component("Comp", (attrs) => {
 })
 ```
 
-- `attrs` is the same `attrs` object passed as the first argument to [stateless components defined using the component API](components.md).
+- `attrs` is the same `attrs` object passed as the first argument to [components defined using the component API](components.md).
 - `view` is the child vnode subtree to render.
 
-The component definition itself is stateless and does *not* include mutable state of its own, so it's perfectly fine to pass it to `m.state` like in `m.state(component(() => whatever(data)))`
+For inline state, you can use `state(() => whatever(data))`, which replaces `m.state`.
 
 ## State
 
@@ -237,10 +237,18 @@ Do *not* do things like `hasChanged(...values.map(func))` - instead, remove the 
 
 For `isEqual(a, b, {tolerance})`, there's several rules on how it works:
 
-- If `a` and `b` are both numbers, this compares them [as per this algorithm](https://github.com/isiahmeadows/clean-assert/blob/master/lib/comparison.js#L38-L80).
+- If `a` and `b` are both numbers, this compares them [as per this algorithm](https://github.com/isiahmeadows/clean-assert/blob/0233c2c3e15e66f20f35694c7b3c5eee93420df7/lib/comparison.js#L38-L80).
+- If `a` is a cycle (based on object identity), this verifies that `b` cycles back (based on object identity) to the same degree.
 - If a method [`fantasy-land/equals`](https://github.com/fantasyland/fantasy-land#setoid) exists on `a`, it's called via `a["fantasy-land/equals"](b)` and the result is coerced to a boolean and returned. This is only called for objects.
+- If `a` and `b` are both arrays, this compares their lengths and entries for equality recursively as per this algorithm.
+- If `a` and `b` are both typed arrays or data views and are of the same type, this compares their buffers, their byte offsets, and their lengths for identity. (This is the real structure they have.)
 - If a method `equals` exists on `a`, it's called via `a.equals(b)` and the result is coerced to a boolean and returned.
-- Otherwise, this follows the same general rules of [my strict matching algorithm for Clean Assert](http://github.com/isiahmeadows/clean-assert/blob/0233c2c3e15e66f20f35694c7b3c5eee93420df7/docs/utility.md#how-does-the-structural-matching-work). (Obviously, the same rules would apply to the recursive checks, too.)
+- If `a` and `b` are both plain objects (extends `null` or `Object.prototype`), this compares their sets of key/value pairs for equality recursively as per this algorithm, without respect to key order.
+- In all other cases, this simply does structural equality.
+    - This intentionally leaves maps and sets checked by identity. A future major update may change this, but [it's pretty complicated to implement efficiently](https://github.com/isiahmeadows/clean-assert/blob/0233c2c3e15e66f20f35694c7b3c5eee93420df7/lib/match.js#L232-L383).
+    - This intentionally leaves dates and regexps compared by identity. A future major update may change this.
+
+> Note: in all cases, the first rule above to apply wins.
 
 ## Conditionals
 
@@ -668,15 +676,16 @@ export function whenEmitted(target, name, callback) {
     const info = useInfo()
     useEffect([target, name, callback], () => {
         const isNode = "addEventListener" in target
-        const handler = async value => {
-            const capture = info.createCapture(isNode : undefined : value)
-            const p = new Promise(resolve => resolve(callback(value, capture)))
-            if (!capture.redrawCaptured()) info.redraw()
+        function handler(value) {
             try {
-                await p
+                const capture = info.createCapture(isNode : undefined : value)
+                await callback(value, capture)
+                if (capture.redrawCaptured()) return
             } catch (e) {
                 info.throw(e, false)
+                return
             }
+            info.redraw()
         }
         if (isNode) {
             target.on(name, handler)

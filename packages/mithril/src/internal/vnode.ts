@@ -11,7 +11,8 @@ import {Window, TrustedString, TagNameString} from "./dom"
 // - The `%` property can be literally anything on object vnodes.
 type AnyNonObject = Exclude<Any, object> | Array<AnyNonObject>
 export type __TestVnodeAny = Assert<AnyNonObject, Vnode>
-export type __TestAttributeValueIsAny = Assert<Any, AttributesObject[string]>
+export type __TestElementAttributeValueIsAny =
+    Assert<Any, ElementAttributesObject[string]>
 export type __TestFunctionsAreNotValidVnodes =
     Assert<Is<(...args: Any[]) => Any, Vnode>, false>
 export type __TestConstructorsAreNotValidVnodes =
@@ -27,6 +28,11 @@ export const enum Type {
     Trust,
     Component,
     Portal,
+    Transition,
+}
+
+export const enum TypeMeta {
+    End = 10
 }
 
 export type __TestTypeEnumIsMinimal = Assert<Type, VnodeNonPrimitive["%"]>
@@ -45,7 +51,9 @@ declare const StateValueMarker: unique symbol
 declare const RefPropertyValueMarker: unique symbol
 declare const LinkValueMarker: unique symbol
 declare const KeyValueMarker: unique symbol
-declare const NonSpecialAttributeValueMarker: unique symbol
+declare const OtherElementAttributeValueMarker: unique symbol
+declare const OtherComponentAttributeValueMarker: unique symbol
+declare const StyleObjectValueMarker: unique symbol
 declare const EnvironmentValueMarker: unique symbol
 declare const WhenReadyResultMarker: unique symbol
 declare const WhenRemovedResultMarker: unique symbol
@@ -55,7 +63,8 @@ export type RefPropertyValue = {
     [RefPropertyValueMarker]: void
 }
 
-export type RefValue = APIOptional<Record<PropertyKey, RefPropertyValue>>
+export type RefObject = Record<PropertyKey, RefPropertyValue>
+export type RefValue = APIOptional<RefObject>
 
 export type Capture = object & {
     event(): void
@@ -96,29 +105,59 @@ export type KeyValue = PropertyKey & {
     [KeyValueMarker]: void
 }
 
-export type EventListener =
-    | ((this: void, e: EventValue, c: Capture) => Await<void>)
-    | [PropertyKey, (this: void, e: RefPropertyValue, c: Capture) => Await<void>]
+// Ideally, `EventListener` and `EventListenerExternal` would use existential
+// types, but that's currently not a thing.
+//
+// https://github.com/microsoft/TypeScript/issues/14466
+
+export type EventListenerCallback<
+    E extends Polymorphic,
+    R extends Polymorphic
+> =
+    (this: void, event: E, capture: Capture, ref: R) => Await<void>
+
+export type EventListener<E extends Polymorphic, R extends AnyNotNull> =
+    | EventListenerCallback<E, R>
+    | [keyof R, EventListenerCallback<R[keyof R], R>]
+
+export type EventListenerExternalCallback<E extends Polymorphic> =
+    (this: void, event: E) => Await<void>
+
+export type EventListenerExternal<E extends AnyNotNull> =
+    | EventListenerExternalCallback<E>
+    | [keyof E, EventListenerExternalCallback<E[keyof E]>]
 
 export type EventsObject = object & {
     [EventsObjectMarker]: void
-    [key: string]: EventListener
+    [key: string]: EventListener<EventValue, RefObject>
 }
 
-export type NonSpecialAttributeValue = {
-    [NonSpecialAttributeValueMarker]: void
+export type OtherElementAttributeValue = {
+    [OtherElementAttributeValueMarker]: void
 }
 
-export type AttributesValue = Any | EventsObject | NonSpecialAttributeValue
+export type StyleObjectValue = {
+    [StyleObjectValueMarker]: void
+}
 
-export type AttributesObject = object & {
+export type StyleObject = {
+    [key: string]: StyleObjectValue
+}
+
+export type ElementAttributesObject = object & {
     on?: EventsObject
-    [key: string]: AttributesValue
+    class?: Exclude<Any, symbol>
+    style?: APIOptional<StyleObject>
+    [key: string]: Any | EventsObject | StyleObject | OtherElementAttributeValue
 }
 
-export type ElementAttributesObject = AttributesObject & {
-    class?: Exclude<Any, symbol>
-    style?: APIOptional<{[key: string]: Exclude<Any, symbol>}>
+export type OtherComponentAttributeValue = {
+    [OtherComponentAttributeValueMarker]: void
+}
+
+export type ComponentAttributesObject = object & {
+    on?: APIOptional<EventsObject>
+    [key: string]: APIOptional<EventsObject> | OtherComponentAttributeValue
 }
 
 export type VnodeHole = undefined | null | boolean
@@ -153,11 +192,12 @@ export interface ComponentInfo<S> {
 }
 
 export type StateInit<
-    S, E extends Environment = Environment
+    S extends Polymorphic, E extends Environment = Environment
 > = (info: ComponentInfo<S>, env: E) => Vnode
 
 export type Component<
-    A extends AttributesObject, S, E extends Environment = Environment
+    A extends ComponentAttributesObject,
+    S extends Polymorphic, E extends Environment = Environment
 > = (attrs: A, info: ComponentInfo<S>, env: E) => Vnode
 
 export type WhenCaughtCallback =
@@ -169,6 +209,19 @@ export type WhenRemovedCallback =
 export type WhenReadyCallback =
     (ref: RefValue) => Await<WhenReadyResult>
 
+export type ClassOrStyle = string | StyleObject
+
+export interface TransitionOptionsObject {
+    in?: APIOptional<ClassOrStyle>
+    out?: APIOptional<ClassOrStyle>
+    move?: APIOptional<ClassOrStyle>
+    afterIn?(): Await<void>
+    afterOut?(): Await<void>
+    afterMove?(): Await<void>
+}
+
+export type TransitionOptions = string | TransitionOptionsObject
+
 export type VnodeRetain = object & {
     "%": Type.Retain
     _: void
@@ -176,7 +229,7 @@ export type VnodeRetain = object & {
 
 export type VnodeElement = object & {
     "%": Type.Element
-    _: [TagNameString, ElementAttributesObject, ...Vnode[]]
+    _: [TagNameString, Maybe<ElementAttributesObject>, ...Vnode[]]
 }
 
 export type VnodeState = object & {
@@ -208,15 +261,24 @@ export type VnodeTrust = object & {
 export type VnodeComponent = object & {
     "%": Type.Component
     _: [
-        Component<AttributesObject, StateValue>,
-        APIOptional<AttributesObject>,
+        Component<ComponentAttributesObject, StateValue>,
+        Maybe<ComponentAttributesObject>,
         ...Vnode[]
     ]
 }
 
 export type VnodePortal = object & {
     "%": Type.Portal
-    _: [RefValue | (() => RefValue), APIOptional<AttributesObject>, ...Vnode[]]
+    _: [
+        RefValue,
+        APIOptional<ElementAttributesObject>,
+        ...Vnode[]
+    ]
+}
+
+export type VnodeTransition = object & {
+    "%": Type.Transition
+    _: [TransitionOptions, VnodeElement]
 }
 
 export type Vnode =
@@ -235,6 +297,7 @@ export type VnodeNonPrimitive =
     | VnodeTrust
     | VnodeComponent
     | VnodePortal
+    | VnodeTransition
 
 // Strictly for vnodes whose children are arrays
 export type NonPrimitiveParentVnode =

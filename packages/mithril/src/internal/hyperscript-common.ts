@@ -1,70 +1,25 @@
 import * as V from "./vnode"
-import {hasOwn, assign, assertDevelopment} from "./util"
+import {hasOwn, assign} from "./util"
 
-export type ClassObject = object & {[key: string]: Any}
-export type StyleObject = object & {[key: string]: Exclude<Any, symbol>}
+type ClassObject = object & {[key: string]: Any}
 
-export type SugaredAttributes = V.AttributesObject & {
+export type SugaredAttributes = V.ElementAttributesObject & {
     "%"?: Exclude<Any, number>
     class: Exclude<Any, object | symbol> | ClassObject
     className: Exclude<Any, object | symbol> | ClassObject
-    style: Exclude<Any, object | symbol> | StyleObject
+    style: Exclude<Any, object | symbol> | V.StyleObject
 }
 
-export type ComponentAttributes = V.AttributesObject & {
+export type ComponentAttributes = V.ComponentAttributesObject & {
     "%"?: Exclude<Any, number>
 }
 
-export type Component = V.Component<V.AttributesObject, V.StateValue>
+export type Component = V.Component<V.ComponentAttributesObject, V.StateValue>
 
-// Display precisely where the error is in the dev build - this will take a
-// lot more space and is why the separate dev build exists - it's all for
-// the dev side.
-export function invalidSelector(
-    selector: string, pos: number, message: string
-): never {
-    assertDevelopment()
-    let str = `Error at offset ${pos}\n\n"${selector}"\n`
-    for (let i = 0; i <= pos; i++) str += " "
-    throw new SyntaxError(`${str}^\n\n${message}`)
-}
+export const RETAIN = V.create<V.VnodeRetain>(V.Type.Retain, void 0)
 
-export function validateTagName(tag: string): void {
-    assertDevelopment()
-
-    let index: number
-
-    if (tag === "" || tag.startsWith(".")) {
-        return invalidSelector(
-            tag, 0, "String selectors must include tag names."
-        )
-    }
-
-    if (tag.startsWith("#")) {
-        return invalidSelector(tag, 0, "Unknown special tag.")
-    }
-
-    if ((index = tag.indexOf(" ")) >= 0) {
-        return invalidSelector(
-            tag, index, "String selectors must not contain spaces."
-        )
-    }
-
-    if (
-        (index = tag.indexOf("..")) >= 0 ||
-            tag[index = tag.length - 1] === "."
-    ) {
-        return invalidSelector(
-            tag, index,
-            "String selectors must not contain empty class names."
-        )
-    }
-}
-
-export function Fragment() {
-    throw new TypeError("This component is not meant to be invoked directly.")
-}
-
+// This is called for literally every element and portal vnode with non-empty
+// attributes, both in the JSX and hyperscript APIs. It has to be fast.
 export function desugarElementAttrs(
     attrs: SugaredAttributes
 ): V.ElementAttributesObject {
@@ -83,11 +38,8 @@ export function desugarElementAttrs(
             let newClass = ""
 
             if (typeof classValue === "object") {
-                for (const key in classValue as ClassObject) {
-                    if (
-                        hasOwn.call(classValue, key) &&
-                        (classValue as ClassObject)[key]
-                    ) {
+                for (const key in classValue) {
+                    if (hasOwn.call(classValue, key) && classValue[key]) {
                         newClass += " " + key
                     }
                 }
@@ -95,7 +47,7 @@ export function desugarElementAttrs(
                 if (newClass === "") break checkStyle
             } else {
                 newClass = `${classValue}`
-                if (/^\s*$/.test(newClass)) break checkStyle
+                if ((/^\s*$/).test(newClass)) break checkStyle
             }
 
             result = assign({}, attrs)
@@ -125,7 +77,7 @@ export function desugarElementAttrs(
             const keyEnd = line.indexOf(":")
             if (keyEnd >= 0) {
                 result.style[line.slice(0, keyEnd).trim()] =
-                    line.slice(keyEnd + 1).trim()
+                    line.slice(keyEnd + 1).trim() as Any as V.StyleObjectValue
             }
         }
     }

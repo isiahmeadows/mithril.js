@@ -91,14 +91,12 @@ The component info object (`info` below) contains all the necessary bits for com
 
 - Schedule callback to run on component commit: `info.whenReady(callback)`
     - `await callback(ref)` - Called once tree is live and ready for direct manipulation, awaited to propagate any errors that may arise from it.
-        - This also delays resolution of the outer render/redraw call.
     - This is always scheduled for the current render pass only. During stateful component initialization, it's only scheduled for the first render pass, not subsequent ones. (Tip: don't use this during stateful component initialization. It doesn't do what you think it will.)
     - This throws an error if this component is not currently rendering and the component view has already been initialized.
     - If you invoke `info.redraw()` here synchronously, the component gets redrawn again asynchronously but in the same microtask. (Translation: it just loops back around again.)
 
 - Schedule callback to run on component removal: `info.whenRemoved(callback)`
-    - `await callback()` - Called before tree is removed, may return a promise to delay removal.
-        - This also delays resolution of the outer render/redraw call.
+    - `await callback(ref)` - Called before tree is removed, awaited to propagate any errors that may arise from it.
     - This is always scheduled for the current render pass only. During stateful component initialization, it's only scheduled for the first render pass, not subsequent ones. (Tip: using this on every call acts more like a fused `onbeforeremove` + `onremove`.)
     - This throws an error if this component is not currently rendering and the component view has already been initialized.
     - `callback` is called on the same tick, right before all changes have been committed to DOM so things like event handlers can be added.

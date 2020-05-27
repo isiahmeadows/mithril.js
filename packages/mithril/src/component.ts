@@ -11,18 +11,23 @@
 //
 // If I had dependent types + induction, this would be so much easier to verify.
 
-import {noop, assertDevelopment} from "./internal/util"
+import {noop, assertDevelopment, promise} from "./internal/util"
 import {isEqual} from "./internal/is-equal"
 import {
     EventEmitter, EventTarget, Event, EventListener,
     AbortSignal, AbortController
 } from "./internal/dom"
 import {
-    AttributesObject, Capture, EventValue,
+    ComponentAttributesObject, Capture, EventValue,
     ComponentInfo, Environment, EnvironmentValue, WhenCaughtCallback,
     WhenReadyCallback, WhenRemovedResult, WhenRemovedCallback,
-    Vnode, Component, ErrorValue
+    Vnode, Component, ErrorValue, EventListener as VirtualEventListener,
+
+    // For `state`
+    VnodeState, StateInit, StateValue, Type, create
 } from "./internal/vnode"
+import {UseState, Use} from "./internal/use"
+import {invokeEvent} from "./internal/dom-util"
 
 /*************************************/
 /*                                   */
@@ -53,28 +58,6 @@ const enum Bits {
     IsFirstRun = 1 << IsFirstRunOffset,
     HasRemoveCallback = 1 << HasRemoveCallbackOffset,
     IsNestedRemove = 1 << IsNestedRemoveOffset,
-}
-
-// Supporting function for `whenEmitted`
-function invokeEvent<T extends EventValue>(
-    info: Info,
-    callback: (value: T, capture: Capture) => Await<void>,
-    value: T,
-    captured: Maybe<T>
-): void {
-    const capture = info.createCapture(captured)
-    try {
-        try {
-            const p = callback(value, capture)
-            if (p != null && typeof p.then === "function") {
-                Promise.resolve(p).catch(e => { info.throw(e, false) })
-            }
-        } finally {
-            if (!capture.redrawCaptured()) info.redraw()
-        }
-    } catch (e) {
-        info.throw(e, false)
-    }
 }
 
 // Note: this machinery exists to reduce allocated closure memory. The enum
@@ -196,22 +179,44 @@ const enum StateType {
 }
 
 interface StateFactory {
-    <T extends Any>(index: number, type: StateType.Slot, p: undefined):
-        (value: T) => Promise<void>
-    <T extends Any>(index: number, type: StateType.Lazy, p: undefined):
-        (update: (value: T) => T) => Promise<void>
-    (index: number, type: StateType.Toggle, p: undefined):
-        () => Promise<void>
-    (index: number, type: StateType.GuardRemove, p: undefined):
-        WhenRemovedCallback
-    (index: number, type: StateType.GuardPromise, p: Promise<Any>): void
-    (index: number, type: StateType.UsePromise, p: Promise<Any>): void
+    <T extends Any>(
+        index: number,
+        type: StateType.Slot,
+        p: undefined
+    ): (value: T) => Promise<void>
+    <T extends Any>(
+        index: number,
+        type: StateType.Lazy,
+        p: undefined
+    ): (update: (value: T) => T) => Promise<void>
+    (
+        index: number,
+        type: StateType.Toggle,
+        p: undefined
+    ): () => Promise<void>
+    (
+        index: number,
+        type: StateType.GuardRemove,
+        p: undefined
+    ): WhenRemovedCallback
+    (
+        index: number,
+        type: StateType.GuardPromise,
+        p: Promise<WhenRemovedResult>
+    ): void
+    (index: number, type: StateType.UsePromise, p: Promise<Polymorphic>): void
 
-    <T>(index: number, type: StateType.Reducer, p: undefined):
-        (next: T) => Promise<void>
+    <T>(
+        index: number,
+        type: StateType.Reducer,
+        p: undefined
+    ): (next: T) => Promise<void>
 
-    (index: number, type: StateType.UseRemove, p: undefined):
-        WhenRemovedCallback
+    (
+        index: number,
+        type: StateType.UseRemove,
+        p: undefined
+    ): WhenRemovedCallback
 
     <E extends Event<string>>(
         index: number,
@@ -327,24 +332,29 @@ function createStateFactory(info: Info, cells: CellList): StateFactory {
                 return void 0 as Any as WhenRemovedResult
             }
         } else if (type === StateType.WhenEmittedDOMCallback) {
-            type _E = T & EventValue
+            type _E = T & Event<string> & EventValue
+            type _T = EventTarget<_E>
             return (event: _E) => {
-                invokeEvent(info, cells[index] as (
-                    (event: _E, capture: Capture) => Await<void>
-                ), event, event)
+                invokeEvent(
+                    info,
+                    cells[index] as VirtualEventListener<_E, _T>,
+                    event, event, cells[index + 1] as _T
+                )
             }
         } else if (type === StateType.WhenEmittedNodeCallback) {
             type _E = T & EventValue
             return (event: _E) => {
-                invokeEvent(info, cells[index] as (
-                    (event: _E, capture: Capture) => Await<void>
-                ), event, void 0)
+                invokeEvent<_E, _E>(
+                    info,
+                    cells[index] as VirtualEventListener<_E, _E>,
+                    event, void 0, event,
+                )
             }
         } else if (type === StateType.WhenEmittedDOMRemove) {
             return (): WhenRemovedResult => {
                 type _E = Event<string>
                 type _T = EventTarget<_E>
-                (cells[index + 1] as _T).removeEventListener(
+                ;(cells[index + 1] as _T).removeEventListener(
                     cells[index + 2] as _E["type"],
                     cells[index + 3] as EventListener<_T, _E>,
                     false
@@ -353,7 +363,7 @@ function createStateFactory(info: Info, cells: CellList): StateFactory {
             }
         } else /* if (type === StateType.WhenEmittedNodeRemove) */ {
             return (): WhenRemovedResult => {
-                (cells[index + 1] as EventEmitter<Record<string, any>>).off(
+                (cells[index + 1] as EventEmitter<Record<string, Any>>).off(
                     cells[index + 2] as string,
                     cells[index + 3] as (event: Any) => void
                 )
@@ -484,21 +494,22 @@ function runClose(
     if (open) return new Promise((r) => resolve = r)
     return void 0
 }
+
 export function component<
-    A extends AttributesObject,
+    A extends ComponentAttributesObject,
     E extends Environment = Environment
 >(
     body: (attrs: A) => Vnode
 ): Component<A, CellList, E>
 export function component<
-    A extends AttributesObject,
+    A extends ComponentAttributesObject,
     E extends Environment = Environment
 >(
     name: string,
     body: (attrs: A) => Vnode
 ): Component<A, CellList, E>
 export function component<
-    A extends AttributesObject,
+    A extends ComponentAttributesObject,
     E extends Environment = Environment
 >(
     name: string | ((attrs: A) => Vnode),
@@ -570,6 +581,59 @@ export function component<
     return Comp
 }
 
+export function state<E extends Environment = Environment>(
+    body: () => Vnode
+): VnodeState {
+    return create(Type.State, ((info: Info, env: E) => {
+        const prevMask = currentMask
+        const prevInfo = currentInfo
+        const prevEnv = currentEnv
+        const prevCells = currentCells
+        const prevRemoveTarget = currentRemoveTarget
+        const prevStateFactory = currentStateFactory
+        let prevCellTypes: Maybe<CellType[]>
+        let prevCellTypeIndex = 0
+
+        if (__DEV__) {
+            prevCellTypes = currentCellTypes
+            prevCellTypeIndex = currentCellTypeIndex
+        }
+
+        const cells = info.state
+
+        // Fast path: always set everything.
+        currentMask = Bits.IsActive
+        currentInfo = info
+        currentEnv = env
+        currentCells = cells as CellList
+        currentRemoveTarget = info
+        currentStateFactory = void 0
+
+        // Slow path: set another variable and allocate the array.
+        if (cells == null) {
+            currentMask = Bits.IsActive | Bits.IsFirstRun
+            currentCells = info.state = []
+        }
+
+        try {
+            return body()
+        } finally {
+            currentMask = prevMask
+            currentInfo = prevInfo
+            currentEnv = prevEnv
+            currentCells = prevCells
+            currentRemoveTarget = prevRemoveTarget
+            currentStateFactory = prevStateFactory
+
+            if (__DEV__) {
+                // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+                currentCellTypes = prevCellTypes!
+                currentCellTypeIndex = prevCellTypeIndex
+            }
+        }
+    }) as Any as StateInit<StateValue>)
+}
+
 export function isInitial(): boolean {
     return (currentMask & Bits.IsFirstRun) !== 0
 }
@@ -605,7 +669,7 @@ export function guard<T extends Polymorphic>(cond: Any, block: () => T): T {
     const parentMask = currentMask
     const parentCells = currentCells
     const prevRemoveTarget = currentRemoveTarget
-    let prevStateFactory = currentStateFactory
+    const prevStateFactory = currentStateFactory
 
     currentStateFactory = void 0
     if (parentMask & Bits.IsFirstRun) {
@@ -652,7 +716,7 @@ export function guard<T extends Polymorphic>(cond: Any, block: () => T): T {
                     // Add it, then remove it once it resolves.
                     (parentCells[index] as number)++
                     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                    stateFactory(index, StateType.GuardPromise, result!)
+                    stateFactory(index, StateType.GuardPromise, result)
                 }
             }
         }
@@ -803,7 +867,7 @@ export function whenEmitted<
             | EventListener<EventTarget<E>, E>
         )
         onRemove = cells[index + 4] as WhenRemovedCallback
-        let prevIsDOM = "addEventListener" in prevTarget
+        const prevIsDOM = "addEventListener" in prevTarget
 
         cells[index] = callback
         cells[index + 1] = target
@@ -1137,45 +1201,14 @@ export function useToggle(): [boolean, () => Promise<void>] {
     ]
 }
 
-const enum UseState {
-    Pending,
-    Ready,
-    Error,
-}
-
-const StateLookup = ["pending", "ready", "error"] as const
-type UseStateKeys = typeof StateLookup
-
-interface UseMatchers<T extends Any, R> {
-    pending(): R
-    ready(value: T): R
-    error(value: ErrorValue): R
-}
-
-type Use<T extends Any> =
-    | {$: UseState.Pending, _: void} & _UseCommon<T>
-    | {$: UseState.Ready, _: T} & _UseCommon<T>
-    | {$: UseState.Error, _: ErrorValue} & _UseCommon<T>
-
-type _UseCommon<T extends Any> = {
-    state(this: Use<T>): UseStateKeys[(typeof this)["$"]]
-    value(this: Use<T>): (typeof this)["_"]
-    match<R extends Polymorphic>(this: Use<T>, matchers: UseMatchers<T, R>): R
-}
-
-const Use: {
-    new<T extends Any>(init?: (signal: AbortSignal) => Await<T>): Use<T>
-    prototype: _UseCommon<Any>
-} = /*@__PURE__*/ (() => {
-function Use<T extends Any>(
-    this: Use<T>,
-    init?: (signal: AbortSignal) => Await<T>
-) {
+function _use<T extends Polymorphic>(init: (signal: AbortSignal) => Await<T>) {
     const mask = currentMask
     const cells = currentCells
     const info = currentInfo
     const index = mask >>> Bits.IndexOffset
     let onRemove: WhenRemovedCallback
+    let state: UseState
+    let value: Use<T>["_"]
 
     currentMask = mask + (4 << Bits.IndexOffset) | Bits.HasRemoveCallback
     if (mask & Bits.IsFirstRun) {
@@ -1183,22 +1216,23 @@ function Use<T extends Any>(
         const controller: AbortController = new info.window!.AbortController()
         const stateFactory = getStateFactory(info, cells)
         cells.push(
-            this.$ = UseState.Pending, // state
-            this._ = void 0, // value
+            state = UseState.Pending, // state
+            value = void 0, // value
             onRemove = stateFactory(index, StateType.UseRemove, void 0),
             controller,
         )
 
-        // I'm creating a synthetic promise because it's cheaper than adding
-        // `init` to the closure *and* creating a second function.
         stateFactory(
             index,
             StateType.UsePromise,
-            Promise.resolve(controller.signal).then(init)
+            // This inner function only contains the initializer function + the
+            // abort controller, and it's not going to be persisted after the
+            // next tick.
+            promise.then(() => init(controller.signal))
         )
     } else {
-        this.$ = cells[index] as UseState
-        this._ = cells[index + 1] as Maybe<T | ErrorValue>
+        state = cells[index] as UseState
+        value = cells[index + 1] as Maybe<T | ErrorValue>
         onRemove = cells[index + 2] as WhenRemovedCallback
     }
 
@@ -1207,53 +1241,31 @@ function Use<T extends Any>(
     } else {
         (currentRemoveTarget as Info).whenRemoved(onRemove)
     }
-}
 
-(Use.prototype as _UseCommon<Any>).state = function () {
-    return StateLookup[this.$]
+    return new Use(state, value)
 }
-
-;(Use.prototype as _UseCommon<Any>).value = function () {
-    return this._
-}
-
-;(Use.prototype as _UseCommon<Any>).match = function (matchers) {
-    if (this.$ === UseState.Pending) {
-        return matchers.pending()
-    } else if (this.$ === UseState.Ready) {
-        return matchers.ready(this._)
-    } else /* if (this.$ === UseState.Error) */ {
-        return matchers.error(this._)
-    }
-}
-
-return Use as Any as {
-    new<T extends Any>(init?: (signal: AbortSignal) => Await<T>): Use<T>
-    prototype: _UseCommon<Any>
-}
-})()
 
 // `use` is pretty complicated to begin with. Let's not blow this module up
 // further by super-optimizing an inherently moderately expensive operation to
 // begin with. It's also something mildly perf-sensitive on subsequent runs as
 // it handles resource loading, a very common operation in many apps.
-export function use<T extends Any>(
+export function use<T extends Polymorphic>(
     init: (signal: AbortSignal) => Await<T>
 ): Use<T>
-export function use<T extends Any, D extends Any>(
+export function use<T extends Polymorphic, D extends Any>(
     dependency: D,
     init: (value: D, signal: AbortSignal) => Await<T>
 ): Use<T>
-export function use<T extends Any, D extends Any>(
+export function use<T extends Polymorphic, D extends Any>(
     dependency: D | ((signal: AbortSignal) => Await<T>),
     init?: (value: D, signal: AbortSignal) => Await<T>
 ): Use<T> {
     if (__DEV__) validateContext(CellType.Use)
 
     if (arguments.length < 2) {
-        return new Use(dependency as (signal: AbortSignal) => Await<T>)
+        return _use(dependency as (signal: AbortSignal) => Await<T>)
     } else {
-        return guard(hasChanged(dependency), () => new Use((signal) =>
+        return guard(hasChanged(dependency), () => _use((signal) =>
             (init as ((value: D, signal: AbortSignal) => Await<T>))(
                 dependency as D,
                 signal
@@ -1320,7 +1332,7 @@ export function hasChangedBy<T extends Any>(
 
     const mask = currentMask
     const cells = currentCells
-    let index = mask >>> Bits.IndexOffset
+    const index = mask >>> Bits.IndexOffset
 
     currentMask = mask + (1 << Bits.IndexOffset)
     if (mask & Bits.IsFirstRun) {

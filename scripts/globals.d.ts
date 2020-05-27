@@ -34,7 +34,7 @@ declare global {
     // autocomplete experience.
     type Any =
         string | object | boolean | symbol | number | bigint | null | undefined
-    type AnyNotNull = string | object | boolean | symbol | number | bigint
+    type AnyNotNull = NonNullable<Any>
 
     // Takes advantage of the fact `unknown` is not assignable to `Any`. Once
     // unique types exist, this should use `unique unknown` instead.
