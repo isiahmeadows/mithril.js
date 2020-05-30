@@ -610,3 +610,7 @@ I've solidified on the second. The first seems better on the surface, but the be
 - The simpler tokenization has shown to not really help. People talk about `onclick` events rather than `click` events, and any time they're dealing with custom events from third-party libraries with names that aren't valid identifier names for properties (like `bs.modal.show`), they inevitably get confused. I've seen even people who've used Mithril for years get confused over this fact.
 
 I know this will be controversial, but my focus is on solving long-standing design issues people have had with Mithril. It's simple in many respects, but I've witnessed with this, among others, a superficial simplicity that us regular users understand intuitively, but runs against the intuition of most others.
+
+## Why did `route.set` lose its `title` option?
+
+Literally only one browser reliably uses this: [Safari](https://github.com/whatwg/html/issues/2174#issuecomment-403521462). Further discussion in that bug makes it pretty clear it's entirely redundant with `document.title`, so one should be using that instead (or `m(document, {title: ...})` if one desires to diff it).

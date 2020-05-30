@@ -9,7 +9,7 @@ This is exposed under `mithril/router`. It depends on the internal path parsing 
 - `unregister = router.register(info)` - Register a component info object, to redraw on route change
     - `unregister()` - Unregister a component info object, so it doesn't get called on future route changes.
     - `route` uses this to properly handle subscription of route points.
-    - This allows multiple entry points with ease.
+    - Routers should allow for the possibility of multiple route points.
 
 - `router.path` - The full matched path with query parameters.
 
@@ -26,7 +26,6 @@ This is exposed under `mithril/router`. It depends on the internal path parsing 
         - If a history entry cannot be found, an error is thrown.
     - `options.replace` - Whether to replace the current history entry or append a new one.
         - Note: it needs to be noted that this does *not* have a real effect on user's history UI, only in terms of the HTML history API. So although it's advised for redirects, it's currently redundant until browsers fix their history UIs to follow the spirit of the spec. (There's mentions of it in various places, including Twitter, and active bugs exist for Firefox and Chrome both.)
-    - `options.title` - The title to associate with the history entry.
     - `options.state` - The state to associate with the history entry.
     - The returned promise awaits the next route change and all applicable redirects before it returns.
     - If `offset` is 0, this does nothing.
@@ -46,8 +45,6 @@ Two built-in router instances exist:
     - This requires HTML5 history support, but will need to include a fallback to `onhashchange` for hash changes to work around [this IE/old Edge bug](https://developer.microsoft.com/en-us/microsoft-edge/platform/issues/3740423/#comment-9).
         - Need to ask someone involved with https://github.com/browserstate/history.js if this bug has a workaround in their library, because I'd likely have to adopt a similar fix/workaround.
         - Might be easiest to just watch for both and ignore duplicate requests if they were received by the other listener.
-    - Extra `set` options:
-        - `options.title` - The title of the history entry. Currently, out of all major browsers, this only affects the UI in Firefox, but it exists in case people want to use it.
 
 - `Memory` - The in-memory instance.
     - `Memory.initial` - The initial global path to start with.
