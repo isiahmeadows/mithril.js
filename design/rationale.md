@@ -46,6 +46,12 @@ I do know this was a bit hyped on my part, but here's why I abandoned it: comple
 
 Now if Mithril was statically compiled, I could actually make it happen and make it happen *performantly*, with virtually all the complexity compiled away.
 
+For the one use case above that can't just be spread into elements blindly, namely `transition`, I made it into a core primitive for a few reasons:
+
+1. I found myself having to expose a *lot* of internals just to do it, and I couldn't find anything else that needed it.
+2. It's much easier to optimize, and I don't need a full vnode tree to do it.
+3. Non-browser platforms will have different ways of doing things, and I want to give them a jumping board on where to start.
+
 ## Removing arbitrary selector support in the hyperscript DSL
 
 This was not a decision made lightly, but it's very much rooted in human psychology, actual usage, my own experience, various complaints I've read through the years, and many other things I've seen and read.
