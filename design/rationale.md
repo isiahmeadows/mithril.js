@@ -178,7 +178,7 @@ I was in large part inspired by Dominic Gannaway's work on events for React, but
 1. It's relatively light sugar, and the only thing synthetic about it is bringing a consistent interface between components and events - the rest of the overhead is just for supporting multiple receivers.
 2. I explain this at length in [the event documentation](core/events.md#why-change-the-event-receiver-model).
 
-## Making the main bundle heavy with even more batteries included
+## Making the main package heavy with even more batteries included
 
 Mithril is primarily a front-end framework. You're literally gaining nothing in bundle size by installing everything all at once. Plus, it's one dependency and you have it all, instead of 15 different dependencies just to get started. Mithril already has historically baked a lot into the core distribution:
 
@@ -190,7 +190,7 @@ Mithril is primarily a front-end framework. You're literally gaining nothing in 
 
 But on top of that, I still see people asking what to do about testing, about rendering to HTML (usually for isomorphic apps), about CSS transition handling, and all of those *have* existing modules and/or patterns, things that we'd see less of if we moved it all into the core repo and published it all as one giant step to npm. It's less hassle for us, less hassle for users.
 
-Note that we would still keep out of core things that can't feasibly be kept *in* core due to naming restrictions, like ESLint's inability to comprehend packages that aren't either `eslint-plugin-*` or `@scope/eslint-plugin-*`. Those would live in separate repos necessarily, and would also be useful for keeping integration-specific modules out of core.
+Note that we would still keep out of core things that can't feasibly be kept *in* core due to naming restrictions, like ESLint's inability to comprehend packages that aren't either `eslint-plugin-*` or `@scope/eslint-plugin-*`. Those would live in separate packages necessarily, and would also be useful for keeping integration-specific modules out of core.
 
 ## Removing trusted vnodes
 
@@ -239,7 +239,7 @@ For more details on this and other models, [check out this page](why-not-x.md) f
 
 ## The existence of a hooks-like DSL
 
-While the concept of hooks itself is *not* a good idea, the general concept of a UI that reacts to state changes and stays up to date *is* a good idea to have. Furthermore, this is something that can be easily extended to other things, too, like resources. The value of this concept is why I provided a [hooks-like DSL](component-dsl.md). However, while they look very similar on the surface, they encapsulate an entirely different reactive model, one not driven by dependencies and effects but by conditions, guards, and actions. Or, to put it another way, React's hooks is cell-based while the redesign's DSL is more rule/constraint-based. It also provides a much fuller standard library to encapsulate common operations like async resource requesting and managing events on various global elements.
+While the concept of hooks itself is *not* a good idea, the general concept of a UI that reacts to state changes and stays up to date *is* a good idea to have. Furthermore, this is something that can be easily extended to other things, too, like resources. The value of this concept is why I provided a [hooks-like DSL](stdlib/component.md). However, while they look very similar on the surface, they encapsulate an entirely different reactive model, one not driven by dependencies and effects but by conditions, guards, and actions. Or, to put it another way, React's hooks is cell-based while the redesign's DSL is more rule/constraint-based. It also provides a much fuller standard library to encapsulate common operations like async resource requesting and managing events on various global elements.
 
 In React, you might write this:
 
@@ -620,3 +620,57 @@ I know this will be controversial, but my focus is on solving long-standing desi
 ## Why did `route.set` lose its `title` option?
 
 Literally only one browser reliably uses this: [Safari](https://github.com/whatwg/html/issues/2174#issuecomment-403521462). Further discussion in that bug makes it pretty clear it's entirely redundant with `document.title`, so one should be using that instead (or `m(document, {title: ...})` if one desires to diff it).
+
+## Duplicate keys were once planned to be supported? Why drop it now?
+
+Comes down to one reason: complexity. Here's how simple single keys would be to implement:
+
+```js
+// This omits a lot of details for clarity. What matters is the algorithm, not
+// all the other intricacies of the renderer.
+function createKeyed(entries) {
+    const map = new Map()
+
+    for (const [key, child] of entries) {
+        map.set(key, create(child))
+    }
+
+    return map
+}
+
+function updateKeyed(old, entries) {
+    const map = new Map()
+
+    for (const [key, child] of entries) {
+        const prev = old.get(key)
+        old.delete(key)
+        map.set(key, update(prev, child))
+    }
+
+    for (const child of old.entries()) {
+        remove(child)
+    }
+
+    return map
+}
+```
+
+Now, modify that to track duplicate key positions. Here's the obvious implementation for `createKeyed`:
+
+```js
+function createKeyed(entries) {
+    const map = new Map()
+
+    for (const [key, child] of entries) {
+        let current = map.get(key)
+        if (current == null) map.set(key, current = [])
+        current.push(create(child))
+    }
+
+    return map
+}
+```
+
+That may look simple enough, but try implementing `updateKeyed`. That's where it gets messy, and it gets messy really quick. (I tried, trust me.) Not only that, but you also need to handle performance. The above code is fast and simple, but multiple key tracking is *far* more complicated and takes a lot more processing power to implement, and so you'd want an upgrade mechanism. This, of course, is even more complexity. Oh, and did I forget to mention that this particular method is itself *very* suboptimal in terms of performance? You'd get far better mileage with a map of counts and an array of maps of values, as that would give you effective `O(1)` insertion without nearly the wasted space you'd get with nested arrays (as most keys are unique even in this case).
+
+Or in other words, I'd offer it if I could delegate to the browser (native multimaps are far more efficient), but I'm not going to do it in userland.

@@ -13,13 +13,13 @@ This is exposed under `mithril/use`.
         - The `pending` attribute is used for the view until the promise resolves or rejects.
         - The `error` attribute is used for the view after the promise is rejected, called with the value it was rejected with.
         - The `complete` attribute is used for the view after the promise is resolved, called with the value it was resolved with.
-    - Note: `pending`, `ready`, and `error` work the same way as [the parameters to `result.match(...)` in the component DSL](component-dsl.md#async-data), and `init` is the same as that function's sole parameter.
+    - Note: `pending`, `ready`, and `error` work the same way as [the parameters to `result.match(...)` in the component DSL](stdlib/component.md#async-data), and `init` is the same as that function's sole parameter.
 
 - `m(UseAll, {init, pending, ready, error})` - Use multiple async resources concurrently
     - `init(signal)` returns an array of promises.
         - `signal` is an `AbortSignal` instance, whose backing `AbortController` is constructed via `info.window.AbortController`.
         - `init`'s call is deferred to the next microtask, in case it's sufficiently expensive to perform, so it doesn't interfere with rendering performance.
-    - `view([...results])` returns a view using the given results, where `results` is an array of [results sharing the same interface as the return value of `use(...)` in the component DSL](component-dsl.md#async-data).
+    - `view([...results])` returns a view using the given results, where `results` is an array of [results sharing the same interface as the return value of `use(...)` in the component DSL](stdlib/component.md#async-data).
     - This exists for more complex scenarios, but as it's pretty complicated and most uses can suffice without it, it's not included in the full bundle.
 
 ### Why?

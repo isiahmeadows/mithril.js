@@ -2,7 +2,7 @@
 //
 // This is probably closer to what one would expect of real-world code.
 import {
-    useEffect, whenEmitted, memo, useInfo, hasChanged, whenRemoved,
+    useEffect, whenEmitted, memo, useInfo, hasChanged, whenRemoved, isInitial
 } from "mithril"
 
 export default function isDarkMode() {
@@ -15,17 +15,17 @@ export default function isDarkMode() {
         return () => mql.removeListener(handle)
     })
 
+    const value = window.localStorage.getItem("dark-mode-enabled")
+    const enabled = value != null ? Boolean(value) : mql.matches
+
+    if (isInitial()) {
+        window.localStorage.setItem("dark-mode-enabled", enabled)
+    }
+
     whenEmitted(window, "storage", () => {})
 
-    const value = window.localStorage.getItem("dark-mode-enabled")
-    const enabled = value ? Boolean(value) : mql.matches
-
     if (hasChanged(enabled)) {
-        if (enabled) {
-            document.body.classList.add("dark-mode")
-        } else {
-            document.body.classList.remove("dark-mode")
-        }
+        document.body.classList.toggle("dark-mode", enabled)
     }
 
     whenRemoved(() => {

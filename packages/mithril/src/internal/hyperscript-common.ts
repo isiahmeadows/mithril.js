@@ -4,17 +4,17 @@ import {hasOwn, assign} from "./util"
 type ClassObject = object & {[key: string]: Any}
 
 export type SugaredAttributes = V.ElementAttributesObject & {
-    "%"?: Exclude<Any, number>
+    ""?: Exclude<Any, number>
     class: Exclude<Any, object | symbol> | ClassObject
     className: Exclude<Any, object | symbol> | ClassObject
     style: Exclude<Any, object | symbol> | V.StyleObject
 }
 
-export type ComponentAttributes = V.ComponentAttributesObject & {
-    "%"?: Exclude<Any, number>
-}
-
-export type Component = V.Component<V.ComponentAttributesObject, V.StateValue>
+export type ComponentAttributes =
+    Omit<V.ComponentAttributesObject, "children"> & {
+        ""?: Exclude<Any, number>
+        children: APIOptional<V.Vnode[] | V.OtherComponentAttributeValue>
+    }
 
 export const RETAIN = V.create<V.VnodeRetain>(V.Type.Retain, void 0)
 

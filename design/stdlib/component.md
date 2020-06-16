@@ -341,20 +341,20 @@ Note: if you need to manually reset a component, you can use `let [isToggled, to
 
 ## Render state
 
-You can check if this is the current render via calling `isInitial()` in the body. If you want to set the ref captured via `whenReady(callback)`, you can use `setRef(ref)`. For more advanced uses, like `info.throw(error)`, you can get the [`info` object](components.md#component-info) itself via `info = useInfo()`.
+You can check if this is the current render via calling `isInitial()` in the body. If you want to set the ref captured via `whenLayout(callback)`, `whenReady(callback)`, `whenRemoved(callback)`, and `whenLayoutRemoved(callback)`, you can use `setRef(ref)`. For more advanced uses, like `info.throw(error)`, you can get the [`info` object](components.md#component-info) itself via `info = useInfo()`.
 
 You can also get keys from the [`env` value passed](components.md) via `let {key} = useEnv()` and set them via `setEnv("key", value)`, for things like routing.
 
 ## Lifecycle
 
-When you need to schedule a callback to modify the DOM, you can just use `whenReady(func)` somewhere in your tree. It's perfectly okay to store the element directly in a variable - it's called on every render.
+When you need to schedule a callback to modify the DOM, you can just use `whenLayout` somewhere in your tree. It's perfectly okay to store the element directly in a variable - it's called on every render. (There's also `whenLayoutRemoved` for when you need to do things on removal rather than on render.)
 
 ```js
 // This is a bit of a contrived example, but you can imagine how it'd play out
 // in more real-world examples.
-return m("div.container", ...otherChildren, component(() => {
+return m("div.container", ...otherChildren, state(() => {
     let container
-    whenReady((elem) => {
+    whenLayout((elem) => {
         container = elem
         container.height = calculateHeight()
     })
@@ -369,33 +369,10 @@ whenReady(async () => {
 })
 ```
 
-If you need to catch and handle an error that occurs within your rendered subtree, you can use `whenCaught`. The callback can itself return a promise, in which rejections are propagated as errors appropriately (with the same fatal/non-fatal status).
-
-```js
-whenReady(async () => {
-    await doSomethingExpensive()
-})
-```
-
 When you need to schedule a callback to run on removal, you can do that with `whenRemoved`. Since this isn't DOM-specific, this is a global hook.
 
 ```js
 whenRemoved(() => stream.close())
-```
-
-You can even return a promise to block removal. This is useful for waiting for transitions and such. If this errors, the component propagates it as usual (but as a non-fatal error).
-
-```js
-let elementRef
-
-whenRemoved(() => new Promise(resolve => {
-    function listener(e) {
-        e.stopPropagation()
-        elementRef.current.removeEventListener("transitionend", listener, false)
-        resolve()
-    }
-    elementRef.current.addEventListener("transitionend", listener, false)
-}))
 ```
 
 When you need to react to changes within the data model itself and conditionally recreate state, you can use `guard` which after first run reinitializes the body each time `cond` returns `true`. `signal` here is what you get from [`info.signal(init)`](signal.md) (an `AbortSignal` when rendering to the DOM), and it's aborted whenever the component is removed or after the block reinitializes. It always returns its result for simplicity and ease of use.
@@ -596,6 +573,10 @@ export function guard(reinit, body) {
 
 export function isInitial() {
     return useInfo().isInitial()
+}
+
+export function whenLayout(callback) {
+    useInfo().whenLayout(callback)
 }
 
 export function whenReady(callback) {

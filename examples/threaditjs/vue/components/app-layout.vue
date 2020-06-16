@@ -1,6 +1,6 @@
 <template>
     <p class="head_links">
-        <a href="https://github.com/isiahmeadows/mithril.js/tree/redesign/examples/threaditjs/vue">Source</a> |
+        <a href="https://github.com/isiahmeadows/mithril.js/tree/redesign-redux/examples/threaditjs/vue">Source</a> |
         <a href="https://threaditjs.com">ThreaditJS: Home</a>
     </p>
     <h2>

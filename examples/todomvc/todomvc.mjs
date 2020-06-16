@@ -17,7 +17,7 @@ function App(_, info) {
         route("/all", () => m(View, {model, showing: "all"})),
         route("/active", () => m(View, {model, showing: "active"})),
         route("/completed", () => m(View, {model, showing: "completed"})),
-        route(null, () => router.set("/"))
+        route(null, () => router.set("/all"))
     ])
 }
 

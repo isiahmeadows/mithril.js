@@ -1,7 +1,7 @@
 import m from "mithril"
 
 const demoSource =
-    "https://github.com/isiahmeadows/mithril.js/tree/redesign/examples/" +
+    "https://github.com/isiahmeadows/mithril.js/tree/redesign-redux/examples/" +
     "threaditjs/mithril-v2-jsx"
 
 export default {

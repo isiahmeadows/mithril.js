@@ -6,7 +6,7 @@ This is a major work in progress, and is very much so a pre-proposal that's stil
 
 ## Design
 
-See [this directory](https://github.com/isiahmeadows/mithril.js/tree/redesign/design) for more details.
+See [this directory](https://github.com/isiahmeadows/mithril.js/tree/redesign-redux/design) for more details.
 
 ## Implementation
 

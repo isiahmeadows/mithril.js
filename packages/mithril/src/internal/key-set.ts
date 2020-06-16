@@ -1,8 +1,8 @@
 declare const KeyMapMarker: unique symbol
 
-export interface T<K extends Polymorphic, V extends Polymorphic> {
+export interface T<K extends Polymorphic> {
     // Set to a function to ensure it's treated as invariant by TS
-    [KeyMapMarker]: (key: K, value: V) => [K, V]
+    [KeyMapMarker]: (key: K) => [K]
 }
 
 // This is some seriously unsafe code, and it's easiest if I disable most
@@ -18,14 +18,11 @@ export interface T<K extends Polymorphic, V extends Polymorphic> {
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 
 // Mark it as pure so it's properly stripped if it's not used.
-export const isNative = /*@__PURE__*/ typeof Map === "function"
+export const isNative = /*@__PURE__*/ typeof Set === "function"
 
-export const T: new <
-    K extends Polymorphic,
-    V extends Polymorphic
->() => T<K, V> =
+export const T: new <K extends Polymorphic>() => T<K> =
     isNative
-        ? Map as any
+        ? Set as any
         // Using a class rather than `Object.create(null)` so I can just call
         // the constructor dorectly rather than wraping it. Simpler and with
         // slightly less overhead in modern browsers that have a native `Map`.
@@ -35,26 +32,12 @@ export const T: new <
             return Dict as any
         })()
 
-export const get: <
-    K extends Polymorphic,
-    V extends Polymorphic
->(map: T<K, V>, key: K) => Maybe<V> =
+export const has: <K extends Polymorphic>(set: T<K>, key: K) => boolean =
     isNative
-        ? (m: any, k: any) => m.get(k)
+        ? (m: any, k: any) => m.has(k)
         : (m: any, k: any) => m[k]
 
-export const set: <
-    K extends Polymorphic,
-    V extends Polymorphic
->(map: T<K, V>, key: K, child: V) => void =
+export const add: <K extends Polymorphic>(set: T<K>, key: K) => void =
     isNative
-        ? (m: any, k: any, v) => { m.set(k, v) }
-        : (m: any, k: any, v) => { m[k] = v }
-
-export const remove: <
-    K extends Polymorphic,
-    V extends Polymorphic
->(map: T<K, V>, key: K, child: V) => boolean =
-    isNative
-        ? (m: any, k: any) => m.delete(k)
-        : (m: any, k: any) => delete m[k]
+        ? (m: any, k: any) => { m.add(k) }
+        : (m: any, k: any) => { m[k] = true }

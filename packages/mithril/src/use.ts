@@ -1,10 +1,10 @@
 import {AbortSignal} from "./internal/dom"
 import {
     ComponentAttributesObject, ComponentInfo, WhenRemovedResult,
-    WhenRemovedCallback, Vnode, ErrorValue
+    WhenRemovedCallback, Vnode, ErrorValue,
 } from "./internal/vnode"
-import {promise} from "./internal/util"
-import {UseState, Use, UseMatchers} from "./internal/use"
+import {defer1} from "./internal/util"
+import {Use as UseConstructor, UseState, UseMatchers} from "./internal/use"
 
 type UseAttrs<T extends Polymorphic> = (
     ComponentAttributesObject &
@@ -15,7 +15,7 @@ type UseAttrs<T extends Polymorphic> = (
 interface UseComponentState<T extends Polymorphic> {
     s: UseState
     v: T | ErrorValue | undefined
-    r: WhenRemovedCallback
+    r: WhenRemovedCallback<ComponentInfo<Polymorphic>>
 }
 
 export {UseComponent as Use}
@@ -37,12 +37,12 @@ function UseComponent<T extends Polymorphic>(
             }
         }
 
-        promise.then(() => attrs.init(controller.signal)).then(
+        defer1(attrs.init, controller.signal).then(
             (v) => {
                 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
                 state!.s = UseState.Ready
                 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                state!.v = v as T
+                state!.v = v
             },
             (e) => {
                 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -54,19 +54,19 @@ function UseComponent<T extends Polymorphic>(
     }
 
     info.whenRemoved(state.r)
-    return new Use(state.s, state.v).match(attrs)
+    return new UseConstructor(state.s, state.v).match(attrs)
 }
 
 type UseAllAttrs = ComponentAttributesObject & {
     init: Array<(signal: AbortSignal) => Await<Polymorphic>>
-    view(results: Use<Polymorphic>[]): Vnode
+    view(results: UseConstructor<Polymorphic>[]): Vnode
 }
 
 type StateArray = Array<Maybe<UseState | Polymorphic | ErrorValue>>
 
 type UseAllComponentState = {
     s: StateArray
-    r: WhenRemovedCallback
+    r: WhenRemovedCallback<ComponentInfo<Polymorphic>>
 }
 
 function invokeInit(
@@ -75,7 +75,7 @@ function invokeInit(
     index: number,
     signal: AbortSignal
 ) {
-    promise.then(() => init(signal)).then(
+    defer1(init, signal).then(
         (v) => {
             // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
             const state = info.state!.s
@@ -129,10 +129,12 @@ function UseAllComponent(
 
     if (state.s == null) return void 0
 
-    const results = [] as Use<Polymorphic>[]
+    const results = [] as UseConstructor<Polymorphic>[]
 
     for (let i = 0; i < state.s.length; i += 2) {
-        results.push(new Use(state.s[i] as UseState, state.s[i + 1]))
+        results.push(
+            new UseConstructor(state.s[i] as UseState, state.s[i + 1])
+        )
     }
 
     return attrs.view(results)

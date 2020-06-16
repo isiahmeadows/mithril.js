@@ -2,7 +2,7 @@ import React from "react"
 import {Link} from "react-router"
 
 const demoSource =
-    "https://github.com/isiahmeadows/mithril.js/tree/redesign/examples/" +
+    "https://github.com/isiahmeadows/mithril.js/tree/redesign-redux/examples/" +
     "threaditjs/react-hooks"
 
 export default function Header() {

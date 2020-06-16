@@ -1,7 +1,7 @@
 import {m, useEnv, component} from "mithril"
 
 const demoSource =
-    "https://github.com/isiahmeadows/mithril.js/tree/redesign/examples/" +
+    "https://github.com/isiahmeadows/mithril.js/tree/redesign-redux/examples/" +
     "threaditjs/mithril-redesign-vanilla"
 
 export const Header = component(() => [

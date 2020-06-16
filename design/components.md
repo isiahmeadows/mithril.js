@@ -56,6 +56,10 @@ The component info object (`info` below) contains all the necessary bits for com
     - `initialState = callback()` creates and returns the initial state.
     - This is just sugar for `info.isInitial() ? (info.state = callback()) : info.state`, though it's a primitive for convenience.
 
+- Get a signal bound to the component lifecycle: `info.signal()`
+    - This satisfies the `AbortSignal` DOM interface, but it's not necessarily the global instance. (In the static renderer, it's a purely synthetic one.)
+    - It always returns the same value on each invocation for that lifecycle, but it's not itself a constant. (It's lazily created for performance reasons.)
+
 - Throw error: `info.throw(value, nonFatal = false)`
     - This triggers the usual exception handling mechanism, the same one used for event listeners and synchronous view errors.
 
@@ -63,22 +67,17 @@ The component info object (`info` below) contains all the necessary bits for com
     - Returns a promise that resolves once the redraw is fully committed.
     - This currently schedules a redraw for the enclosing root, but this could change in a future update.
 
-- Is parent moving: `info.isParentMoving()`
-    - This throws an error if this component is not currently rendering and the component view has already been initialized.
-    - This allows transitions to work without having to know about their surrounding context.
-    - It's virtually zero-cost to implement, anyways, so it's an easy, obvious thing to add.
-
 - Is initial render: `info.isInitial()`
     - This throws an error if this component is not currently rendering and the component view has already been initialized.
-    - This is technically discernible in userland, but it's provided here for convenience. It's effectively zero-cost to implement, anyways.
+    - This is technically discernible in userland, but it's provided here for convenience. It's effectively zero-cost to implement, anyways, as the info is needed internally.
 
 - Render type: `info.renderType()`
     - This gets the render type. For the DOM renderer, it returns `"dom"`, and for the static renderer, it returns `"static"`. Other renderers are encouraged to return their own values for these.
 
-- Set component ref: `info.ref = ref`
-    - This may be called at any point in time, but `info.whenReady` callbacks are just invoked as `callback(info.ref)` where `info` is the parent `info` for that callback.
+- Set component ref: `info.setRef(ref)`
+    - This may be called at any point in time, but `info.whenLayout` callbacks are invoked with the current ref at that given time.
     - The initial `ref` is `undefined`, and previous refs are persisted. It can also be set to any value.
-    - This is different from React's `useImperativeHandle` in that it lets you set the ref at any time.
+    - This is different from React's `useImperativeHandle` in that it's a bit less magical and much less restrictive.
 
 - Set environment key: `info.setEnv(key, value)`
     - `key` - The key to set in the child environment, as an object property.
@@ -89,26 +88,29 @@ The component info object (`info` below) contains all the necessary bits for com
     - Environment is updated via roughly `childEnv = Object.freeze({__proto: parentEnv, ...keys})`.
     - This works similarly to React's context API, but is much simpler and lower-level.
 
-- Schedule callback to run on component commit: `info.whenReady(callback)`
+- Schedule callback to run when the component's parent DOM ref is updated, before paint: `info.whenLayout(callback)`
     - `await callback(ref)` - Called once tree is live and ready for direct manipulation, awaited to propagate any errors that may arise from it.
-    - This is always scheduled for the current render pass only. During stateful component initialization, it's only scheduled for the first render pass, not subsequent ones. (Tip: don't use this during stateful component initialization. It doesn't do what you think it will.)
-    - This throws an error if this component is not currently rendering and the component view has already been initialized.
-    - If you invoke `info.redraw()` here synchronously, the component gets redrawn again asynchronously but in the same microtask. (Translation: it just loops back around again.)
+    - This is always scheduled for the current render pass only, making single-use cases much more efficient.
+    - This throws an error if this component's view has already been consumed.
+    - If you invoke `info.redraw()` here synchronously, it waits until the next animation frame to render.
+
+- Schedule callback to run when the component's parent DOM ref is removed, before paint: `info.whenLayoutRemoved(callback)`
+    - `await callback(ref)` - Called once tree is live and ready for direct manipulation, awaited to propagate any errors that may arise from it.
+    - This is always scheduled for the current render pass only, making single-use cases much more efficient.
+    - This throws an error if this component's view has already been consumed.
+    - If you invoke `info.redraw()` here synchronously, it waits until the next animation frame to render.
+
+- Schedule callback to run after the component is rendered: `info.whenReady(callback)`
+    - `await callback()` - Called once tree is live and ready for direct manipulation, awaited to propagate any errors that may arise from it.
+    - This is always scheduled for the current render pass only, making single-use cases much more efficient.
+    - This throws an error if this component's view has already been consumed.
+    - If you invoke `info.redraw()` here synchronously, it schedules a new render, but in the same animation frame.
 
 - Schedule callback to run on component removal: `info.whenRemoved(callback)`
-    - `await callback(ref)` - Called before tree is removed, awaited to propagate any errors that may arise from it.
+    - `await callback()` - Called before tree is removed, awaited to propagate any errors that may arise from it.
     - This is always scheduled for the current render pass only. During stateful component initialization, it's only scheduled for the first render pass, not subsequent ones. (Tip: using this on every call acts more like a fused `onbeforeremove` + `onremove`.)
     - This throws an error if this component is not currently rendering and the component view has already been initialized.
     - `callback` is called on the same tick, right before all changes have been committed to DOM so things like event handlers can be added.
-
-- Schedule callback to run on component error: `info.whenCaught(callback)`
-    - `await callback(e, stack, isFatal)` - Called with each error that propagates from children after this in the subtree as well as a component `stack` trace, may rethrow or return rejected promise to propagate
-    - `isFatal` is whether the error was fatal (originated from any point other than `beforeRemove`) or not.
-    - Errors caught include both errors in streams and errors and rejections caught from event handlers. It does *not* include errors thrown from the top-level component view invocation itself.
-    - Caught errors are batched and scheduled to be reported on the next tick.
-    - This exists mainly for error reporting, but can be used in other ways like with async network requests.
-    - When an error propagates past a subtree, that subtree is synchronously removed with inner `done` callbacks invoked. If any of those throw, their errors are also added to the `errors` list.
-    - Resolution searches back to the first child, then up to the parent, then back to its first child, and so on, until it finds such a hook.
 
 - Create `capture` value: `info.createCapture(event?)`
     - `event` is an optional platform-specific object to initialize with (in case native events have such functionality built-in, like with the DOM).
@@ -125,12 +127,12 @@ The component info object (`info` below) contains all the necessary bits for com
 
 You may be wondering why a few of these are defined on `info` and why this `info` object even exists. That's a valid question. Here's some answers:
 
-- "On ready" callbacks are generally scheduled at the global level. In v2, this is done via reading and binding `oncreate`/`onupdate` callbacks, but with `info.whenReady(callback)`, you don't need to feature-detect at all - you can just do it directly whenever that method is invoked.
-- "On remove" callbacks are generally scheduled as the component is visited. Reducing that to an inner array means no type checks are required, just an `array != null` or `array.length !== 0`.
-- `info.ref` as a settable property trivializes that process, and it's just read whenever it's ready. There's literally no extra overhead involved.
+- "On ready" callbacks are generally scheduled at the global level. In v2, this is done via reading and binding `oncreate`/`onupdate` callbacks, but with `info.whenLayout` and `info.whenReady`, it can be directly pushed to the queue.
+- "On remove" callbacks are modeled via a `start` + `end` pair in the component info object referencing a slice stored on the root for the component and its descendants. This makes it as simple as iterating from `start` to `end` for each component in a slice whenever a component's removed, and `info.whenRemoved` can just append directly to that array.
+- `info.setRef(ref)` allows me to proxy straight to the underlying IR node, so the ref isn't stored directly on `info`. Basically, a layer of invocation indirection (fast) to avoid a layer of memory indirection (slow).
 - Using a single `info` object injected means we aren't doing polymorphic code accesses. The only polymorphic invocation involved is invoking the component.
-- Setting keys via `info.setEnv("key", value)` is for similar reasons to `info.whenReady(...)` - the environment object can just be tracked globally, and `set` can just assign directly to it, creating it if necessary and setting a bit so it doesn't get recreated again (and to pre-allocate it on subsequent runs to avoid a branch prediction penalty).
-- Stuff like `info.isInitial()` and `info.isParentMoving()` can just test a bit - they don't need to have a whole property dedicated to themselves.
+- Setting keys via `info.setEnv("key", value)` is for similar reasons to `info.whenLayout` and `info.whenReady` - the environment object can just be tracked globally, and `set` can just assign directly to it, creating it if necessary and setting a bit so it doesn't get recreated again (and to pre-allocate it on subsequent runs to avoid a branch prediction penalty).
+- Stuff like `info.isInitial()` can just test a bit - they don't need to have a whole property dedicated to themselves.
 
 > Also, in general, everything that *could* be a getter, setter, or proxy is a function, so those stuck developing against IE (and Edge's IE Mode) can shim as appropriate.
 
@@ -138,12 +140,15 @@ You may be wondering why a few of these are defined on `info` and why this `info
 
 Lifecycles are much more streamlined, and there's fewer of them. It's bound to inline vnodes, so you can use them literally anywhere without them polluting element or component attributes. You capture refs just by capturing the return value of a component It consists of a hyperscript call you use to capture the parent vnode's ref + a few instance hooks:
 
-- `callback` in `info.whenReady(callback)` is called with the ref after all changes or movement have been committed with this vnode, provided it wasn't removed.
+- `callback` in `info.whenLayout(callback)` is called with the ref after all changes or movement have been committed with this vnode, provided it wasn't removed.
     - Useful for DOM initialization and updating.
+
+- `callback` in `info.whenReady(callback)` is called after the screen has been updated.
+    - Useful for updating layouts and other computations that don't involve elements.
 
 - `callback` in `info.whenRemoved(callback)` is called after all changes or movement have been committed with this vnode, provided it wasn't removed. It may return a promise to block removal. This is also called on parent error but not self or child error.
 
-- `callback` in `info.whenCaught(callback)` is called on child error. The child errors caught and reported include both sync view errors, sync lifecycle errors propagated via `info.throw(e)`, sync event listener errors, and event listener rejections. This does *not* get called errors within lifecycle methods, only errors that occur in child components.
+- `callback` in `m.whenCaught(callback)` is called on child error. The child errors caught and reported include both sync view errors, sync lifecycle errors propagated via `info.throw(e)`, sync event listener errors, and event listener rejections. This does *not* get called errors within lifecycle methods, only errors that occur in child components.
 
 - `info.isInitial()` checks if this is the first render, for easier initialization.
 
@@ -153,13 +158,11 @@ The syntax for them is similar to the syntax for hooks.
 
 ### Timings
 
-This is another place where we break with other frameworks:
+This redesign continues to hold the same invariant as other frameworks for view instantiation, but differs with "on ready" and "on remove" call order. View functions are called in a preorder traversal (children in order, current node before children), and lifecycle hooks are called in a postorder traversal (children in order, children before current node). In the special case of element (not component) attributes, those are specifically applied after views are called and after children are added, but before "on ready" and "on remove" callbacks are scheduled.
 
-- The tree is diffed in a preorder traversal
-- Components are rendered and scheduled in a postorder traversal
+This is mainly for ergonomics
 
 This happens to be better for performance and ergonomics, counterintuitively:
 
-- Child components can set parent element and component attributes. This is what enables `transition` to work.
 - Parent components receive the normalized and fully resolved children, with the rendered output of components and state callbacks in place of component vnodes and state vnodes.
-- Certain DOM attributes, like `selectedIndex`, are set automatically by the children (in that case, the offset for the first child with a `selected` attribute), so to apply it correctly, you have to set it after you set the children. This is simpler than the workaround that HTML and other frameworks use, where they apply parent attributes before rendering children and just defer applying the offending attributes.
+- Certain DOM attributes like `selectedIndex` are often set automatically by adding children (in that case, the offset for the first child with a `selected` attribute), so to apply it correctly, you have to set it after you add the children. This is simpler than the workaround that HTML and other frameworks use, where they apply parent attributes before rendering children and just defer applying the offending attributes.

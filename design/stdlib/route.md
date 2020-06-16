@@ -35,8 +35,10 @@ This is exposed under `mithril/router`. It depends on the internal path parsing 
 
 - `router.linkTo(offset)`, `router.linkTo(route, options?)` - See below in "Links".
     - `options` is the same as what's passed to `router.goTo`, but it also accepts an `on: {click}` parameter to handle clicks.
-    - If the event was captured, this does nothing.
-    - If the event was not captured, this should navigate on a simple left click or equivalent.
+        - This should only handle things like single taps, left clicks, and similar, things that on the given platform typically signify desire to navigate.
+        - If the click event was captured by the callback, this should do nothing.
+        - If the click event was not captured, this should navigate on a simple left click or equivalent.
+    - This generates an attributes object appropriate for a link that's subsequently injected into the DOM.
 
 Two built-in router instances exist:
 

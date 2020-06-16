@@ -24,6 +24,10 @@ export const assign: (
             return target
         })
 
+export function merge<T extends {}, U extends {}>(a: T, b: U): T & U {
+    return assign(assign({} as T & U, a), b)
+}
+
 export const fill: <T extends Any>(
     this: T[],
     value: T,
@@ -65,22 +69,34 @@ export type SentinelValue = object & {
 
 export const SENTINEL = {} as SentinelValue
 
+declare const ErrorSentinelValueMarker: unique symbol
+export type ErrorSentinelValue = object & {
+    [ErrorSentinelValueMarker]: void
+}
+
+export const ERROR_SENTINEL = {} as ErrorSentinelValue
+
 export function noop() { return void 0 }
+
+// 1. It's marginally faster.
+// 2. It allows me to control object lifetimes better to ensure things get
+//    collected as early as possible.
+// 3. It's not any less readable and in some cases more readable.
+/*@__NOINLINE__*/ export function constant<T>(value: T) {
+    return () => value
+}
+/*@__NOINLINE__*/ export function defer0<T>(func: () => Await<T>): Promise<T> {
+    return promise.then(() => func() as T)
+}
+/*@__NOINLINE__*/ export function defer1<T, A>(
+    func: (value: A) => Await<T>,
+    value: A
+): Promise<T> {
+    return promise.then(() => func(value) as T)
+}
 
 // For things that need to run async but don't need scheduled
 export const promise = Promise.resolve()
-
-// Low-level because I need to control the emit
-export function arrayify<T extends Any[]>(this: number, ...args: T): T
-export function arrayify<T extends Any[]>(this: number): T {
-    const result = []
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    for (let i = this; i < arguments.length; i++) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-        result.push(arguments[i])
-    }
-    return result as T
-}
 
 export function eachKey<T extends Polymorphic>(
     value: T,

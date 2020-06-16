@@ -4,6 +4,8 @@
 
 This is exposed under `mithril/modal`, and helps users create accesssible modals.
 
+FIXME: this doesn't quite look right.
+
 - `overlay({on: {close}, target?, setAriaHiddenAttrs = true, ...attrs}, overlay)` - Render a modal overlay
     - `target` is the target to render to, by default `info.document.body`.
     - For accessibility reasons, this sets `"aria-hidden": "true"` on the render root unless `setAriaHiddenAttrs` is explicitly set to `false`, and it similarly sets `"aria-hidden": "false"` on `target` unless that attribute is already present on remaining attributes.
@@ -18,8 +20,8 @@ This is exposed under `mithril/modal`, and helps users create accesssible modals
         - It exposes a `"mithril/modal:close"({kind, original})` callback to the environment to be received by `modal` to connect modal closure to the close callback as appropriate. The object is passed through unmodified to the `close` event handler.
     - Top-level children represent the overlay, and inner children of it represent the modal's contents
     - Children represent additional attributes for the overlay itself, and they may contain one or more elements for the modal itself.
-    - Pass `m.state((info) => info.whenReady(func))` to observe when the modal is first shown.
-    - Pass `m.state((info) => info.whenRemoved(func))` to observe when the modal is removed.
+    - Pass `m.whenReady(func)` or use `info.whenReady(func)` in an inner state node to observe when the modal is first shown.
+    - Pass `m.whenRemoved(func)` or use `info.whenRemoved(func)` in an inner state node to observe when the modal is removed.
     - On remove, this always restores the previously active focused element if one was previously active.
     - Stacked modals are supported.
     - You can render classes and attributes as desired to signify the modal is open.

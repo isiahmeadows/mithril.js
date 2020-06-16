@@ -1,3 +1,4 @@
+import {m} from "mithril"
 import * as Model from "../model.mjs"
 
 export default function Footer({model, showing}, info, {router, dispatch}) {
@@ -20,9 +21,9 @@ export default function Footer({model, showing}, info, {router, dispatch}) {
             filter("/active", "active", "Active"),
             filter("/completed", "completed", "Completed"),
         ]),
-        m("button", "Clear completed", {
+        m("button", {
             id: "clear-completed",
             on: {click() { dispatch(Model.clearCompleted()) }},
-        }),
+        }, "Clear completed"),
     ]
 }

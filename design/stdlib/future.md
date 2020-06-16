@@ -18,37 +18,6 @@ This is exposed under `mithril/query` and provides the ability to render a tree,
 
 This would mostly amount to bringing `mithril-query` into core, but just the core logic of it, not the integration with Should or Chai.
 
-## Selector binding
-
-This is exposed under `mithril/select` and depends on `mithril/render`.
-
-- `close = select(root, selectors)` - Bind selectors from an element to a vnode tree and return an unsubscription function.
-    - `root` - The root element to watch selectors on
-    - `selectors` - A key/value map where keys are selector strings and values vnodes plugged straight into `render(elem, vnode)` as the second parameter.
-    - `close()` - Stop observing changes and clear the selectors.
-    - Note: this doesn't recursively observe through selected roots. This helps keep things sane.
-
-This uses `MutationObserver` with an appropriate mutation events fallback for IE (and falling back gracefully to doing nothing) to ensure that selectors do get rendered to when new elements are added matching them and have their trees removed when selectors no longer match an element.
-
-*TODO: Look at how mutation observer polyfills work to figure out how to fall back correctly to mutation events.*
-
-### Why?
-
-This exists to ease integration into pages that are a heterogenous mix of Mithril and traditional static HTML and/or legacy content. The `MutationObserver` part is to be smart about it so you don't have to even manually render when elements matching the desired selectors are added - even if that selector doesn't get there until well after the page loads, the call still works.
-
-It's also very declarative, and very CSS-like in how it binds views to selectors. It more or less "just works".
-
-```js
-select(root, {
-    ".mithril-date-picker": m(DatePicker),
-    ".widget .input": {placeholder: "Type away..."},
-    "#app-one": m(One),
-    "#app-two": m(Two),
-    "#app-three": m(Three),
-    // etc.
-})
-```
-
 ## Security verification using trusted strings
 
 For things like `href: "javascript:..."`, those should require an opt-in. I'm blocked on work on trusted types, but I'd like an API that can integrate with whatever ends up used, whether it be [trusted types](https://github.com/WICG/trusted-types), [literals](https://github.com/mikewest/tc39-proposal-literals), or something else.
@@ -59,9 +28,9 @@ Page transitions are one of those things that's never obvious to do. I'd like to
 
 ## Event handler helpers
 
-The DOM exposes a very low-level way of handling things, and it's not only easy to screw up at times, [it's also often hard to do *correctly*, even for the seemingly simplest of cases like a click](mvp-utils/router.md#links). So it may be worth providing some basic wrapper components for things like left clicks, drag-and-drop, long presses, among other things, stuff that's simple to the user, annoyingly complex for the developer.
+The DOM exposes a very low-level way of handling things, and it's not only easy to screw up at times, [it's also often hard to do *correctly*, even for the seemingly simplest of cases like a click](stdlib/route.md#links). So it may be worth providing some basic wrapper components for things like left clicks, drag-and-drop, long presses, among other things, stuff that's simple to the user, annoyingly complex for the developer.
 
-[The React team is looking to do this themselves as well](https://gitter.im/mithriljs/mithril.js?at=5d363870d1cceb1a8da44199), and this is what prompted me to look into this in the first place, but in Mithril style, I'd like to keep it 1. simple, 2. easy, and 3. not in the core bundle. Thankfully, this redesign provides enough core primitives it's possible to [exploit this already for other things](mvp-utils/router.md#links), so it's entirely possible someone could come up with userland helpers first, and *then* them making their way into Mithril proper.
+[The React team is looking to do this themselves as well](https://gitter.im/mithriljs/mithril.js?at=5d363870d1cceb1a8da44199), and this is what prompted me to look into this in the first place, but in Mithril style, I'd like to keep it 1. simple, 2. easy, and 3. not in the core bundle. Thankfully, this redesign provides enough core primitives it's possible to [exploit this already for other things](stdlib/route.md#links), so it's entirely possible someone could come up with userland helpers first, and *then* them making their way into Mithril proper.
 
 This was also in large part inspired by the React core team's work on sugared events for React, but with the mental model shifted to be a little more direct. Here's a few links for context:
 

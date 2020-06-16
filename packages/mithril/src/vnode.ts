@@ -1,9 +1,9 @@
 import * as V from "./internal/vnode"
 import {
-    SugaredAttributes, ComponentAttributes, Component,
+    SugaredAttributes, ComponentAttributes,
     desugarElementAttrs, RETAIN,
 } from "./internal/hyperscript-common"
-import {hasOwn, eachKey, assign, isEmpty} from "./internal/util"
+import {hasOwn, eachKey, merge, isEmpty} from "./internal/util"
 import {TrustedString, TagNameString} from "./internal/dom"
 
 export {create} from "./internal/vnode"
@@ -26,9 +26,8 @@ export type ParsedVnode =
     | {type: "trusted", value: TrustedString}
     | {
         type: "component"
-        tagName: Component
-        attributes: APIOptional<V.ComponentAttributesObject>
-        children: V.Vnode[]
+        tagName: V.PolymorphicComponent
+        attributes: V.ComponentAttributesObject
     }
     | {
         type: "portal"
@@ -52,7 +51,7 @@ export function parse(vnode: V.Vnode): ParsedVnode {
     }
 
     if (__DEV__) {
-        const typeId = vnode["%"]
+        const typeId = vnode[""]
         if (
             typeof typeId !== "number" ||
             // eslint-disable-next-line no-bitwise
@@ -63,7 +62,7 @@ export function parse(vnode: V.Vnode): ParsedVnode {
         }
     }
 
-    switch (vnode["%"]) {
+    switch (vnode[""]) {
     case V.Type.Retain:
         return {type: "retain"}
 
@@ -96,9 +95,6 @@ export function parse(vnode: V.Vnode): ParsedVnode {
         return {type: "keyed", entries}
     }
 
-    case V.Type.Static:
-        return {type: "static", child: vnode._}
-
     case V.Type.Trust:
         return {type: "trusted", value: vnode._}
 
@@ -107,7 +103,6 @@ export function parse(vnode: V.Vnode): ParsedVnode {
             type: "component",
             tagName: vnode._[0],
             attributes: vnode._[1],
-            children: vnode._.slice(2) as V.Vnode[]
         }
 
     case V.Type.Portal:
@@ -121,8 +116,8 @@ export function parse(vnode: V.Vnode): ParsedVnode {
     case V.Type.Transition:
         return {
             type: "transition",
-            options: vnode._[0],
-            child: vnode._[1],
+            options: vnode._[1],
+            child: vnode._[2],
         }
 
     default:
@@ -133,10 +128,18 @@ export function parse(vnode: V.Vnode): ParsedVnode {
 
 export function compile(vnode: ParsedVnode): V.Vnode {
     switch (vnode.type) {
-    case "hole": return void 0
-    case "text": return vnode.value
-    case "fragment": return vnode.children
-    case "retain": return RETAIN
+    case "hole":
+        return void 0
+
+    case "text":
+        return vnode.value
+
+    case "fragment":
+        return vnode.children
+
+    case "retain":
+        return RETAIN
+
     case "element": {
         const data = [vnode.tagName, vnode.attributes] as Array<
             | TagNameString
@@ -148,7 +151,10 @@ export function compile(vnode: ParsedVnode): V.Vnode {
         }
         return V.create(V.Type.Element, data as V.VnodeElement["_"])
     }
-    case "state": return V.create(V.Type.State, vnode.body)
+
+    case "state":
+        return V.create(V.Type.State, vnode.body)
+
     case "link": {
         const data = [vnode.identity] as Array<V.LinkValue | V.Vnode>
         for (let i = 0; i < vnode.children.length; i++) {
@@ -156,6 +162,7 @@ export function compile(vnode: ParsedVnode): V.Vnode {
         }
         return V.create(V.Type.Link, data as V.VnodeElement["_"])
     }
+
     case "keyed": {
         const data = [] as Array<V.KeyValue | V.Vnode>
         for (let i = 0; i < vnode.entries.length; i++) {
@@ -165,19 +172,13 @@ export function compile(vnode: ParsedVnode): V.Vnode {
         // TODO: check for duplicates
         return V.create(V.Type.Keyed, data)
     }
-    case "static": return V.create(V.Type.Static, vnode.child)
-    case "trusted": return V.create(V.Type.Trust, vnode.value)
-    case "component": {
-        const data = [vnode.tagName, vnode.attributes] as Array<
-            | Component
-            | V.ComponentAttributesObject
-            | V.Vnode
-        >
-        for (let i = 0; i < vnode.children.length; i++) {
-            data.push(vnode.children[i])
-        }
-        return V.create(V.Type.Component, data as V.VnodeElement["_"])
-    }
+
+    case "trusted":
+        return V.create(V.Type.Trust, vnode.value)
+
+    case "component":
+        return V.create(V.Type.Component, [vnode.tagName, vnode.attributes])
+
     case "portal": {
         const data = [vnode.target, vnode.attributes] as Array<
             | V.RefObject
@@ -189,8 +190,10 @@ export function compile(vnode: ParsedVnode): V.Vnode {
         }
         return V.create(V.Type.Element, data as V.VnodeElement["_"])
     }
+
     case "transition":
-        return V.create(V.Type.Transition, [vnode.options, vnode.child])
+        return V.create(V.Type.Transition, [void 0, vnode.options, vnode.child])
+
     default:
         if (__DEV__) {
             throw new TypeError(
@@ -222,10 +225,6 @@ function invokeHandler(
     }
 }
 
-function merge<T extends {}, U extends {}>(a: T, b: U): T & U {
-    return assign(assign({} as T & U, a), b)
-}
-
 // This could be called in perf-sensitive code, so it needs to be at least
 // baseline-optimized.
 export function augment(
@@ -237,13 +236,27 @@ export function augment(
         | V.Vnode
     >
 ): V.VnodeElement | V.VnodeComponent | V.VnodePortal {
+    if (__DEV__) {
+        if (
+            vnode == null || typeof vnode !== "object" ||
+            typeof vnode[""] !== "number" ||
+            vnode[""] !== V.Type.Element &&
+            vnode[""] !== V.Type.Component &&
+            vnode[""] !== V.Type.Portal
+        ) {
+            throw new TypeError(
+                "Only element, component, and portal elements can be augmented."
+            )
+        }
+    }
+
     let start = 2
 
     if (isEmpty(attrs)) {
         // If it's empty, don't retain it.
         attrs = void 0
     } else if (
-        typeof (attrs as Partial<V.VnodeNonPrimitive>)["%"] === "number"
+        typeof (attrs as Partial<V.VnodeNonPrimitive>)[""] === "number"
     ) {
         start = 1
         attrs = void 0
@@ -256,7 +269,7 @@ export function augment(
 
     if (attrs != null) {
         const oldAttrs = vnode._[1]
-        const inputAttrs = vnode["%"] === V.Type.Component
+        const inputAttrs = vnode[""] === V.Type.Component
             ? attrs as V.ElementAttributesObject
             : desugarElementAttrs(attrs as SugaredAttributes)
 
@@ -288,14 +301,18 @@ export function augment(
                 })
             }
 
-            if (vnode["%"] !== V.Type.Component) {
+            if (vnode[""] !== V.Type.Component) {
                 if (
                     hasOwn.call(inputAttrs, "class") &&
                     inputAttrs.class != null &&
                     hasOwn.call(oldAttrs, "class") &&
                     oldAttrs.class != null
                 ) {
-                    newAttrs.class = `${oldAttrs.class} ${newAttrs.class}`
+                    newAttrs.class = `${
+                        oldAttrs.class as string
+                    } ${
+                        newAttrs.class as string
+                    }`
                 }
 
                 if (
@@ -312,7 +329,7 @@ export function augment(
 
     const newData = vnode._.slice() as Array<
         | TagNameString
-        | Component
+        | V.PolymorphicComponent
         | V.ElementAttributesObject
         | V.ComponentAttributesObject
         | V.Vnode
@@ -324,7 +341,7 @@ export function augment(
     while (start < arguments.length) newData.push(arguments[start++])
 
     return V.create(
-        vnode["%"],
+        vnode[""],
         newData as (V.VnodeElement | V.VnodeComponent | V.VnodePortal)["_"],
     )
 }

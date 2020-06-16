@@ -11,33 +11,33 @@
 //
 // If I had dependent types + induction, this would be so much easier to verify.
 
-import {noop, assertDevelopment, promise} from "./internal/util"
+import {noop, assertDevelopment, defer1} from "./internal/util"
 import {isEqual} from "./internal/is-equal"
 import {
     EventEmitter, EventTarget, Event, EventListener,
-    AbortSignal, AbortController
+    AbortSignal, AbortController,
 } from "./internal/dom"
 import {
     ComponentAttributesObject, Capture, EventValue,
-    ComponentInfo, Environment, EnvironmentValue, WhenCaughtCallback,
-    WhenReadyCallback, WhenRemovedResult, WhenRemovedCallback,
+    Environment, EnvironmentValue, RefValue,
+    WhenLayoutResult, WhenLayoutRemovedResult,
+    WhenReadyResult, WhenRemovedResult,
     Vnode, Component, ErrorValue, EventListener as VirtualEventListener,
 
     // For `state`
     VnodeState, StateInit, StateValue, Type, create
 } from "./internal/vnode"
-import {UseState, Use} from "./internal/use"
+import {Use, UseInit, UseState} from "./internal/use"
 import {invokeEvent} from "./internal/dom-util"
+import {
+    CellType, CellTypeTable, CellList, Info, RemoveCallback, RemoveChild
+} from "./internal/dsl-common"
 
 /*************************************/
 /*                                   */
 /*   C o r e   p r i m i t i v e s   */
 /*                                   */
 /*************************************/
-
-type CellList = Any[]
-type Info = ComponentInfo<CellList>
-type RemoveTarget = Info | WhenRemovedCallback[]
 
 const enum Bits {
     NotActive = 0,
@@ -57,7 +57,6 @@ const enum Bits {
     IsActive = 1 << IsActiveOffset,
     IsFirstRun = 1 << IsFirstRunOffset,
     HasRemoveCallback = 1 << HasRemoveCallbackOffset,
-    IsNestedRemove = 1 << IsNestedRemoveOffset,
 }
 
 // Note: this machinery exists to reduce allocated closure memory. The enum
@@ -161,21 +160,101 @@ const enum Bits {
 // It's also worth noting that internal DSL globals are almost never accessed in
 // these closures, so there's no increased indirection in practice aside from
 // those two.
+//
+// -----------------------------------------------------------------------------
+//
+// You may be wondering why I chose to use chained closures instead of a single
+// shared object. Well, this has a reason, too: engines *always* allocate a
+// closure parent pointer for every closure, whether you use a shared object or
+// not. And this closure parent pointer exists in all but the most contrived
+// case where only local variables are accessed. So if you even as much as
+// reference a parent closure (as virtually all these do), the reference is
+// broken.
+
+// For callbacks that only need the info and/or state, the overhead is skipped,
+// as there aren't any memory savings to be gained with the indirection, even
+// in the ideal case, and in many simple cases, the intermediate closure doesn't
+// even need allocated.
+
+function makeUseEffectRemove(index: number): RemoveChild {
+    return (info) => {
+        // eslint-disable-next-line @typescript-eslint/ban-ts-ignore
+        // @ts-ignore https://github.com/microsoft/TypeScript/issues/35866
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        (0, info.state![index + 1])()
+        return void 0 as Any as WhenRemovedResult
+    }
+}
+
+function makeGuardRemove(index: number): RemoveChild {
+    return (info) => {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        const cells = info.state!
+
+        // Clear out unneeded memory references.
+        cells[index + 1] =
+        cells[index + 2] =
+        cells[index + 3] = void 0
+        // If there's nothing to await, let's just skip the ceremony.
+        return --(cells[index] as number)
+            ? new Promise<WhenRemovedResult>(
+                (resolve) => { cells[index + 2] = resolve }
+            )
+            : void 0 as Any as WhenRemovedResult
+    }
+}
+
+function makeUseRemove(index: number): RemoveChild {
+    return (info) => {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        const cells = info.state!
+
+        const ctrl = cells[index + 3] as AbortController
+        cells[index + 2] = cells[index + 3] = void 0
+        ctrl.abort()
+        return void 0 as Any as WhenRemovedResult
+    }
+}
+
+function makeWhenEmittedDOMRemove(index: number): RemoveChild {
+    return (info) => {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        const cells = info.state!
+
+        type _E = Event<string>
+        type _T = EventTarget<_E>
+        ;(cells[index + 1] as _T).removeEventListener(
+            cells[index + 2] as _E["type"],
+            cells[index + 3] as EventListener<_T, _E>,
+            false
+        )
+        return void 0 as Any as WhenRemovedResult
+    }
+}
+
+function makeWhenEmittedNodeRemove(index: number): RemoveChild {
+    return (info) => {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        const cells = info.state!
+
+        ;(cells[index + 1] as EventEmitter<Record<string, Any>>).off(
+            cells[index + 2] as string,
+            cells[index + 3] as (event: Any) => void
+        )
+        return void 0 as Any as WhenRemovedResult
+    }
+}
 
 const enum StateType {
     Slot,
     Lazy,
     Toggle,
-    GuardRemove,
     GuardPromise,
     UsePromise,
-    UseRemove,
     Reducer,
 
     WhenEmittedDOMCallback,
     WhenEmittedNodeCallback,
-    WhenEmittedDOMRemove,
-    WhenEmittedNodeRemove,
 }
 
 interface StateFactory {
@@ -196,11 +275,6 @@ interface StateFactory {
     ): () => Promise<void>
     (
         index: number,
-        type: StateType.GuardRemove,
-        p: undefined
-    ): WhenRemovedCallback
-    (
-        index: number,
         type: StateType.GuardPromise,
         p: Promise<WhenRemovedResult>
     ): void
@@ -212,12 +286,6 @@ interface StateFactory {
         p: undefined
     ): (next: T) => Promise<void>
 
-    (
-        index: number,
-        type: StateType.UseRemove,
-        p: undefined
-    ): WhenRemovedCallback
-
     <E extends Event<string>>(
         index: number,
         type: StateType.WhenEmittedDOMCallback,
@@ -228,12 +296,6 @@ interface StateFactory {
         type: StateType.WhenEmittedNodeCallback,
         p: undefined
     ): (event: T[K]) => void
-
-    (
-        index: number,
-        type: StateType.WhenEmittedDOMRemove | StateType.WhenEmittedNodeRemove,
-        p: undefined
-    ): WhenRemovedCallback
 }
 
 function createStateFactory(info: Info, cells: CellList): StateFactory {
@@ -269,28 +331,6 @@ function createStateFactory(info: Info, cells: CellList): StateFactory {
                 ))(cells[index], next)
                 return info.redraw()
             }
-        } else if (type === StateType.GuardRemove) {
-            return (): Await<WhenRemovedResult> => {
-                const removes = cells[index + 2] as
-                    WhenRemovedCallback[]
-                // Clear out unneeded memory references.
-                cells[index + 1] =
-                cells[index + 2] =
-                cells[index + 3] = void 0
-                // If there's nothing to await, let's just skip the
-                // ceremony.
-                if (--(cells[index] as number)) {
-                    const p = new Promise<WhenRemovedResult>(
-                        (resolve) => { cells[index + 2] = resolve }
-                    )
-                    if (!removes.length) return p
-                    removes.push(() => p)
-                } else if (!removes.length) {
-                    return void 0 as Any as WhenRemovedResult
-                }
-                // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                return runClose(info, removes)!
-            }
         } else if (type === StateType.GuardPromise) {
             // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
             promise!.then(
@@ -324,13 +364,6 @@ function createStateFactory(info: Info, cells: CellList): StateFactory {
                 }
             )
             return void 0
-        } else if (type === StateType.UseRemove) {
-            return () => {
-                const ctrl = cells[index + 3] as AbortController
-                cells[index + 2] = cells[index + 3] = void 0
-                ctrl.abort()
-                return void 0 as Any as WhenRemovedResult
-            }
         } else if (type === StateType.WhenEmittedDOMCallback) {
             type _E = T & Event<string> & EventValue
             type _T = EventTarget<_E>
@@ -350,17 +383,6 @@ function createStateFactory(info: Info, cells: CellList): StateFactory {
                     event, void 0, event,
                 )
             }
-        } else if (type === StateType.WhenEmittedDOMRemove) {
-            return (): WhenRemovedResult => {
-                type _E = Event<string>
-                type _T = EventTarget<_E>
-                ;(cells[index + 1] as _T).removeEventListener(
-                    cells[index + 2] as _E["type"],
-                    cells[index + 3] as EventListener<_T, _E>,
-                    false
-                )
-                return void 0 as Any as WhenRemovedResult
-            }
         } else /* if (type === StateType.WhenEmittedNodeRemove) */ {
             return (): WhenRemovedResult => {
                 (cells[index + 1] as EventEmitter<Record<string, Any>>).off(
@@ -377,7 +399,7 @@ let currentMask: number = Bits.NotActive
 let currentInfo: Info
 let currentEnv: Environment
 let currentCells: CellList
-let currentRemoveTarget: RemoveTarget
+let currentRemoveChild: Maybe<RemoveChild[]>
 let currentStateFactory: Maybe<StateFactory>
 
 function getStateFactory(info: Info, cells: CellList) {
@@ -391,52 +413,20 @@ function getStateFactory(info: Info, cells: CellList) {
 let currentCellTypes: CellType[]
 let currentCellTypeIndex = 0
 
-const enum CellType {
-    Guard,
-    UseEffect,
-    WhenEmitted,
-    When,
-    Ref,
-    Slot,
-    UseReducer,
-    Lazy,
-    Memo,
-    UsePrevious,
-    UseToggle,
-    Use,
-    HasChanged,
-    HasChangedBy,
-}
-
-const CellTypeTable = [
-    "guard",
-    "useEffect",
-    "whenEmitted",
-    "when",
-    "ref",
-    "slot",
-    "useReducer",
-    "lazy",
-    "memo",
-    "usePrevious",
-    "useToggle",
-    "use",
-    "hasChanged",
-    "hasChangedBy",
-] as const
-
 // Note: this should only be called in dev mode.
 function validateContext(type: Maybe<CellType>) {
     assertDevelopment()
 
-    if (!currentMask) {
+    const mask = currentMask
+
+    if (!mask) {
         throw new TypeError(
             "This must only be used inside a component context."
         )
     }
 
     if (type != null) {
-        if (currentMask & Bits.IsFirstRun) {
+        if (mask & Bits.IsFirstRun) {
             currentCellTypes.push(type)
         } else {
             const expected = currentCellTypes[currentCellTypeIndex++]
@@ -452,7 +442,7 @@ function validateContext(type: Maybe<CellType>) {
 
 function runClose(
     info: Info,
-    removes: WhenRemovedCallback[]
+    removes: RemoveChild[]
 ): Maybe<Promise<WhenRemovedResult>> {
     // Wait for all to settle - doesn't matter what the result is.
     let open = 1
@@ -495,6 +485,8 @@ function runClose(
     return void 0
 }
 
+type DevCellList = CellList & {componentKind: "dsl"}
+
 export function component<
     A extends ComponentAttributesObject,
     E extends Environment = Environment
@@ -525,7 +517,7 @@ export function component<
         const prevInfo = currentInfo
         const prevEnv = currentEnv
         const prevCells = currentCells
-        const prevRemoveTarget = currentRemoveTarget
+        const prevRemoveChild = currentRemoveChild
         const prevStateFactory = currentStateFactory
         let prevCellTypes: Maybe<CellType[]>
         let prevCellTypeIndex = 0
@@ -538,17 +530,25 @@ export function component<
         const cells = info.state
 
         // Fast path: always set everything.
-        currentMask = Bits.IsActive
+        currentMask = __DEV__
+            ? Bits.IsActive | 1 << Bits.IndexOffset
+            : Bits.IsActive
         currentInfo = info
         currentEnv = env
         currentCells = cells as CellList
-        currentRemoveTarget = info
-        currentStateFactory = void 0
+        currentRemoveChild = currentStateFactory = void 0
 
         // Slow path: set another variable and allocate the array.
         if (cells == null) {
-            currentMask = Bits.IsActive | Bits.IsFirstRun
+            currentMask = __DEV__
+                ? Bits.IsActive | Bits.IsFirstRun | 1 << Bits.IndexOffset
+                : Bits.IsActive | Bits.IsFirstRun
             currentCells = info.state = []
+
+            if (__DEV__) {
+                (currentCells as DevCellList).componentKind = "dsl",
+                currentCells.push(currentCellTypes = [])
+            }
         }
 
         try {
@@ -561,7 +561,7 @@ export function component<
             currentInfo = prevInfo
             currentEnv = prevEnv
             currentCells = prevCells
-            currentRemoveTarget = prevRemoveTarget
+            currentRemoveChild = prevRemoveChild
             currentStateFactory = prevStateFactory
 
             if (__DEV__) {
@@ -578,18 +578,23 @@ export function component<
         // ignore to gracefully degrade on IE
     }
 
+    if (__DEV__) {
+        // For detection. This metadata is *not* kept inline.
+        Comp._devDslRoot = true
+    }
+
     return Comp
 }
 
 export function state<E extends Environment = Environment>(
     body: () => Vnode
 ): VnodeState {
-    return create(Type.State, ((info: Info, env: E) => {
+    function init(info: Info, env: E): Vnode {
         const prevMask = currentMask
         const prevInfo = currentInfo
         const prevEnv = currentEnv
         const prevCells = currentCells
-        const prevRemoveTarget = currentRemoveTarget
+        const prevRemoveChild = currentRemoveChild
         const prevStateFactory = currentStateFactory
         let prevCellTypes: Maybe<CellType[]>
         let prevCellTypeIndex = 0
@@ -602,17 +607,25 @@ export function state<E extends Environment = Environment>(
         const cells = info.state
 
         // Fast path: always set everything.
-        currentMask = Bits.IsActive
+        currentMask = __DEV__
+            ? Bits.IsActive | 1 << Bits.IndexOffset
+            : Bits.IsActive
         currentInfo = info
         currentEnv = env
         currentCells = cells as CellList
-        currentRemoveTarget = info
-        currentStateFactory = void 0
+        currentRemoveChild = currentStateFactory = void 0
 
         // Slow path: set another variable and allocate the array.
         if (cells == null) {
-            currentMask = Bits.IsActive | Bits.IsFirstRun
+            currentMask = __DEV__
+                ? Bits.IsActive | Bits.IsFirstRun | 1 << Bits.IndexOffset
+                : Bits.IsActive | Bits.IsFirstRun
             currentCells = info.state = []
+
+            if (__DEV__) {
+                (currentCells as DevCellList).componentKind = "dsl",
+                currentCells.push(currentCellTypes = [])
+            }
         }
 
         try {
@@ -622,7 +635,7 @@ export function state<E extends Environment = Environment>(
             currentInfo = prevInfo
             currentEnv = prevEnv
             currentCells = prevCells
-            currentRemoveTarget = prevRemoveTarget
+            currentRemoveChild = prevRemoveChild
             currentStateFactory = prevStateFactory
 
             if (__DEV__) {
@@ -631,7 +644,14 @@ export function state<E extends Environment = Environment>(
                 currentCellTypeIndex = prevCellTypeIndex
             }
         }
-    }) as Any as StateInit<StateValue>)
+    }
+
+    if (__DEV__) {
+        // For detection. This metadata is *not* kept inline.
+        init._devDslRoot = true
+    }
+
+    return create(Type.State, init as Any as StateInit<StateValue>)
 }
 
 export function isInitial(): boolean {
@@ -659,35 +679,33 @@ export function isInitial(): boolean {
 // The function itself is structured as five concrete steps:
 //
 // 1. Set up initial state in preparation for the block
-// 1. Invoke the block
-// 1. Restore old state
-// 1. Clean up after child close (if applicable)
-// 1. Schedule removal callback if any child remove callbacks were scheduled
-export function guard<T extends Polymorphic>(cond: Any, block: () => T): T {
-    if (__DEV__) validateContext(CellType.Guard)
-
+// 2. Invoke the block
+// 3. Restore old state
+// 4. Clean up after child close (if applicable)
+// 5. Schedule removal callback if any child remove callbacks were scheduled
+function _guard<T extends Polymorphic>(cond: Any, block: () => T): T {
     const parentMask = currentMask
     const parentCells = currentCells
-    const prevRemoveTarget = currentRemoveTarget
+    const prevRemoveChild = currentRemoveChild
     const prevStateFactory = currentStateFactory
 
     currentStateFactory = void 0
     if (parentMask & Bits.IsFirstRun) {
-        currentMask = Bits.IsActive | Bits.IsFirstRun | Bits.IsNestedRemove
+        currentMask = Bits.IsActive | Bits.IsFirstRun
         parentCells.push(
             1, // close open count
             currentCells = [], // child cells on run, close resolve after closed
-            currentRemoveTarget = [],
+            currentRemoveChild = [],
             void 0 // onRemove
         )
     } else {
         const index = parentMask >>> Bits.IndexOffset
-        currentMask = Bits.IsActive | Bits.IsNestedRemove |
+        currentMask = Bits.IsActive |
             // Intentionally using an implicit coercion here.
             (!!cond as Any as number) << Bits.IsFirstRunOffset
-        const removes = currentRemoveTarget =
-            parentCells[index + 1] as WhenRemovedCallback[]
-        if (removes.length) currentRemoveTarget = parentCells[index + 1] = []
+        const removes = currentRemoveChild =
+            parentCells[index + 1] as RemoveChild[]
+        if (removes.length) currentRemoveChild = parentCells[index + 1] = []
         const cells = currentCells = parentCells[index + 2] as CellList
         if (parentMask & Bits.IsFirstRun) cells.length = 0
     }
@@ -699,13 +717,13 @@ export function guard<T extends Polymorphic>(cond: Any, block: () => T): T {
         const info = currentInfo
         const index = parentMask >>> Bits.IndexOffset
         currentCells = parentCells
-        currentRemoveTarget = prevRemoveTarget
+        currentRemoveChild = prevRemoveChild
         currentMask = parentMask + (4 << Bits.IndexOffset)
         currentStateFactory = prevStateFactory
         let stateFactory: Maybe<StateFactory>
 
         if (childMask & Bits.IsFirstRun) {
-            const childRemoves = parentCells[index + 1] as WhenRemovedCallback[]
+            const childRemoves = parentCells[index + 1] as RemoveChild[]
 
             if (childRemoves.length) {
                 const result = runClose(info, childRemoves)
@@ -730,69 +748,75 @@ export function guard<T extends Polymorphic>(cond: Any, block: () => T): T {
             // Better to just update it directly rather than to waste stack
             // space just to avoid a heap access.
             currentMask |= Bits.HasRemoveCallback
-            let onRemove = parentCells[index + 3] as Maybe<WhenRemovedCallback>
+            let onRemove = parentCells[index + 3] as Maybe<RemoveChild>
             if (onRemove == null) {
-                if (stateFactory == null) {
-                    stateFactory = getStateFactory(info, parentCells)
-                }
-                parentCells[index + 3] = onRemove =
-                    stateFactory(index, StateType.GuardRemove, void 0)
+                parentCells[index + 3] = onRemove = makeGuardRemove(index)
             }
 
-            if (childMask & Bits.IsNestedRemove) {
-                (currentRemoveTarget as WhenRemovedCallback[]).push(onRemove)
-            } else {
-                (currentRemoveTarget as Info).whenRemoved(onRemove)
-            }
+            if (prevRemoveChild != null) prevRemoveChild.push(onRemove)
         }
     }
 }
 
-export function useEffect(block: () => Maybe<WhenRemovedCallback>): void
+export function guard<T extends Polymorphic>(cond: Any, block: () => T): T {
+    if (__DEV__) validateContext(CellType.Guard)
+    return _guard(cond, block)
+}
+
+export function useEffect(block: () => Maybe<RemoveCallback>): void
 export function useEffect<D extends Any>(
     dependency: D,
-    block: () => Maybe<WhenRemovedCallback>
+    block: () => Maybe<RemoveCallback>
 ): void
 export function useEffect<D extends Any>(
-    dependency: D | (() => Maybe<WhenRemovedCallback>),
-    block?: () => Maybe<WhenRemovedCallback>
+    dependency: D | (() => Maybe<RemoveCallback>),
+    block?: () => Maybe<RemoveCallback>
 ): void {
     if (__DEV__) validateContext(CellType.UseEffect)
 
     const mask = currentMask
     const cells = currentCells
     const index = mask >>> Bits.IndexOffset
-    let callback: Maybe<WhenRemovedCallback>
+    let callback: Maybe<RemoveCallback>
 
     if (arguments.length < 2) {
         currentMask = mask + (1 << Bits.IndexOffset)
         if (mask & Bits.IsFirstRun) {
-            callback = (dependency as () => Maybe<WhenRemovedCallback>)()
+            callback = (dependency as () => Maybe<RemoveCallback>)()
             if (typeof callback !== "function") callback = void 0
             cells.push(callback)
         } else {
-            callback = cells[index] as Maybe<WhenRemovedCallback>
+            callback = cells[index] as Maybe<RemoveCallback>
         }
     } else {
         currentMask = mask + (2 << Bits.IndexOffset)
         if (mask & Bits.IsFirstRun) {
-            callback = (block as () => WhenRemovedCallback)()
+            callback = (block as () => RemoveCallback)()
             if (typeof callback !== "function") callback = void 0
             cells.push(dependency, callback)
         } else {
             const prev = cells[index] as D
             cells[index] = dependency
             if (isEqual(prev, dependency as D)) {
-                callback = cells[index + 1] as Maybe<WhenRemovedCallback>
+                callback = cells[index + 1] as Maybe<RemoveCallback>
+                cells[index + 1] = void 0
             } else {
-                callback = (block as () => WhenRemovedCallback)()
+                callback = (block as () => RemoveCallback)()
                 if (typeof callback !== "function") callback = void 0
                 cells[index + 1] = callback
             }
         }
     }
 
-    if (callback != null) whenRemoved(callback)
+    currentMask |= Bits.HasRemoveCallback
+
+    if (callback != null) {
+        const info = currentInfo
+        const removeChild = currentRemoveChild
+        const wrapped = makeUseEffectRemove(index)
+        if (removeChild != null) removeChild.push(wrapped)
+        info.whenRemoved(wrapped)
+    }
 }
 
 export function whenEmitted<T extends {}, K extends keyof T>(
@@ -822,7 +846,7 @@ export function whenEmitted<
     const currentIsDOM = "addEventListener" in target
     const stateFactory = getStateFactory(info, cells)
     let handler: ((value: T[K]) => void) | EventListener<EventTarget<E>, E>
-    let onRemove: WhenRemovedCallback
+    let onRemove: RemoveChild
 
     currentMask = mask + (5 << Bits.IndexOffset) | Bits.HasRemoveCallback
 
@@ -835,6 +859,7 @@ export function whenEmitted<
                 ),
                 false
             )
+            onRemove = makeWhenEmittedDOMRemove(index)
         } else {
             (target as EventEmitter<T>).on(
                 name as K,
@@ -842,6 +867,7 @@ export function whenEmitted<
                     index, StateType.WhenEmittedNodeCallback, void 0
                 )
             )
+            onRemove = makeWhenEmittedNodeRemove(index)
         }
 
         cells.push(
@@ -849,13 +875,7 @@ export function whenEmitted<
             target,
             name,
             handler,
-            onRemove = stateFactory( // remove
-                index,
-                currentIsDOM
-                    ? StateType.WhenEmittedDOMRemove
-                    : StateType.WhenEmittedNodeRemove,
-                void 0
-            )
+            onRemove
         )
     } else {
         const prevTarget = cells[index + 1] as (
@@ -866,7 +886,7 @@ export function whenEmitted<
             | ((value: T[K]) => void)
             | EventListener<EventTarget<E>, E>
         )
-        onRemove = cells[index + 4] as WhenRemovedCallback
+        onRemove = cells[index + 4] as RemoveChild
         const prevIsDOM = "addEventListener" in prevTarget
 
         cells[index] = callback
@@ -897,15 +917,10 @@ export function whenEmitted<
                     )
                 }
             } else {
-                onRemove = cells[index + 4] = stateFactory(
-                    index,
-                    currentIsDOM
-                        ? StateType.WhenEmittedDOMRemove
-                        : StateType.WhenEmittedNodeRemove,
-                    void 0
-                )
                 if (currentIsDOM) {
-                    (target as EventTarget<E>).addEventListener(
+                    onRemove = cells[index + 4] =
+                        makeWhenEmittedDOMRemove(index)
+                    ;(target as EventTarget<E>).addEventListener(
                         name as E["type"],
                         cells[index + 3] = stateFactory<E>(
                             index, StateType.WhenEmittedDOMCallback, void 0
@@ -913,7 +928,9 @@ export function whenEmitted<
                         false
                     )
                 } else {
-                    (target as EventEmitter<T>).off(
+                    onRemove = cells[index + 4] =
+                        makeWhenEmittedNodeRemove(index)
+                    ;(target as EventEmitter<T>).off(
                         name as K,
                         cells[index + 3] = stateFactory<T, K>(
                             index, StateType.WhenEmittedNodeCallback, void 0
@@ -937,30 +954,37 @@ export function whenEmitted<
         }
     }
 
-    whenRemoved(onRemove)
+    currentMask |= Bits.HasRemoveCallback
+    if (currentRemoveChild != null) currentRemoveChild.push(onRemove)
+    currentInfo.whenRemoved(onRemove)
 }
 
-export function whenCaught(callback: WhenCaughtCallback) {
+export function whenLayout(
+    callback: (ref: RefValue) => Await<WhenLayoutResult>
+) {
     if (__DEV__) validateContext(void 0)
-    currentInfo.whenCaught(callback)
+    currentInfo.whenLayout((ref) => callback(ref))
 }
 
-export function whenReady(callback: WhenReadyCallback) {
+export function whenLayoutRemoved(
+    callback: (ref: RefValue) => Await<WhenLayoutRemovedResult>
+) {
     if (__DEV__) validateContext(void 0)
-    currentInfo.whenReady(callback)
+    currentInfo.whenLayoutRemoved((ref) => callback(ref))
 }
 
-export function whenRemoved(callback: WhenRemovedCallback) {
+export function whenReady(callback: () => Await<WhenReadyResult>) {
     if (__DEV__) validateContext(void 0)
+    currentInfo.whenReady(() => callback())
+}
 
-    const mask = currentMask
-    currentMask = mask | Bits.HasRemoveCallback
+export function whenRemoved(callback: RemoveCallback) {
+    if (__DEV__) validateContext(void 0)
+    const wrapped = () => callback()
 
-    if (mask & Bits.IsNestedRemove) {
-        (currentRemoveTarget as WhenRemovedCallback[]).push(callback)
-    } else {
-        (currentRemoveTarget as Info).whenRemoved(callback)
-    }
+    currentMask |= Bits.HasRemoveCallback
+    if (currentRemoveChild != null) currentRemoveChild.push(wrapped)
+    currentInfo.whenRemoved(wrapped)
 }
 
 interface IfElseOpts<T extends Any> {
@@ -1000,7 +1024,7 @@ export function when<T extends Any>(
         changed = (cells[index] as boolean) !== (cells[index] = coerced)
     }
 
-    return guard(
+    return _guard(
         changed,
         typeof block === "function" ? block : noop
     )
@@ -1201,12 +1225,17 @@ export function useToggle(): [boolean, () => Promise<void>] {
     ]
 }
 
-function _use<T extends Polymorphic>(init: (signal: AbortSignal) => Await<T>) {
+// `use` is pretty complicated to begin with. Let's not blow this module up
+// further by super-optimizing an inherently moderately expensive operation to
+// begin with. It's also something mildly perf-sensitive on subsequent runs as
+// it handles resource loading, a very common operation in many apps, but the
+// creation itself is not.
+function _use<T extends Polymorphic>(init: UseInit<T>): Use<T> {
     const mask = currentMask
     const cells = currentCells
     const info = currentInfo
     const index = mask >>> Bits.IndexOffset
-    let onRemove: WhenRemovedCallback
+    let onRemove: RemoveChild
     let state: UseState
     let value: Use<T>["_"]
 
@@ -1214,62 +1243,45 @@ function _use<T extends Polymorphic>(init: (signal: AbortSignal) => Await<T>) {
     if (mask & Bits.IsFirstRun) {
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         const controller: AbortController = new info.window!.AbortController()
-        const stateFactory = getStateFactory(info, cells)
         cells.push(
             state = UseState.Pending, // state
             value = void 0, // value
-            onRemove = stateFactory(index, StateType.UseRemove, void 0),
+            onRemove = makeUseRemove(index),
             controller,
         )
 
-        stateFactory(
+        getStateFactory(info, cells)(
             index,
             StateType.UsePromise,
             // This inner function only contains the initializer function + the
             // abort controller, and it's not going to be persisted after the
             // next tick.
-            promise.then(() => init(controller.signal))
+            defer1(init, controller.signal)
         )
     } else {
         state = cells[index] as UseState
         value = cells[index + 1] as Maybe<T | ErrorValue>
-        onRemove = cells[index + 2] as WhenRemovedCallback
+        onRemove = cells[index + 2] as RemoveChild
     }
 
-    if (mask & Bits.IsNestedRemove) {
-        (currentRemoveTarget as WhenRemovedCallback[]).push(onRemove)
-    } else {
-        (currentRemoveTarget as Info).whenRemoved(onRemove)
-    }
+    if (currentRemoveChild != null) currentRemoveChild.push(onRemove)
+    info.whenRemoved(onRemove)
 
     return new Use(state, value)
 }
 
-// `use` is pretty complicated to begin with. Let's not blow this module up
-// further by super-optimizing an inherently moderately expensive operation to
-// begin with. It's also something mildly perf-sensitive on subsequent runs as
-// it handles resource loading, a very common operation in many apps.
-export function use<T extends Polymorphic>(
-    init: (signal: AbortSignal) => Await<T>
-): Use<T>
 export function use<T extends Polymorphic, D extends Any>(
-    dependency: D,
-    init: (value: D, signal: AbortSignal) => Await<T>
-): Use<T>
-export function use<T extends Polymorphic, D extends Any>(
-    dependency: D | ((signal: AbortSignal) => Await<T>),
-    init?: (value: D, signal: AbortSignal) => Await<T>
+    dependency: D | UseInit<T>,
+    init: Maybe<(value: D, signal: AbortSignal) => Await<T>>
 ): Use<T> {
     if (__DEV__) validateContext(CellType.Use)
 
     if (arguments.length < 2) {
-        return _use(dependency as (signal: AbortSignal) => Await<T>)
+        return _use(dependency as UseInit<T>)
     } else {
-        return guard(hasChanged(dependency), () => _use((signal) =>
-            (init as ((value: D, signal: AbortSignal) => Await<T>))(
-                dependency as D,
-                signal
-            )
+        return _guard(hasChanged(dependency), () => _use(
+            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+            (signal) => init!(dependency as D, signal)
         ))
     }
 }

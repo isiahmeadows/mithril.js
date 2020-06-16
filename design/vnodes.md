@@ -15,6 +15,14 @@
 - State points: `m.state(init)`
     - `vnode = init(info, env)` is called with the current info object.
 - Trusted raw fragments: `m.trust(text)`
+- When caught: `m.whenCaught(callback, ...children)`
+    - `await callback(e, stack, isFatal)` - Called with each error that propagates from children after this in the subtree as well as a component `stack` trace, may rethrow or return rejected promise to propagate
+    - `isFatal` is whether the error was fatal (originated from any point other than `whenRemoved`) or not.
+    - Errors caught include both errors in streams and errors and rejections caught from event handlers. It does *not* include errors thrown from the top-level component view invocation itself.
+    - Caught errors are batched and scheduled to be reported on the next tick.
+    - This exists mainly for error reporting, but can be used in other ways like with async network requests.
+    - When an error propagates past a subtree, that subtree is synchronously removed with inner `done` callbacks invoked. If any of those throw, their errors are also added to the `errors` list.
+    - Resolution searches back to the first child, then up to the parent, then back to its first child, and so on, until it finds such a hook.
 - Keyed lists: `m.each(list, key, view)`
     - `key: (x, i) => key` - Get the property key
     - `view: (x, i) => vnode` - Get the corresponding vnode
@@ -60,6 +68,8 @@
     - `options.afterMove()` - Optionally called after the move transition finishes.
     - `child` is a child DOM vnode to update.
     - `options.afterIn`, `options.afterOut`, and `options.afterMove` are awaited to propagate errors accordingly.
+- `m.whenReady(callback, ...children)`, `m.whenLayout(callback, ...children)`, `m.whenRemoved(callback, ...children)`, and `m.whenLayoutRemoved(callback, ...children)` exist and delegate to state vnodes with those relevant children.
+- Note: none of these strictly correspond one-to-one with specific vnode types, and may be optimized to something with equivalent semantics.
 
 ### JSX
 
@@ -130,11 +140,11 @@ Also, while this could be done to a degree in userland, it's far more efficient 
 
 ## Low-level
 
-Each of these are normalized to a low-level representation, where non-holes have two properties: `%` and `_`. The first, `%`, is used to both differentiate vnodes from other objects and to tell what kind of vnode it is. These are created via a simple factory:
+Each of these are normalized to a low-level representation, where non-holes have two properties: `""` and `_`. The first, `%`, is used to both differentiate vnodes from other objects and to tell what kind of vnode it is. These are created via a simple factory:
 
 ```js
 m.create = function (type, data) {
-    return {"%": type, _: data}
+    return {"": type, _: data}
 }
 ```
 
@@ -143,38 +153,49 @@ And here's how each type is represented:
 - Hole: `null`, `undefined`, `true`, `false`
 - Text: strings, numbers
 - Fragment: arrays of vnode children
-- Retain: `create(0, void 0)`
-- Element: `create(1, [tag, attrs, ...children])`
+- Retain: `create(Type.Retain, void 0)`
+- Element: `create(Type.Element, [tag, attrs, ...children])`
     - `tag: string` is the element tag name.
     - `attrs: Object | undefined` is the attributes object. If it's empty or omitted, `undefined` is returned instead (and the eventual attributes object is recreated later).
     - Customized builtins' `is` values are specified by passing them as an array, like `["p", "custom-name"]`.
     - `children: Child[]` is an array of vnode children.
-- State: `create(2, body)`
+- State: `create(Type.State, body)`
     - `body: (info: Info, env: Environment) => Child` is the state body.
-- Link: `create(3, [id, ...children])`
+- Link: `create(Type.Link, [id, ...children])`
     - `id: any` represents the current state. This can be any value, and is compared via `SameValueZero`.
     - `children: Child[]` is an array of vnode children.
-- Keyed: `create(4, [key, body, ...])`
+- Keyed: `create(Type.Keyed, [key, body, ...])`
     - `key: any` contains the property keys for each body. In IE, keys are treated as property keys for performance reasons, but in modern browsers, `Map`s are used, so any reference type can be used in them.
     - `body: Child` is an array of vnode children where each child corresponds to the key of the same index in `keys`. These are immediately invoked for both easier error handling and better performance when processing.
     - For performance, these are interleaved.
-- Static hint: `create(5, vnode)`
-    - `vnode: Vnode` is the vnode to decorate.
-    - On create, this is simply recursed through, but on update, the following things happen:
-        - Children are assumed to never change primitive type
-        - Element tags, link keys, and keyed fragment keys are never diffed.
-    - This exists as an optimization for tooling to leverage, but it's optional. Tooling should also consider conditionally using `info.isInitial() ? m.RETAIN : vnode` for deeply static trees instead of this, too.
-- Trusted: `create(6, text)`
+- Trusted: `create(Type.Trust, text)`
     - `text: string` is the raw text.
-- Component: `create(7, [Comp, attrs, ...children])`
+- Component: `create(Type.Component, [Comp, attrs, ...children])`
     - `Comp: Component` is the component tag.
     - `attrs: Object | undefined` is the attributes object. If it's empty or omitted, `undefined` is returned instead (and the eventual attributes object is recreated later).
     - `children: Child[]` is an array of vnode children.
-- Portal: `create(8, [attrs, ...children])`
-    - `text: string` is the raw text.
-- Transition: `create(9, [classPrefixOrOptions, child])`
+- Portal: `create(Type.Portal, [target, attrs, ...children])`
+    - `target` is the target ref to render to
+    - `attrs: Object | undefined` are the attributes to render
+    - `children: Vnode[]` are the children to append
+- Transition: `create(Type.Transition, [void 0, classPrefixOrOptions, child])`
     - `classPrefixOrOptions: string | Object` is the class prefix or options object.
     - `child` is a DOM node.
+
+> The general value structure of elements is one of these:
+>
+> - If zero or more children exist to be rendered and auxiliary data exists: `[identity, data, ...children]`
+> - If a single child exists to be rendered: `[identity, attrs, ...children]`
+
+A special bit is set if it's a static vnode, to ignore structural changes to it.
+
+- On create, the node is rendered as usual, but on update, the following things happen:
+    - Children are assumed to never change primitive type.
+    - Attribute keys are assumed to remain the same.
+    - Element tags, link keys, and keyed fragment keys are never diffed.
+- The optimization does not extend to children, only parents, allowing for it to be broadly used for maximum efficiency.
+- This exists as an optimization for tooling to leverage, but it's optional. Tooling should also consider conditionally using `info.isInitial() ? m.RETAIN : vnode` for deeply static trees instead of this, too.
+- Note: this has no impact on diffing, and it's ignored on retain vnodes.
 
 Note that these vnodes are immutable. You can feel free to reuse them, and unlike in most other frameworks, these are *very* lightweight. For contrast:
 
@@ -187,9 +208,59 @@ We can always build our own specialized nodes as necessary, and we can have much
 
 #### Why only two properties?
 
-Well, this is a space trade-off, actually. When engines allocate objects, they usually only allocate the real number of properties that exist, but when they allocate non-empty arrays, they always allocate at least 8 entries. In addition, GC generations are typically sized in terms of their reserved byte sizes, not their number of handles, so if we can reduce our footprint here, more things can fit in the nursery and next level down, and so we're leveraging the GC more effectively.
+Well, this is actually an attempt to optimize for space as best as possible while still being able to tell fragments apart from object vnodes. And this isn't just to optimize for element and component vnodes, but also for keyed vnodes which get hit by this even harder.
 
-For us, most our special vnodes only need 2 pieces of data, a type and a value or array. And for those that need more, they all include children. Most vnodes have more than zero children (including attributes), so we have to allocate the array regardless, but most also have 7 or fewer children, so that's at least one slot that's wasted if we don't use it. As for speed impact, it's minimal but you'll see fewer GC spikes.
+When engines allocate objects, they usually only allocate the real number of properties that exist. They do similar with statically-sized arrays - it allocates exactly what's needed and no more. However, when you allocate an empty array and manually push into it in V8, something very wasteful happens, as I found while doing some testing in Chrome with every array length from 0 to 256 inclusive (all entries set to a shared object reference):
+
+- 0 entries: It just allocates the object, but not the array entries.
+- 1-16 entries: It allocates and retains 76 bytes (or 19 compressed 4-bit pointers) for the entries.
+- 17-42 entries: It allocates and retains 180 bytes (or 45 compressed 4-bit pointers) for the entries.
+- 43-81 entries: It allocates and retains 336 bytes (or 84 compressed 4-bit pointers) for the entries.
+- 82-139 entries: It allocates and retains 568 bytes (or 142 compressed 4-bit pointers) for the entries.
+- 140-226 entries: It allocates and retains 916 bytes (or 229 compressed 4-bit pointers) for the entries.
+- 227-256 entries: It allocates and retains 1440 bytes (or 360 compressed 4-bit pointers) for the entries.
+
+> My test code was this:
+>
+> ```js
+> function makeStatic() {
+>     for (let i = 0; i <= 2**8; i++) {
+>         window['s'+i] = Function('m', `return[${'m,'.repeat(i)}]`)(makeStatic)
+>     }
+> }
+> function makeDynamic() {
+>     for (let i = 0; i <= 2**8; i++) {
+>         var a = []
+>         for (var j = 0; j <= i; j++) a.push(makeDynamic)
+>         window['d'+i] = a
+>     }
+> }
+> ```
+>
+> Here's what I did for each function:
+>
+> 1. I ran the function first, either `makeStatic` or `makeDynamic` depending on which I wanted to check.
+> 1. I brought it back up in preparation to run it again
+> 1. I switched to the "Memory" tab, ran an explicit GC, and took a heap snapshot.
+> 1. I switched to the "Console" tab and ran the function again.
+> 1. I switched to the "Memory" tab, ran an explicit GC, and took a second heap snapshot.
+> 1. I then compared the results of the two heap snapshots to find the newly allocated arrays. (I looked through the "(array)" elements, and looked at their retainers to find the length they corresponded to.)
+
+Internally, V8 uses the following rules for managing array length:
+
+- Initial size: The static number of entries + 1
+- Growth function: [`floor(old length + 50%) + 16`](https://github.com/v8/v8/blob/5c7c6835819e2ae7f73e492674fe7cdf865a4c95/src/objects/js-objects.h#L529-L535)
+- If the final open slot is written to, the array is grown immediately after. (This triggers on the first write, too.)
+
+This means that when statically allocating values, there's basically no wasted space (and so we can do whatever we want), but when dynamically building them, it generates a lot of wasted space.
+
+> Other engines do differ, but it's a similar story across them, too. For example, [Spidermonkey has some fairly advanced heuristics](https://hg.mozilla.org/mozilla-central/file/f99b937e9e7ce91e7d648a37251d4af8d1d6da68/js/src/vm/NativeObject.cpp#l773), but [it's unclear if they also optimize array literals](https://hg.mozilla.org/mozilla-central/file/tip/js/src/builtin/Array.cpp#l3853). So this isn't just optimizing for V8 - V8's just the one I'm the most familiar with, and it's the simplest to explain.
+
+In addition, GC generations are typically sized in terms of their reserved byte sizes, not their number of handles, so if we can reduce our footprint here, more things can fit in the nursery and next level down, and so we're leveraging the GC more effectively.
+
+For us, most vnodes that have children have more than zero children, but less than 14 (16-2, first 2 entries reserved).
+
+For us, most our special vnodes only need 2 pieces of data, a type and a value or array. And for those that need more, most of them also include children. Most vnodes have more than zero children (including attributes), so we have to allocate the array regardless, but very few also have more than 16 children, so that's at least one slot that's wasted if we don't use it. As for speed impact, it's minimal but you'll see fewer GC spikes.
 
 As for internal usage, we can better control our GC behavior if we use our own model. We also don't need any special API contracts to do so.
 
@@ -218,7 +289,7 @@ The `[key, func]` variant is spiritually similar to `m.withAttr`, but takes adva
 - For DOM vnodes, it returns the relevant property/attribute value for the current element target, and the choice of element vs attribute is detected similarly to how that key is applied as a property normally.
 - For components, it's just sugar for `(_, capture) => func(ref[key], capture)`, using the current ref at the time of reading.
 
-> Why reinstate it after it was removed? Well, unlike `m.prop()` which was an utter waste of memory for what could just as easily be done as a simple state variable, the existence of the [component DSL and its `slot`](component-dsl.md#state) makes it *much* more useful. Also, it being a simple array pair means it's actually smaller to use than `event.target.key` directly if that's all you're using.
+> Why reinstate it after it was removed? Well, unlike `m.prop()` which was an utter waste of memory for what could just as easily be done as a simple state variable, the existence of the [component DSL and its `slot`](stdlib/component.md#state) makes it *much* more useful. Also, it being a simple array pair means it's actually smaller to use than `event.target.key` directly if that's all you're using.
 
 `capture` objects have a few methods:
 
@@ -262,7 +333,7 @@ This is not a common need, but it's one nevertheless, and it exists so you aren'
 
 There's also a separate `m.compile(parsed)` that does the above in reverse.
 
-Note: this does not recursively parse its results. You have to do it once at each level.
+Note: this does not recursively parse its results. You have to do it once at each level. Also, it does *not* extract static info - you generally shouldn't need to, and if you do, you probably need to be operating at a lower level than this anyways.
 
 ### Appending attributes to DOM vnodes
 

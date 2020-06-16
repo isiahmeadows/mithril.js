@@ -10,7 +10,7 @@ This is exposed under `mithril/request` and in the full bundle as `Mithril.reque
 - This assumes a compatible `XMLHttpRequest` exists.
 - A `request.TIMEOUT` constant now exists for people to reliably detect timeouts, without having to pass an explicit option or otherwise complicate request handling. Just check if the error thrown is this constant, and you're good.
 - New options:
-    - Abort signals can be provided via a `signal:` parameter for compatibility with `fetch`. Such signals are generally created via [`m(Use, ...)`](use.md) or [`use(async () => ...)`](component-dsl.md#async-data).
+    - Abort signals can be provided via a `signal:` parameter for compatibility with `fetch`. Such signals are generally created via [`m(Use, ...)`](use.md) or [`use(async () => ...)`](component.md#async-data).
         - This replaces `xhr.abort()` in the `config:` callback. Don't call that directly - pass `signal:` instead.
     - You can pass use `xhr.on.progress` to observe progress events. It's called with the relevant progress event as `progress({lengthComputable, loaded, total})`.
     - You can pass use `xhr.on.headersReceived` to observe when headers are first received. It's called with the relevant progress event as `headersReceived({status, statusText, headers})`.

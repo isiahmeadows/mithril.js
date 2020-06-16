@@ -6,9 +6,9 @@ import {Window, TrustedString, TagNameString} from "./dom"
 
 // This bit exists as a type-encoded proof of a few API contracts:
 //
-// - All values that are not objects with a numeric `%` property, a well as
+// - All values that are not objects with a numeric `""` property, a well as
 //   arrays that may recursively contain them, are considered valid vnodes.
-// - The `%` property can be literally anything on object vnodes.
+// - The `""` property can be literally anything on object vnodes.
 type AnyNonObject = Exclude<Any, object> | Array<AnyNonObject>
 export type __TestVnodeAny = Assert<AnyNonObject, Vnode>
 export type __TestElementAttributeValueIsAny =
@@ -24,19 +24,30 @@ export const enum Type {
     State,
     Link,
     Keyed,
-    Static,
     Trust,
     Component,
     Portal,
     Transition,
+    WhenCaught,
 }
 
 export const enum TypeMeta {
-    End = 10
+    // Note; *always* update this. Other code depends on it being right.
+    End = Type.WhenCaught,
 }
 
-export type __TestTypeEnumIsMinimal = Assert<Type, VnodeNonPrimitive["%"]>
-export type __TestTypeEnumIsComplete = Assert<VnodeNonPrimitive["%"], Type>
+/* eslint-disable no-bitwise */
+export const enum TypeMask {
+    IsStatic = 1 << 6,
+}
+/* eslint-enable no-bitwise */
+
+export type __TestTypeEnumIsMinimal = Assert<Type, VnodeNonPrimitive[""]>
+export type __TestTypeEnumIsComplete = Assert<VnodeNonPrimitive[""], Type>
+export type __TestVnodeStructure = Assert<NonPrimitiveParentVnode, object & {
+    "": Type
+    _: [Polymorphic, Polymorphic, ...Vnode[]]
+}>
 
 // The markers here are to ensure these values never get mixed up, despite most
 // of them being technically polymorphic over either all objects (attributes,
@@ -55,6 +66,8 @@ declare const OtherElementAttributeValueMarker: unique symbol
 declare const OtherComponentAttributeValueMarker: unique symbol
 declare const StyleObjectValueMarker: unique symbol
 declare const EnvironmentValueMarker: unique symbol
+declare const WhenLayoutResultMarker: unique symbol
+declare const WhenLayoutRemovedResultMarker: unique symbol
 declare const WhenReadyResultMarker: unique symbol
 declare const WhenRemovedResultMarker: unique symbol
 declare const CatchResultMarker: unique symbol
@@ -83,6 +96,14 @@ export type ErrorValue = {
 
 export type StateValue = {
     [StateValueMarker]: void
+}
+
+export type WhenLayoutResult = {
+    [WhenLayoutResultMarker]: void
+}
+
+export type WhenLayoutRemovedResult = {
+    [WhenLayoutRemovedResultMarker]: void
 }
 
 export type WhenReadyResult = {
@@ -157,10 +178,13 @@ export type OtherComponentAttributeValue = {
 
 export type ComponentAttributesObject = object & {
     on?: APIOptional<EventsObject>
-    [key: string]: APIOptional<EventsObject> | OtherComponentAttributeValue
+    // Note: this is not reliably a vnode, so it must be treated likewise.
+    children: Vnode[] | OtherComponentAttributeValue
+    [key: string]: (
+        APIOptional<EventsObject> | Vnode | OtherComponentAttributeValue
+    )
 }
 
-export type VnodeHole = undefined | null | boolean
 export type VnodeText = string | number | symbol | bigint
 // eslint-disable-next-line @typescript-eslint/no-empty-interface
 export type VnodeFragment = Vnode[]
@@ -177,15 +201,15 @@ export type Environment = object & {
 export interface ComponentInfo<S> {
     throw(value: ErrorValue, nonFatal: boolean): void
     redraw(): Promise<void>
-    isParentMoving(): boolean
     isInitial(): boolean
     renderType(): string
-    whenReady(callback: WhenReadyCallback): void
-    whenRemoved(callback: WhenRemovedCallback): void
-    whenCaught(callback: WhenCaughtCallback): void
+    whenLayout(callback: WhenLayoutCallback<this>): void
+    whenLayoutRemoved(callback: WhenLayoutRemovedCallback<this>): void
+    whenReady(callback: WhenReadyCallback<this>): void
+    whenRemoved(callback: WhenRemovedCallback<this>): void
     setEnv(key: PropertyKey, value: EnvironmentValue): void
     createCapture(event?: Maybe<EventValue>): Capture
-    state: S | undefined
+    state: Maybe<S>
     init(initializer: () => S): S
     ref: RefValue
     window?: Window
@@ -200,14 +224,23 @@ export type Component<
     S extends Polymorphic, E extends Environment = Environment
 > = (attrs: A, info: ComponentInfo<S>, env: E) => Vnode
 
+export type PolymorphicComponent =
+    Component<ComponentAttributesObject, StateValue, Environment>
+
 export type WhenCaughtCallback =
     (error: ErrorValue, nonFatal: boolean) => Await<CatchResult>
 
-export type WhenRemovedCallback =
-    () => Await<WhenRemovedResult>
+export type WhenRemovedCallback<I extends ComponentInfo<Polymorphic>> =
+    (info: I) => Await<WhenRemovedResult>
 
-export type WhenReadyCallback =
-    (ref: RefValue) => Await<WhenReadyResult>
+export type WhenReadyCallback<I extends ComponentInfo<Polymorphic>> =
+    (info: I) => Await<WhenReadyResult>
+
+export type WhenLayoutCallback<I extends ComponentInfo<Polymorphic>> =
+    (ref: RefValue, info: I) => Await<WhenLayoutResult>
+
+export type WhenLayoutRemovedCallback<I extends ComponentInfo<Polymorphic>> =
+    (ref: RefValue, info: I) => Await<WhenLayoutRemovedResult>
 
 export type ClassOrStyle = string | StyleObject
 
@@ -223,52 +256,46 @@ export interface TransitionOptionsObject {
 export type TransitionOptions = string | TransitionOptionsObject
 
 export type VnodeRetain = object & {
-    "%": Type.Retain
+    "": Type.Retain
     _: void
 }
 
 export type VnodeElement = object & {
-    "%": Type.Element
+    "": Type.Element
     _: [TagNameString, Maybe<ElementAttributesObject>, ...Vnode[]]
 }
 
 export type VnodeState = object & {
-    "%": Type.State
+    "": Type.State
     _: StateInit<StateValue>
 }
 
 export type VnodeLink = object & {
-    "%": Type.Link
-    _: [LinkValue, ...Vnode[]]
+    "": Type.Link
+    _: [LinkValue, undefined, ...Vnode[]]
 }
 
 export type VnodeKeyed = object & {
-    "%": Type.Keyed
+    "": Type.Keyed
     // There's no way of specifying alternating keys and values.
     _: Array<KeyValue | Vnode>
 }
 
-export type VnodeStatic = object & {
-    "%": Type.Static
-    _: Vnode
-}
-
 export type VnodeTrust = object & {
-    "%": Type.Trust
+    "": Type.Trust
     _: TrustedString
 }
 
 export type VnodeComponent = object & {
-    "%": Type.Component
+    "": Type.Component
     _: [
-        Component<ComponentAttributesObject, StateValue>,
-        Maybe<ComponentAttributesObject>,
-        ...Vnode[]
+        PolymorphicComponent,
+        ComponentAttributesObject
     ]
 }
 
 export type VnodePortal = object & {
-    "%": Type.Portal
+    "": Type.Portal
     _: [
         RefValue,
         APIOptional<ElementAttributesObject>,
@@ -277,15 +304,20 @@ export type VnodePortal = object & {
 }
 
 export type VnodeTransition = object & {
-    "%": Type.Transition
-    _: [TransitionOptions, VnodeElement]
+    "": Type.Transition
+    _: [undefined, TransitionOptions, VnodeElement]
 }
 
-export type Vnode =
-    | VnodeHole
+export type VnodeWhenCaught = object & {
+    "": Type.WhenCaught
+    _: [undefined, WhenCaughtCallback, ...Vnode[]]
+}
+
+export type Vnode = APIConditional<
     | VnodeText
     | VnodeFragment
     | VnodeNonPrimitive
+>
 
 export type VnodeNonPrimitive =
     | VnodeRetain
@@ -293,11 +325,11 @@ export type VnodeNonPrimitive =
     | VnodeState
     | VnodeLink
     | VnodeKeyed
-    | VnodeStatic
     | VnodeTrust
     | VnodeComponent
     | VnodePortal
     | VnodeTransition
+    | VnodeWhenCaught
 
 // Strictly for vnodes whose children are arrays
 export type NonPrimitiveParentVnode =
@@ -306,9 +338,9 @@ export type NonPrimitiveParentVnode =
     | VnodeComponent
     | VnodePortal
 
-// The one and only function exported from this
+// The one and only value exported from this
 export function create<T extends VnodeNonPrimitive>(
-    type: T["%"], value: T["_"]
+    type: T[""], value: T["_"]
 ): T {
-    return {"%": type, _: value} as T
+    return {"": type, _: value} as T
 }

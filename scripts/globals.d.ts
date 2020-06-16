@@ -19,7 +19,7 @@ declare global {
     // Ideally, `A & B` would narrow to `never` if `A` is a function and `B` is
     // a primitive, but alas, nope.
     type Is<T extends Polymorphic, U extends Polymorphic> =
-        T extends U ? true : false
+        T extends U ? U extends T ? true : false : false
 
     // Until I get an `awaited T` type, this is the closest I'm going to get.
     type Await<T extends Polymorphic> = T | AwaitPromise<T>
@@ -27,8 +27,11 @@ declare global {
         extends PromiseLike<Await<T>> {}
 
     // For convenience when dealing with API contracts
-    type APIOptional<T> = T | null | undefined
-    type Maybe<T> = T | undefined
+    type APIOptional<T extends Polymorphic> = T | null | undefined
+    type Maybe<T extends Polymorphic> = T | undefined
+    type APIConditional<T extends Polymorphic> = T | null | undefined | boolean
+    type APIUnconditional<T extends Polymorphic> =
+        Exclude<T, APIConditional<never>>
 
     // So narrowing works as it's supposed to. These are duplicated for a better
     // autocomplete experience.
@@ -49,5 +52,12 @@ declare global {
             this: (this: T, ...args: never[]) => R,
             thisArg: T, args: IArguments
         ): R
+    }
+
+    namespace __GlobalTypeTests {
+        type _TestApiConditionalIsApiOptional = Assert<
+            Is<APIConditional<1>, APIOptional<1 | boolean>>,
+            true
+        >
     }
 }

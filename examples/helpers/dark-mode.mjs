@@ -6,15 +6,11 @@ import {isMedia} from "./is-media.mjs"
 export function isDarkMode() {
     const prefersDarkMode = isMedia("(prefers-color-scheme: dark)")
 
-    const [enabled = prefersDarkMode, setEnabled] =
-        useLocalStorage("dark-mode-enabled")
+    const [enabled, setEnabled] =
+        useLocalStorage("dark-mode-enabled", prefersDarkMode)
 
     if (hasChanged(enabled)) {
-        if (enabled) {
-            document.body.classList.add("dark-mode")
-        } else {
-            document.body.classList.remove("dark-mode")
-        }
+        document.body.classList.toggle("dark-mode", enabled)
     }
 
     whenRemoved(() => {
